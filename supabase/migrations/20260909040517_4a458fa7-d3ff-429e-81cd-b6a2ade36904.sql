@@ -1,0 +1,20 @@
+REVOKE ALL ON FUNCTION public.admin_top_viewed(integer, integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.ensure_profile() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.has_role(uuid, app_role) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.is_staff(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.products_back_in_stock() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.recompute_all_pricing() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.recompute_product_pricing(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.supplier_products_after_change() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.waiting_count(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.log_product_view(uuid, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.log_search_miss(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.top_viewed_products(integer, integer) FROM PUBLIC;
+
+GRANT EXECUTE ON FUNCTION public.ensure_profile() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.has_role(uuid, app_role) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_staff(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.waiting_count(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.log_product_view(uuid, text) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.log_search_miss(text) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.top_viewed_products(integer, integer) TO anon, authenticated;

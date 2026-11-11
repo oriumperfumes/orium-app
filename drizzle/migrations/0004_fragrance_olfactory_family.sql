@@ -1,0 +1,1 @@
+ALTER TABLE public.fragrance_details ADD COLUMN IF NOT EXISTS olfactory_family text;

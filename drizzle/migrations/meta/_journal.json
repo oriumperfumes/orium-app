@@ -1,0 +1,258 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1788729754714,
+      "tag": "0000_seed_orium_base_config",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788741993606,
+      "tag": "0001_olfactory_note_assets",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788742864937,
+      "tag": "0002_fragrance_pyramid_status_view",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788747014598,
+      "tag": "0003_fragrantica_audit",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788792511432,
+      "tag": "0004_fragrance_olfactory_family",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790127473013,
+      "tag": "0005_store_sales",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790127543776,
+      "tag": "0006_dashboard_channels",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790129072749,
+      "tag": "0007_voice_aliases",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790130641487,
+      "tag": "0008_store_sale_edit_delete",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790261865311,
+      "tag": "0009_purchase_comparator",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790263727145,
+      "tag": "0010_kl_sync_diagnostics",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790265773678,
+      "tag": "0011_identity_engine_v3",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790266736628,
+      "tag": "0012_catalog_brand_eligibility",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790279971466,
+      "tag": "0013_copilot_local_stock",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1790284528747,
+      "tag": "0014_restore_products_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1790300709639,
+      "tag": "0015_copilot_voice_metrics",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1790301096759,
+      "tag": "0016_store_sale_list_sp_today",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790598049105,
+      "tag": "0017_decant_vial_cost",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790615181093,
+      "tag": "0018_store_physical_stock",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790616487558,
+      "tag": "0019_ready_to_deliver",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790616811977,
+      "tag": "0020_store_stock_tracking_alerts",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790730965114,
+      "tag": "0021_live_sessions_dedupe",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1790731179872,
+      "tag": "0022_store_stock_tracked_list",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1790731575037,
+      "tag": "0023_catalog_ready_first",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790731829799,
+      "tag": "0024_product_image_manual_choice",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790734199863,
+      "tag": "0025_catalog_facet_covering_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1790734916620,
+      "tag": "0026_product_image_pipeline",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1790735254003,
+      "tag": "0027_fix_optimized_image_trigger_jsonb",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1790738395633,
+      "tag": "0028_order_payment_tracking",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1791422690660,
+      "tag": "0029_orium_ai_engine",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1791423712094,
+      "tag": "0030_ai_model_router",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1791424447400,
+      "tag": "0031_order_customer_link",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1791424483623,
+      "tag": "0032_order_customer_pick_fix",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1791505760257,
+      "tag": "0033_order_delivery_schedule",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1791829853332,
+      "tag": "0034_migration",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1791833279861,
+      "tag": "0035_supplier_catalog_freight",
+      "breakpoints": true
+    }
+  ]
+}

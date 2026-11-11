@@ -1,0 +1,3410 @@
+#lovable-badge {
+  display: none !important;
+}
+
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  /* tablets: 600px+ (retrato) e 1180px+ (iPad Pro paisagem) */
+  --breakpoint-tab: 600px;
+  --breakpoint-wide: 1180px;
+  --font-display: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --color-background: var(--background);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-gold: var(--gold);
+  --color-gold-soft: var(--gold-soft);
+  --color-gold-faint: var(--gold-faint);
+  --color-gold-foreground: var(--gold-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --shadow-soft: 0 1px 2px oklch(0 0 0 / 4%), 0 8px 24px -12px oklch(0 0 0 / 12%);
+  --shadow-lift: 0 2px 4px oklch(0 0 0 / 5%), 0 18px 40px -18px oklch(0 0 0 / 18%);
+}
+
+/* ============ ORIUM — preto quente + dourado fosco ============
+   A Orium tem um único tema: dark. Não existe versão clara. */
+:root {
+  /* largura do painel do Orium Copilot no desktop; nunca cobre a sidebar */
+  --copilot-w: clamp(360px, 32vw, 480px);
+  --radius: 1rem;
+  /* Motion system único da Orium: 3 velocidades, 1 curva. */
+  --motion-fast: 140ms;
+  --motion-standard: 220ms;
+  --motion-emphasis: 320ms;
+  --ease-orium: cubic-bezier(0.22, 1, 0.36, 1);
+  color-scheme: dark;
+}
+
+/* Orium é só dark: tokens únicos. */
+:root {
+  /* preto quente em camadas: fundo → header → card → card elevado */
+  --background: oklch(0.158 0.004 88);
+  --surface-1: oklch(0.192 0.005 88);
+  --surface-2: oklch(0.235 0.007 84);
+  --surface-3: oklch(0.283 0.009 84);
+  --foreground: oklch(0.955 0.009 88);
+  --card: var(--surface-2);
+  --card-foreground: oklch(0.955 0.009 88);
+  --popover: oklch(0.245 0.008 84);
+  --popover-foreground: oklch(0.955 0.009 88);
+  --primary: oklch(0.89 0.087 77); /* #FFD599, dourado do Figma */
+  --primary-foreground: oklch(0.185 0.012 78);
+  --secondary: var(--surface-3);
+  --secondary-foreground: oklch(0.955 0.009 88);
+  --muted: var(--surface-3);
+  --muted-foreground: oklch(0.7 0.012 84);
+  --accent: oklch(0.305 0.012 82);
+  --accent-foreground: oklch(0.955 0.009 88);
+  --gold: oklch(0.89 0.087 77); /* #FFD599 */
+  --gold-soft: oklch(0.86 0.072 82);
+  --gold-faint: oklch(0.775 0.088 78 / 14%);
+  --gold-foreground: oklch(0.185 0.012 78);
+  --success: oklch(0.74 0.09 158);
+  --warning: oklch(0.79 0.12 76);
+  --destructive: oklch(0.67 0.17 27);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(0.775 0.088 78 / 15%);
+  --input: oklch(0.775 0.088 78 / 26%);
+  --ring: oklch(0.775 0.088 78);
+  --sidebar: var(--surface-1);
+  --sidebar-foreground: oklch(0.955 0.009 88);
+  --sidebar-primary: oklch(0.775 0.088 78);
+  --sidebar-primary-foreground: oklch(0.185 0.012 78);
+  --sidebar-accent: oklch(0.305 0.012 82);
+  --sidebar-accent-foreground: oklch(0.955 0.009 88);
+  --sidebar-border: oklch(0.775 0.088 78 / 15%);
+  --sidebar-ring: oklch(0.775 0.088 78);
+}
+
+
+@layer base {
+  .dark {
+    --shadow-soft: 0 1px 0 oklch(1 0 0 / 4%) inset, 0 10px 26px -18px oklch(0 0 0 / 55%);
+    --shadow-lift: 0 1px 0 oklch(1 0 0 / 6%) inset, 0 20px 44px -22px oklch(0 0 0 / 60%);
+  }
+
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    transition:
+      background-color 0.35s ease,
+      color 0.35s ease;
+  }
+
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.02em;
+  }
+}
+
+@utility display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+@utility fade-up {
+  animation: fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- mobile-first: áreas seguras, gestos e microinterações ---------- */
+
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* respeita o recorte inferior do iPhone */
+@utility pb-safe {
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+}
+
+@utility bottom-safe {
+  bottom: calc(1rem + env(safe-area-inset-bottom));
+}
+
+/* header nunca fica embaixo da barra de status do iOS quando instalado */
+@utility header-safe {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  .header-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+}
+
+/* valor de métrica: adapta ao espaço, sem estourar o card */
+@utility metric-value {
+  font-size: clamp(1.05rem, 5.2vw, 1.75rem);
+}
+
+@media (min-width: 640px) {
+  .metric-value {
+    font-size: clamp(1rem, 2.5vw, 1.5rem);
+  }
+}
+
+@media (min-width: 1024px) {
+  .metric-value {
+    font-size: clamp(1.15rem, 1.7vw, 1.875rem);
+  }
+}
+
+
+/* resposta imediata ao toque, sem depender de cor */
+@utility press {
+  /* soltar volta com uma mola curta; apertar afunda na hora */
+  transition: transform 340ms cubic-bezier(0.3, 1.45, 0.55, 1);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  &:active {
+    transform: scale(0.965);
+    transition: transform 90ms cubic-bezier(0.2, 0, 0, 1);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+    &:active { transform: none; }
+  }
+}
+
+@utility stagger-in {
+  animation: fade-up var(--motion-emphasis) var(--ease-orium) both;
+  animation-delay: calc(var(--i, 0) * 30ms);
+}
+
+.cart-pop {
+  animation: cart-pop var(--motion-emphasis) var(--ease-orium);
+}
+
+@keyframes cart-pop {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.wholesale-glow {
+  animation: wholesale-glow 1.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes wholesale-glow {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--gold) 45%, transparent);
+  }
+  40% {
+    box-shadow: 0 0 0 10px color-mix(in oklab, var(--gold) 0%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--gold) 0%, transparent);
+  }
+}
+
+.value-in {
+  animation: value-in 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes value-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- decants: seletor tátil, check e contador ---------- */
+
+/* opção de tamanho: só transform/opacity/box-shadow animam */
+.size-opt {
+  transition:
+    transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 200ms ease,
+    border-color 200ms ease;
+  will-change: transform;
+}
+.size-opt:active {
+  transform: scale(0.96);
+}
+.size-opt[data-selected="true"] {
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--gold) 55%, transparent),
+    0 8px 22px -14px color-mix(in oklab, var(--gold) 60%, transparent);
+}
+
+/* ---------- decant: vidro escuro + perfume âmbar ---------- */
+.decant-vial {
+  --amber-deep: oklch(0.36 0.085 52);
+  --amber: oklch(0.63 0.13 70);
+  --amber-lite: oklch(0.8 0.11 82);
+  --champagne: oklch(0.9 0.07 88);
+  --vial-bg: oklch(0.17 0.006 65);
+  --liquid-top: color-mix(in oklab, var(--amber) 62%, var(--vial-bg));
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  -webkit-mask-image: -webkit-radial-gradient(white, black);
+  border: 1px solid color-mix(in oklab, var(--gold) 16%, transparent);
+  background:
+    radial-gradient(120% 80% at 50% 0%, color-mix(in oklab, white 4%, transparent), transparent 60%),
+    linear-gradient(180deg, oklch(0.2 0.006 70), oklch(0.15 0.005 60));
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, white 7%, transparent),
+    inset 0 -10px 18px -12px color-mix(in oklab, black 80%, transparent);
+  transition:
+    transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 350ms ease,
+    box-shadow 450ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.decant-vial:active { transform: scale(0.98); }
+.decant-vial[data-selected="true"] {
+  border-color: color-mix(in oklab, var(--champagne) 70%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, white 14%, transparent),
+    inset 0 0 0 1px color-mix(in oklab, var(--amber-lite) 18%, transparent),
+    0 0 14px -6px color-mix(in oklab, var(--amber-lite) 55%, transparent);
+}
+.decant-vial__tank {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.decant-vial__liquid {
+  position: absolute;
+  inset: 0;
+  transform: translate3d(0, calc(100% + 14px), 0);
+  transition: transform 600ms cubic-bezier(0.25, 1, 0.35, 1);
+  will-change: transform;
+}
+.decant-vial[data-selected="true"] .decant-vial__liquid {
+  transform: translate3d(0, calc((1 - var(--fill)) * 100%), 0);
+}
+.decant-vial__body {
+  position: absolute;
+  inset: -12px 0 0 0;
+  transform-origin: 50% 12px;
+  /* a onda é recortada do próprio líquido: sem emenda entre superfície e corpo */
+  -webkit-mask:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 14' preserveAspectRatio='none'%3E%3Cpath d='M0 8 C 14 11, 36 11, 50 7 S 86 3, 100 8 V14 H0Z'/%3E%3C/svg%3E") 0 0 / 50% 13px repeat-x,
+    linear-gradient(#000, #000) 0 12px / 100% calc(100% - 12px) no-repeat;
+  mask:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 14' preserveAspectRatio='none'%3E%3Cpath d='M0 8 C 14 11, 36 11, 50 7 S 86 3, 100 8 V14 H0Z'/%3E%3C/svg%3E") 0 0 / 50% 13px repeat-x,
+    linear-gradient(#000, #000) 0 12px / 100% calc(100% - 12px) no-repeat;
+  background:
+    linear-gradient(90deg, color-mix(in oklab, var(--amber-lite) 45%, transparent) 0, transparent 9%, transparent 91%, color-mix(in oklab, var(--amber-lite) 40%, transparent) 100%),
+    radial-gradient(90% 55% at 50% 100%, color-mix(in oklab, var(--amber-lite) 45%, transparent), transparent 75%),
+    linear-gradient(100deg, transparent 18%, color-mix(in oklab, var(--champagne) 9%, transparent) 26%, transparent 34%),
+    linear-gradient(180deg,
+      var(--liquid-top) 0,
+      color-mix(in oklab, var(--amber) 58%, var(--vial-bg)) 45%,
+      color-mix(in oklab, var(--amber-deep) 80%, var(--vial-bg)) 100%);
+}
+.decant-vial__wave {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% - 1px);
+  width: 100%;
+  height: 13px;
+  overflow: visible;
+  transform-origin: 50% 100%;
+}
+.decant-vial__wave--back path { fill: none; stroke: var(--amber-lite); stroke-opacity: 0.35; stroke-width: 0.8; vector-effect: non-scaling-stroke; }
+.decant-vial__glow { fill: none; stroke: var(--amber-lite); stroke-opacity: 0.35; stroke-width: 4; vector-effect: non-scaling-stroke; filter: blur(1.5px); }
+.decant-vial__wave--back { transform: translate3d(-18%, -1px, 0); }
+.decant-vial__crest {
+  fill: none;
+  stroke: var(--champagne);
+  stroke-opacity: 0.85;
+  stroke-width: 0.9;
+  vector-effect: non-scaling-stroke;
+}
+.decant-vial__wave--front { transform: none; }
+.decant-vial[data-selected="true"] .decant-vial__wave--front,
+.decant-vial[data-selected="true"] .decant-vial__body {
+  animation: vial-slosh 1000ms cubic-bezier(0.3, 0.9, 0.3, 1) 120ms both;
+}
+.decant-vial[data-selected="true"] .decant-vial__wave--back {
+  animation: vial-slosh-back 1100ms cubic-bezier(0.3, 0.9, 0.3, 1) 150ms both;
+}
+@keyframes vial-slosh {
+  0% { transform: skewY(-2.2deg); }
+  35% { transform: skewY(1.6deg); }
+  65% { transform: skewY(-0.7deg); }
+  100% { transform: none; }
+}
+@keyframes vial-slosh-back {
+  0% { transform: translate3d(-40%, 0, 0) scaleY(1.6); }
+  50% { transform: translate3d(-10%, -1px, 0) scaleY(1.15); }
+  100% { transform: translate3d(-18%, -1px, 0) scaleY(1); }
+}
+.decant-vial__bubble {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  border: 0.5px solid color-mix(in oklab, var(--champagne) 70%, transparent);
+  background: color-mix(in oklab, var(--champagne) 20%, transparent);
+  opacity: 0.7;
+}
+.decant-vial__bubble--sm { width: 2px; height: 2px; }
+.decant-vial__glass {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    linear-gradient(112deg, color-mix(in oklab, white 10%, transparent) 0%, transparent 22%),
+    linear-gradient(90deg, color-mix(in oklab, white 5%, transparent) 0, transparent 5%, transparent 95%, color-mix(in oklab, white 4%, transparent) 100%);
+}
+.decant-vial__content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: inherit;
+}
+.decant-vial[data-selected="true"] .decant-vial__content {
+  text-shadow: 0 1px 2px color-mix(in oklab, oklch(0.16 0.03 50) 85%, transparent),
+    0 0 10px color-mix(in oklab, oklch(0.16 0.03 50) 45%, transparent);
+}
+/* leve véu escuro atrás do bloco de texto: o líquido nunca engole a informação */
+.decant-vial[data-selected="true"] .decant-vial__content::before {
+  content: "";
+  position: absolute;
+  inset: 18% 12%;
+  z-index: -1;
+  border-radius: 999px;
+  background: radial-gradient(closest-side, color-mix(in oklab, oklch(0.16 0.03 50) 38%, transparent), transparent);
+  pointer-events: none;
+}
+.decant-vial__price { color: color-mix(in oklab, var(--gold) 55%, var(--foreground)); }
+@media (prefers-reduced-motion: reduce) {
+  .decant-vial__liquid { transition-duration: 120ms; }
+  .decant-vial[data-selected="true"] .decant-vial__wave { animation: none; }
+}
+
+.check-pop {
+  animation: check-pop 220ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes check-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.price-morph {
+  animation: price-morph 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes price-morph {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* fotos entram com um leve assentamento (opacidade + escala), nunca piscam */
+.img-fade {
+  opacity: 0;
+  transform: scale(1.025);
+  transition:
+    opacity 420ms var(--ease-orium),
+    transform 620ms var(--ease-orium);
+}
+.img-fade.is-loaded {
+  opacity: 1;
+  transform: none;
+}
+
+/* hero dos decants: gradiente para o texto respirar sobre a foto */
+.hero-scrim {
+  background: linear-gradient(
+    90deg,
+    oklch(0.16 0.004 80 / 96%) 0%,
+    oklch(0.16 0.004 80 / 82%) 42%,
+    oklch(0.16 0.004 80 / 20%) 72%,
+    transparent 100%
+  );
+}
+@media (max-width: 639px) {
+  .hero-scrim {
+    background: linear-gradient(
+      180deg,
+      oklch(0.16 0.004 80 / 30%) 0%,
+      oklch(0.16 0.004 80 / 78%) 45%,
+      oklch(0.16 0.004 80 / 97%) 100%
+    );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cart-pop,
+  .wholesale-glow,
+  .value-in,
+  .stagger-in,
+  .check-pop,
+  .price-morph {
+    animation: none !important;
+  }
+  .size-opt,
+  .img-fade {
+    transition: none !important;
+  }
+  .img-fade {
+    opacity: 1;
+    transform: none;
+  }
+  * {
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---------- campanha: card de recompensa (entrada em etapas) ---------- */
+
+.reward-card {
+  will-change: transform, opacity;
+}
+.reward-in {
+  animation: reward-in 380ms cubic-bezier(0.34, 1.4, 0.64, 1) both;
+}
+@keyframes reward-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.reward-out {
+  animation: reward-out 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes reward-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+}
+.reward-step {
+  animation: value-in 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--d, 0ms);
+}
+/* o percentual do desconto chega por último, com brilho champagne discreto */
+.reward-value {
+  animation: reward-value 420ms cubic-bezier(0.34, 1.4, 0.64, 1) both;
+  animation-delay: 240ms;
+}
+@keyframes reward-value {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  60% {
+    box-shadow: 0 0 0 6px color-mix(in oklab, var(--gold) 12%, transparent);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+/* código do cupom como pequeno ticket */
+.coupon-ticket {
+  border: 1px dashed color-mix(in oklab, var(--gold) 55%, transparent);
+  background: color-mix(in oklab, var(--gold) 10%, transparent);
+  border-radius: 8px;
+  padding: 4px 10px;
+}
+
+/* ---------- celebração: partículas champagne, brilho e check ---------- */
+
+.confetti-layer {
+  border-radius: inherit;
+  contain: strict;
+  z-index: 5;
+}
+.confetti-piece {
+  position: absolute;
+  top: 58%;
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: confetti-fly 900ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+@keyframes confetti-fly {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(0.6) rotate(0deg);
+  }
+  12% {
+    opacity: 1;
+  }
+  55% {
+    opacity: 1;
+    transform: translate3d(calc(var(--tx) * 0.75), var(--ty), 0) scale(1) rotate(calc(var(--rot) * 0.6));
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--tx), calc(var(--ty) * 0.25), 0) scale(0.9) rotate(var(--rot));
+  }
+}
+
+/* alternativa sem movimento: brilho champagne curto */
+.celebrate-glow {
+  border-radius: inherit;
+  animation: celebrate-glow 700ms ease-out both;
+}
+@keyframes celebrate-glow {
+  0% {
+    box-shadow: inset 0 0 0 0 color-mix(in oklab, var(--gold) 0%, transparent);
+    background: color-mix(in oklab, var(--gold) 16%, transparent);
+  }
+  100% {
+    box-shadow: none;
+    background: transparent;
+  }
+}
+
+.celebrate-check {
+  width: 1.25rem;
+  height: 1.25rem;
+  color: var(--gold-foreground);
+  background: color-mix(in oklab, var(--gold) 65%, transparent);
+  animation: check-pop 260ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.dark .celebrate-check {
+  color: var(--gold-foreground);
+}
+
+/* preço promocional: risco atravessa suavemente e o novo valor sobe */
+.price-strike {
+  position: relative;
+  animation: value-in 200ms ease-out both;
+}
+.price-strike::after {
+  content: "";
+  position: absolute;
+  inset-inline: -2px;
+  top: 52%;
+  height: 1px;
+  background: currentColor;
+  transform-origin: left center;
+  animation: price-strike 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 120ms;
+}
+@keyframes price-strike {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.price-new {
+  animation: price-new 320ms cubic-bezier(0.34, 1.4, 0.64, 1) both;
+  animation-delay: var(--d, 260ms);
+}
+@keyframes price-new {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* brilho discreto na área do preço ao abrir uma oferta */
+.price-glow {
+  animation: price-glow 900ms ease-out both;
+  border-radius: 14px;
+}
+@keyframes price-glow {
+  0% {
+    background: color-mix(in oklab, var(--gold) 14%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+/* erro nunca é celebrado: apenas um deslocamento horizontal mínimo */
+.nudge-x {
+  animation: nudge-x 220ms ease-in-out both;
+}
+@keyframes nudge-x {
+  0%,
+  100% {
+    transform: none;
+  }
+  25% {
+    transform: translateX(-3px);
+  }
+  75% {
+    transform: translateX(3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confetti-piece,
+  .price-strike::after,
+  .price-new,
+  .price-glow,
+  .nudge-x,
+  .celebrate-check {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+  }
+  .price-strike::after {
+    transform: scaleX(1);
+  }
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  .reward-in,
+  .reward-out,
+  .reward-step,
+  .reward-value {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- área olfativa: tons sutis por família de nota ---------- */
+
+:root {
+  --note-citrico: oklch(0.86 0.11 95);
+  --note-floral: oklch(0.84 0.08 20);
+  --note-amadeirado: oklch(0.74 0.06 60);
+  --note-especiado: oklch(0.8 0.1 45);
+  --note-doce: oklch(0.87 0.07 70);
+  --note-gourmand: oklch(0.74 0.07 50);
+  --note-ambarado: oklch(0.85 0.09 75);
+  --note-almiscarado: oklch(0.86 0.02 90);
+  --note-aromatico: oklch(0.8 0.07 145);
+  --note-aquatico: oklch(0.82 0.07 220);
+  --note-frutado: oklch(0.82 0.09 15);
+  --note-couro: oklch(0.7 0.06 45);
+  --note-outros: oklch(0.82 0.02 90);
+}
+
+/* pill de nota olfativa */
+.note-chip {
+  background: color-mix(in oklab, var(--tone) 12%, var(--card));
+  border: 1px solid color-mix(in oklab, var(--tone) 26%, transparent);
+}
+
+.note-orb {
+  background: radial-gradient(
+    circle at 32% 28%,
+    color-mix(in oklab, var(--tone) 85%, white 10%),
+    color-mix(in oklab, var(--tone) 55%, black 12%)
+  );
+}
+
+/* barra de acorde */
+.accord-track {
+  background: color-mix(in oklab, var(--foreground) 8%, transparent);
+}
+
+.accord-fill {
+  background: linear-gradient(90deg, color-mix(in oklab, var(--tone) 55%, var(--foreground) 12%), var(--tone));
+  width: 0;
+  transition: width 620ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition-delay: var(--delay, 0ms);
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(10px);
+  transition:
+    opacity 340ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 340ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition-delay: var(--delay, 0ms);
+}
+
+.reveal.is-in {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .accord-fill {
+    transition: none !important;
+  }
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+
+/* ---------- carrossel "queridinhos" e popup de ofertas ---------- */
+
+.reveal-pre {
+  opacity: 0;
+  transform: translateY(14px);
+}
+.reveal-in {
+  animation: reveal-up 340ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.popup-in {
+  animation: popup-in 300ms cubic-bezier(0.34, 1.35, 0.64, 1) both;
+  will-change: transform, opacity;
+}
+@keyframes popup-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.popup-out {
+  animation: popup-out 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes popup-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(20px) scale(0.98);
+  }
+}
+
+/* Fundo da promoção: escurece e desfoca o restante da interface enquanto o
+   popup está na tela. O blur pertence só a este backdrop e sai junto dele. */
+.popup-backdrop {
+  background: rgba(6, 6, 6, 0.62);
+  animation: popup-fade-in 280ms ease-out both;
+}
+.popup-backdrop-out {
+  animation: popup-fade-out 220ms ease-in both;
+}
+@keyframes popup-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes popup-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal-pre,
+  .reveal-in,
+  .popup-in,
+  .popup-out,
+  .popup-backdrop,
+  .popup-backdrop-out {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- Admin: motion system, superfícies e hierarquia ---------- */
+
+:root {
+  --admin-tap: 120ms;
+  --admin-micro: 160ms;
+  --admin-transition: 220ms;
+  --admin-reveal: 320ms;
+}
+
+/* entrada em sequência muito curta (título → cards → conteúdo) */
+.admin-in {
+  animation: admin-in var(--admin-reveal) cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+
+@keyframes admin-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* card de métrica: hover discreto no desktop, press no mobile */
+.admin-card {
+  transition:
+    transform var(--admin-micro) cubic-bezier(0.16, 1, 0.3, 1),
+    background-color var(--admin-micro) ease,
+    border-color var(--admin-micro) ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .admin-card:hover {
+    transform: translateY(-1px);
+    border-color: color-mix(in oklab, var(--border) 70%, var(--foreground) 30%);
+    background-color: color-mix(in oklab, var(--card) 92%, var(--foreground) 8%);
+  }
+}
+
+.admin-card:active {
+  transform: scale(0.985);
+}
+
+/* item de navegação com indicador ativo deslizante */
+.admin-nav-item {
+  position: relative;
+  transition:
+    background-color var(--admin-micro) ease,
+    color var(--admin-micro) ease;
+}
+
+.admin-nav-item::before {
+  content: "";
+  position: absolute;
+  left: 0.25rem;
+  top: 50%;
+  height: 0;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--primary);
+  transform: translateY(-50%);
+  transition: height var(--admin-transition) cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.admin-nav-item[data-active="true"]::before {
+  height: 1.15rem;
+}
+
+/* drawer mobile do Admin */
+.admin-backdrop {
+  animation: admin-fade var(--admin-transition) ease both;
+}
+
+.admin-drawer {
+  animation: admin-drawer 260ms cubic-bezier(0.22, 1.1, 0.36, 1) both;
+  will-change: transform;
+}
+
+@keyframes admin-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes admin-drawer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+.admin-skeleton {
+  background: linear-gradient(
+    90deg,
+    #1a1a1a 25%,
+    #222222 50%,
+    #1a1a1a 75%
+  );
+  background-size: 200% 100%;
+  animation: admin-shimmer 1.4s linear infinite;
+  border-radius: 0.5rem;
+}
+
+@keyframes admin-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* Reposição: item entra curto, valor faz crossfade ao mudar. */
+.admin-row-in {
+  animation: admin-row-in 160ms ease-out both;
+}
+
+@keyframes admin-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.admin-value-in {
+  animation: admin-value-in 180ms ease-out both;
+}
+
+@keyframes admin-value-in {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-in,
+  .admin-drawer,
+  .admin-backdrop,
+  .admin-skeleton,
+  .admin-row-in,
+  .admin-value-in {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+  }
+
+  .admin-card,
+  .admin-nav-item,
+  .admin-nav-item::before {
+    transition: none !important;
+  }
+}
+
+/* ============ Segmented controls (pill deslizante) ============ */
+/* Tokens de motion: press 110ms · pill 220ms · texto 150ms · conteúdo 220ms */
+.seg-track {
+  --seg-press: 110ms;
+  --seg-slide: 220ms;
+  --seg-text: 150ms;
+  overscroll-behavior-x: contain;
+}
+
+.seg-pill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  pointer-events: none;
+  will-change: transform, width;
+}
+
+/* só anima depois da primeira medição: nada de pill voando na montagem */
+.seg-pill-move {
+  transition:
+    transform var(--seg-slide) cubic-bezier(0.32, 1.28, 0.5, 1),
+    width var(--seg-slide) cubic-bezier(0.32, 1.28, 0.5, 1),
+    height var(--seg-slide) cubic-bezier(0.32, 1.28, 0.5, 1);
+}
+
+.seg-item {
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color var(--seg-text) ease-out,
+    opacity var(--seg-text) ease-out,
+    transform var(--seg-press) ease-out;
+}
+
+.seg-item:active {
+  transform: scale(0.97);
+}
+
+.seg-item:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.seg-item .seg-icon {
+  opacity: 0.7;
+  transition:
+    opacity var(--seg-text) ease-out,
+    transform var(--seg-text) cubic-bezier(0.32, 1.28, 0.5, 1);
+}
+
+.seg-item[data-on] .seg-icon {
+  opacity: 1;
+  transform: scale(1.06);
+}
+
+.seg-panel {
+  animation: seg-panel-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes seg-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seg-pill-move,
+  .seg-item,
+  .seg-item .seg-icon {
+    transition: none !important;
+  }
+  .seg-item:active {
+    transform: none;
+  }
+  .seg-panel {
+    animation: seg-fade-in 120ms ease-out both;
+  }
+  @keyframes seg-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
+
+/* Transição entre páginas do Admin: curta, sem atrasar a navegação */
+.admin-page {
+  animation: admin-page-in 150ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes admin-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-page {
+    animation: none;
+  }
+}
+
+/* ============ Chips separados (filtros rápidos) ============ */
+.chip-row {
+  --chip-press: 100ms;
+  --chip-state: 190ms;
+}
+
+/* cada chip anima o seu próprio estado: fundo, texto e press */
+.chip {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition:
+    background-color var(--chip-state) cubic-bezier(0.16, 1, 0.3, 1),
+    color var(--chip-state) cubic-bezier(0.16, 1, 0.3, 1),
+    transform var(--chip-press) cubic-bezier(0.32, 1.28, 0.5, 1);
+}
+
+.chip:active {
+  transform: scale(0.97);
+}
+
+.chip[data-on] {
+  animation: chip-pop 200ms cubic-bezier(0.32, 1.28, 0.5, 1) both;
+}
+
+.chip-label {
+  transition: opacity var(--chip-state) ease-out;
+}
+
+.chip:not([data-on]) .chip-label {
+  opacity: 0.85;
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@keyframes chip-pop {
+  0% {
+    transform: scale(0.97);
+  }
+  55% {
+    transform: scale(1.03);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* troca da lista de produtos após filtrar: saída curta, entrada com leve subida */
+.list-swap {
+  animation: list-swap-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes list-swap-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ============ Abertura do perfume ============
+   Fluidez acima de efeito: sem snapshot da página inteira (View Transitions),
+   só um fade curto com leve subida na página que abre. */
+@media (prefers-reduced-motion: no-preference) {
+  .page-in {
+    animation: page-in 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes page-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chip,
+  .chip-label {
+    transition: none !important;
+  }
+  .chip[data-on] {
+    animation: none;
+  }
+  .chip:active {
+    transform: none;
+  }
+  .list-swap {
+    animation: list-swap-fade 120ms ease-out both;
+  }
+  @keyframes list-swap-fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  .page-in {
+    animation: none;
+  }
+}
+
+
+/* Selo "Exclusivo no app" e preço promocional: revelação sutil, uma única vez. */
+@keyframes promoReveal {
+  from { opacity: 0; transform: translateY(3px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+.promo-badge { animation: promoReveal 200ms ease-out both; }
+.promo-price { animation: promoReveal 220ms ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .promo-badge,
+  .promo-price { animation: none; }
+}
+
+/* Catálogo longo: o navegador não gasta layout/paint em cards fora da tela.
+   Isso encurta o trabalho no momento em que a página do perfume abre. */
+.card-cv {
+  content-visibility: auto;
+  /* só a altura estimada: a largura vem sempre da grade/carrossel */
+  contain-intrinsic-block-size: auto 380px;
+}
+
+/* Toque no perfume: resposta imediata, só transform/opacity (60 FPS). */
+.tap-card {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 380ms cubic-bezier(0.3, 1.4, 0.55, 1);
+}
+
+.tap-card:active {
+  transform: scale(0.975);
+  transition: transform 110ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tap-card {
+    transition: none;
+  }
+  .tap-card:active {
+    transform: none;
+  }
+}
+
+/* ============ ROUTE MOTION SYSTEM ============
+   Transição consistente em toda a Orium: só opacity/transform, curta e com
+   direção coerente (avançar sobe de baixo, voltar assenta de cima). */
+@media (prefers-reduced-motion: no-preference) {
+  .route-in {
+    animation: route-in 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .route-in-forward {
+    animation: route-in-forward 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .route-in-back {
+    animation: route-in-back 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  @keyframes route-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes route-in-forward {
+    from { opacity: 0; transform: translate3d(0, 10px, 0); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes route-in-back {
+    from { opacity: 0; transform: translate3d(0, -4px, 0) scale(1.005); }
+    to { opacity: 1; transform: none; }
+  }
+
+  /* Continuidade da foto: a imagem do card cresce até virar a foto da página. */
+  .hero-media {
+    animation: hero-media 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    will-change: transform, opacity;
+  }
+  @keyframes hero-media {
+    from { opacity: 0; transform: scale(0.96); }
+    to { opacity: 1; transform: none; }
+  }
+
+  /* Conteúdo (nome, preço, controles) entra logo depois da foto. */
+  .content-reveal {
+    animation: content-reveal 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: 60ms;
+  }
+  .content-reveal-late {
+    animation: content-reveal 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: 120ms;
+  }
+  @keyframes content-reveal {
+    from { opacity: 0; transform: translate3d(0, 8px, 0); }
+    to { opacity: 1; transform: none; }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-in,
+  .route-in-forward,
+  .route-in-back,
+  .hero-media,
+  .content-reveal,
+  .content-reveal-late {
+    animation: route-fade 100ms ease-out both;
+  }
+  @keyframes route-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+}
+
+/* coração dos favoritos: pulso curto só no toque */
+@keyframes fav-pop {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+.fav-pop { animation: fav-pop var(--motion-standard) var(--ease-orium); }
+@media (prefers-reduced-motion: reduce) { .fav-pop { animation: none; } }
+
+/* ——— Abertura do app instalado ———
+   Fundo do ícone, símbolo dourado que se desenha, perfume âmbar que sobe
+   dentro do círculo e saudação. Sem brilho: só traço, cor e movimento. */
+.orium-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background: #0a0a0a;
+  transition: opacity 460ms var(--ease-orium);
+}
+.orium-splash.is-leaving { opacity: 0; pointer-events: none; }
+.orium-splash .splash-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: -24px;
+  transition: transform 520ms var(--ease-orium), opacity 420ms var(--ease-orium);
+}
+.orium-splash.is-leaving .splash-stage { transform: scale(1.08); opacity: 0; }
+.orium-splash .splash-mark { position: relative; width: 78px; aspect-ratio: 552 / 742; }
+.orium-splash .splash-symbol,
+.orium-splash .splash-liquid { position: absolute; inset: 0; width: 100%; height: 100%; }
+.orium-splash .splash-symbol { color: #ffd599; }
+/* desenho do traço */
+.orium-splash .sym-ring { stroke-dasharray: 1; stroke-dashoffset: 1; animation: sym-draw 900ms cubic-bezier(0.65, 0, 0.35, 1) 80ms forwards; }
+.orium-splash .sym-stem { stroke-dasharray: 1; stroke-dashoffset: 1; animation: sym-draw 560ms cubic-bezier(0.65, 0, 0.35, 1) 380ms forwards; }
+.orium-splash .sym-cap { opacity: 0; transform-box: fill-box; transform-origin: 50% 100%; animation: sym-cap 520ms cubic-bezier(0.34, 1.4, 0.64, 1) 640ms forwards; }
+@keyframes sym-draw { to { stroke-dashoffset: 0; } }
+@keyframes sym-cap { from { opacity: 0; transform: translateY(-14px) scale(0.85); } to { opacity: 1; transform: none; } }
+/* o perfume subindo (com a superfície ondulando devagar) */
+.orium-splash .splash-rise { transform: translateY(240px); animation: splash-rise 1100ms cubic-bezier(0.22, 1, 0.36, 1) 620ms forwards; }
+@keyframes splash-rise { to { transform: translateY(0); } }
+.orium-splash .splash-wave { animation: splash-wave 3000ms linear infinite; }
+@keyframes splash-wave { to { transform: translateX(-480px); } }
+.orium-splash .splash-greet {
+  margin-top: 26px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: #a9a9a9;
+  animation: splash-greet 620ms var(--ease-orium) 520ms backwards;
+}
+@keyframes splash-greet { from { opacity: 0; transform: translate3d(0, 8px, 0); } }
+@media (prefers-reduced-motion: reduce) {
+  .orium-splash .sym-ring, .orium-splash .sym-stem { animation: none; stroke-dashoffset: 0; }
+  .orium-splash .sym-cap { animation: none; opacity: 1; }
+  .orium-splash .splash-rise { animation: none; transform: translateY(80px); }
+  .orium-splash .splash-wave, .orium-splash .splash-greet { animation: none; }
+}
+
+/* Primeiro frame do app instalado: a mesma cor da abertura pintada antes do
+   React assumir, para que a loja nunca apareça antes da abertura. */
+html.orium-booting body { overflow: hidden; }
+html.orium-booting::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  background: #0a0a0a;
+}
+
+
+/* Destaque suave do ícone Compartilhar na ilustração do Safari (iOS). */
+.orium-share-pulse { animation: share-pulse 1800ms ease-in-out infinite; }
+@keyframes share-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 color-mix(in oklab, var(--foreground) 22%, transparent); }
+  50% { transform: scale(1.06); box-shadow: 0 0 0 8px color-mix(in oklab, var(--foreground) 0%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .orium-share-pulse { animation: none; }
+}
+
+/* Busca: só o X cinza da Orium. O botão nativo de limpar (X azul) e os
+   demais enfeites do input[type="search"] ficam desligados em todos os
+   navegadores WebKit/Blink (Safari, Chrome, iOS, Android) e no Edge/IE. */
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-decoration,
+input[type="search"]::-webkit-search-results-button,
+input[type="search"]::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+input[type="search"]::-ms-clear,
+input[type="search"]::-ms-reveal {
+  display: none;
+  width: 0;
+  height: 0;
+}
+input[type="search"] {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+
+/* ============ Carrossel horizontal (Você também pode gostar, Queridinhos…) ============ */
+/* `overflow-x: auto` faz o eixo Y virar rolagem também: o card acabava
+   acompanhando o dedo para cima/baixo e engolia o scroll da página.
+   Aqui o trilho é móvel SÓ na horizontal; qualquer gesto vertical vai direto
+   para a página. Rolagem nativa: nenhum drag em JS, nenhum translateY. */
+@utility hcarousel {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
+  /* touch-action fica em auto de propósito: `pan-x` desligaria o gesto
+     vertical inteiro (nem o trilho nem a página rolariam). Quem impede o
+     card de acompanhar o dedo é o overflow-y: hidden acima. */
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Aviso discreto da equipe (Ao Vivo) — entra suave e nunca cobre o CTA. */
+@keyframes live-nudge-in {
+  from { opacity: 0; transform: translate3d(0, 14px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+.live-nudge { animation: live-nudge-in 320ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+@media (prefers-reduced-motion: reduce) { .live-nudge { animation: none; } }
+
+/* ============ ORIUM — acabamento premium (preto quente + dourado) ============ */
+
+/* Véu sobre a fotografia do hero: legibilidade sem apagar a imagem. */
+.orium-scrim {
+  background:
+    linear-gradient(180deg, oklch(0.12 0.008 80 / 20%) 0%, oklch(0.12 0.008 80 / 72%) 55%, oklch(0.12 0.008 80 / 96%) 100%);
+}
+@media (min-width: 640px) {
+  .orium-scrim {
+    background:
+      linear-gradient(90deg, oklch(0.12 0.008 80 / 95%) 0%, oklch(0.12 0.008 80 / 78%) 45%, oklch(0.12 0.008 80 / 18%) 78%, transparent 100%);
+  }
+}
+
+/* Fio dourado: separação de seções sem peso visual. */
+@utility gold-hairline {
+  background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--gold) 35%, transparent), transparent);
+  height: 1px;
+}
+
+/* Selo dourado fosco (promoção, novidade) — sem glow. */
+@utility gold-chip {
+  background: color-mix(in oklab, var(--gold) 92%, transparent);
+  color: var(--gold-foreground);
+}
+
+/* ============ ORIUM — liquid glass (vidro líquido, discreto) ============ */
+
+/*
+ * Vidro sóbrio: fundo quase opaco, desfoque suave e um fio de luz de
+ * um pixel na borda superior. Sem brilho dourado, sem reflexos fortes.
+ */
+@utility glass {
+  position: relative;
+  background: color-mix(in oklab, var(--surface-1) 92%, transparent);
+  backdrop-filter: blur(16px) saturate(120%);
+  box-shadow: inset 0 1px 0 color-mix(in oklab, white 7%, transparent);
+}
+
+/* Reflexo mínimo — apenas um leve degradê de luz no topo. */
+@utility glass-sheen {
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(
+      180deg,
+      color-mix(in oklab, white 4%, transparent) 0%,
+      transparent 55%
+    );
+  }
+}
+
+/* Navegador sem suporte a backdrop-filter: mantemos contraste sólido. */
+@supports not (backdrop-filter: blur(1px)) {
+  .glass {
+    background: var(--surface-1);
+  }
+}
+
+/*
+ * iOS (Safari e PWA): o WebKit compõe cada superfície translúcida em uma camada
+ * própria. Com o cabeçalho e a barra de busca encaixada sobrepostos, os dois
+ * desfoques se somavam e criavam névoa/halo. Aqui a superfície fica quase
+ * opaca, o desfoque cai para um valor leve e o brilho extra sai — nitidez e
+ * estabilidade durante o scroll valem mais que o vidro forte.
+ */
+@supports (-webkit-touch-callout: none) {
+  .glass {
+    background: color-mix(in oklab, var(--surface-1) 97%, transparent);
+    backdrop-filter: blur(6px) saturate(110%);
+    box-shadow: none;
+  }
+
+  /* uma única camada de superfície: sem pseudo-elemento de reflexo */
+  .glass-sheen::after {
+    display: none;
+  }
+
+  /* separação por fio de borda, não por sombra difusa (evita halo) */
+  .glass.shadow-soft {
+    box-shadow: 0 1px 0 color-mix(in oklab, var(--border) 70%, transparent);
+  }
+}
+
+
+
+/* ============ ORIUM — sistema único de espaço, raio e motion ============
+   Uma só escala em todo o app: margem lateral, raio dos componentes e
+   duração das animações vêm daqui. Nada de valores avulsos por tela. */
+:root {
+  /* margem lateral da aplicação (mobile 20px · tablet+ 24px) */
+  --page-gutter: 1.25rem;
+
+  /* raios: card · botão/chip · sheet */
+  --r-card: 18px;
+  --r-btn: 14px;
+  --r-sheet: 30px;
+
+  /* motion: toque · microinteração · chip · card · sheet · página */
+  --t-tap: 90ms;
+  --t-micro: 160ms;
+  --t-chip: 200ms;
+  --t-card: 220ms;
+  --t-sheet: 260ms;
+  --t-page: 240ms;
+}
+
+/* tablet e computador: margens maiores e uma largura máxima única (--shell-max) */
+:root {
+  --shell-max: 80rem; /* 1280px de conteúdo */
+}
+@media (min-width: 600px) {
+  :root {
+    --page-gutter: 2rem;
+  }
+}
+@media (min-width: 64rem) {
+  :root {
+    --page-gutter: 2.5rem;
+  }
+}
+@media (min-width: 1180px) {
+  :root {
+    --page-gutter: 3rem;
+  }
+}
+
+/* Moldura da loja: mesma largura e mesmas margens no header, nas seções e no rodapé. */
+@utility shell {
+  width: 100%;
+  max-width: calc(var(--shell-max) + 2 * var(--page-gutter));
+  margin-inline: auto;
+  padding-left: max(var(--page-gutter), env(safe-area-inset-left, 0px));
+  padding-right: max(var(--page-gutter), env(safe-area-inset-right, 0px));
+}
+
+/* Margem lateral padrão — respeita o recorte lateral do aparelho. */
+@utility page-x {
+  padding-left: max(var(--page-gutter), env(safe-area-inset-left, 0px));
+  padding-right: max(var(--page-gutter), env(safe-area-inset-right, 0px));
+}
+
+/* Trilho horizontal que sangra até a borda mantendo o alinhamento da página. */
+@utility page-bleed {
+  margin-left: calc(var(--page-gutter) * -1);
+  margin-right: calc(var(--page-gutter) * -1);
+  padding-left: var(--page-gutter);
+  padding-right: var(--page-gutter);
+}
+
+/* Raios do sistema. */
+@utility r-card {
+  border-radius: var(--r-card);
+}
+@utility r-btn {
+  border-radius: var(--r-btn);
+}
+@utility r-sheet {
+  border-radius: var(--r-sheet) var(--r-sheet) 0 0;
+}
+
+/* Superfície de card: profundidade por camada, borda quase invisível. */
+@utility card-surface {
+  background-color: var(--card);
+  border: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
+  box-shadow: var(--shadow-soft);
+}
+
+/* Skeleton único: mesma cor, mesmo brilho, mesmo raio em todo o app. */
+@utility skeleton {
+  /* Discreto: respiração de opacidade (GPU), sem brilho correndo. */
+  background: color-mix(in oklab, var(--muted) 72%, transparent);
+  animation: skeleton-breathe 1.6s ease-in-out infinite;
+  border-radius: 10px;
+}
+
+@keyframes skeleton-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+
+/* Carrossel que sangra só à direita: o primeiro card fica alinhado à página. */
+@utility page-bleed-r {
+  margin-right: calc(var(--page-gutter) * -1);
+  padding-right: var(--page-gutter);
+}
+
+@keyframes orium-island-in {
+  0% { opacity: 0; transform: translateY(28px) scale(0.92); filter: blur(6px); }
+  60% { opacity: 1; transform: translateY(-4px) scale(1.01); filter: blur(0); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.orium-island > * { animation: orium-island-in 0.55s cubic-bezier(0.22, 1.2, 0.36, 1) both; transform-origin: bottom center; }
+@media (prefers-reduced-motion: reduce) { .orium-island > * { animation: none; } }
+
+/* ---------- Copilot: ilha flutuante liquid glass ---------- */
+.copilot-island {
+  position: fixed;
+  z-index: 54;
+  right: calc(env(safe-area-inset-right, 0px) + 16px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  display: flex;
+  align-items: center;
+  gap: 0;
+  height: 52px;
+  padding: 0 6px;
+  border-radius: 999px;
+  color: var(--gold-soft);
+  background:
+    radial-gradient(120% 140% at 30% 0%, color-mix(in oklab, var(--gold) 16%, transparent), transparent 60%),
+    color-mix(in oklab, oklch(0.16 0.01 70) 78%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  backdrop-filter: blur(18px) saturate(1.4);
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, white 14%, transparent),
+    inset 0 0 0 1px color-mix(in oklab, var(--gold) 32%, transparent),
+    0 12px 32px -12px oklch(0 0 0 / 60%),
+    0 0 24px -8px color-mix(in oklab, var(--gold) 35%, transparent);
+  transition: transform 380ms cubic-bezier(0.34, 1.4, 0.64, 1), box-shadow 300ms ease, opacity 260ms ease, gap 300ms ease, padding 300ms ease;
+  animation: copilot-island-in 620ms cubic-bezier(0.34, 1.4, 0.64, 1) both;
+}
+.copilot-island:hover { transform: translateY(-2px) scale(1.03); gap: 8px; padding-right: 16px;
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, white 18%, transparent),
+    inset 0 0 0 1px color-mix(in oklab, var(--gold) 55%, transparent),
+    0 16px 36px -12px oklch(0 0 0 / 65%),
+    0 0 34px -6px color-mix(in oklab, var(--gold) 50%, transparent);
+}
+.copilot-island:active { transform: scale(0.96); }
+.copilot-island:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+.copilot-island[data-open="true"] { opacity: 0; transform: translateY(12px) scale(0.85); pointer-events: none; }
+.copilot-island-label {
+  max-width: 0; overflow: hidden; white-space: nowrap; opacity: 0;
+  font-size: 13px; font-weight: 500; letter-spacing: 0.08em;
+  transition: max-width 320ms cubic-bezier(0.16, 1, 0.3, 1), opacity 240ms ease;
+}
+.copilot-island:hover .copilot-island-label { max-width: 90px; opacity: 1; }
+.copilot-orb {
+  position: relative; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 999px;
+  background: radial-gradient(circle at 35% 30%, color-mix(in oklab, var(--gold-soft) 38%, transparent), color-mix(in oklab, var(--gold) 8%, transparent) 70%);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--gold) 40%, transparent);
+}
+.copilot-orb::before {
+  content: ""; position: absolute; inset: -3px; border-radius: inherit;
+  background: conic-gradient(from 0deg, transparent 0 70%, color-mix(in oklab, var(--gold-soft) 70%, transparent), transparent);
+  -webkit-mask: radial-gradient(circle, transparent 62%, #000 64%); mask: radial-gradient(circle, transparent 62%, #000 64%);
+  animation: copilot-spin 6s linear infinite; opacity: 0.7;
+}
+.copilot-orb::before { display: none; }
+.copilot-island:hover .copilot-orb2 .orb-arc { opacity: 1; animation: copilot-spin 2.4s linear infinite; }
+.copilot-badge {
+  position: absolute; top: 2px; right: 2px; width: 9px; height: 9px; border-radius: 999px;
+  background: var(--gold); box-shadow: 0 0 0 2px oklch(0.16 0.01 70), 0 0 10px var(--gold);
+}
+.copilot-panel-in { animation: copilot-panel-in 420ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+@media (min-width: 1024px) {
+  .copilot-island { right: 24px; bottom: 24px; }
+  .copilot-panel-in { animation-name: copilot-panel-side; }
+}
+@keyframes copilot-island-in { from { opacity: 0; transform: translateY(20px) scale(0.8); } to { opacity: 1; transform: none; } }
+@keyframes copilot-spin { to { transform: rotate(360deg); } }
+@keyframes copilot-breathe { 0%,100% { transform: scale(1) rotate(0); opacity: .9; } 50% { transform: scale(1.12) rotate(12deg); opacity: 1; } }
+@keyframes copilot-panel-in { from { opacity: 0; transform: translateY(24px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes copilot-panel-side { from { opacity: 0; transform: translateX(32px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .copilot-island, .copilot-orb::before, .copilot-orb svg, .copilot-panel-in { animation: none; }
+}
+
+/* ---------- Copilot v2: orb, painel, mensagens ---------- */
+.copilot-orb2 { position: relative; display: inline-grid; place-items: center; flex-shrink: 0; transform: scale(var(--orb-scale, 1)); transition: transform 120ms linear; }
+.copilot-orb2 svg { overflow: visible; }
+.copilot-orb2 .orb-arc { transform-origin: 20px 20px; opacity: 0.55; }
+.copilot-orb2 .orb-core { transform-origin: 20px 20px; animation: orb-breathe 5s ease-in-out infinite; }
+.copilot-orb2[data-state="thinking"] .orb-arc { opacity: 1; animation: copilot-spin 2.4s linear infinite; }
+.copilot-orb2[data-state="working"] .orb-arc { opacity: 1; stroke-dasharray: 10 84; animation: copilot-spin 0.9s linear infinite; }
+.copilot-orb2[data-state="listening"] .orb-arc { opacity: 0.9; animation: copilot-spin 6s linear infinite; }
+.copilot-orb2[data-state="done"] { animation: orb-flash 700ms ease-out; }
+@keyframes orb-breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+@keyframes orb-flash { 0% { filter: drop-shadow(0 0 0 transparent); } 30% { filter: drop-shadow(0 0 8px var(--gold)); } 100% { filter: drop-shadow(0 0 0 transparent); } }
+
+.copilot-surface {
+  background:
+    radial-gradient(120% 60% at 100% 0%, color-mix(in oklab, var(--gold) 7%, transparent), transparent 60%),
+    radial-gradient(90% 50% at 0% 100%, color-mix(in oklab, var(--gold) 4%, transparent), transparent 70%),
+    var(--background);
+}
+.copilot-glass {
+  background: color-mix(in oklab, var(--card) 72%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  backdrop-filter: blur(14px) saturate(1.3);
+  box-shadow: inset 0 1px 0 color-mix(in oklab, white 7%, transparent), inset 0 0 0 1px color-mix(in oklab, var(--border) 70%, transparent), 0 10px 30px -18px oklch(0 0 0 / 55%);
+}
+/* composer do Copilot: uma única superfície — o grupo interno não pinta fundo, borda nem sombra */
+.copilot-composer [data-slot="input-group"],
+.copilot-composer [data-slot="input-group-control"],
+.copilot-composer [data-slot="input-group-addon"] {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+.copilot-card {
+  background: color-mix(in oklab, var(--card) 85%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--gold) 18%, var(--border)), 0 12px 30px -20px oklch(0 0 0 / 60%);
+  transition: box-shadow 300ms ease, padding 300ms ease;
+}
+.copilot-card-done { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--gold) 38%, transparent); padding-block: 0.75rem; }
+
+.copilot-panel {
+  transform-origin: calc(100% - 40px) calc(100% - 40px);
+  animation: copilot-grow 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.copilot-panel[data-closing="true"] { animation: copilot-shrink 220ms cubic-bezier(0.4, 0, 1, 1) both; }
+.copilot-panel-content { animation: copilot-content-in 280ms 90ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes copilot-grow { from { opacity: 0; transform: scale(0.12); border-radius: 999px; } 60% { opacity: 1; } to { opacity: 1; transform: none; } }
+@keyframes copilot-shrink { from { opacity: 1; transform: none; } to { opacity: 0; transform: scale(0.14); border-radius: 999px; } }
+@keyframes copilot-content-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (min-width: 1024px) {
+  .copilot-panel { top: 12px; bottom: 12px; right: 12px; border-radius: 22px; transform-origin: calc(100% - 28px) calc(100% - 28px); }
+}
+
+.copilot-msg-in { animation: copilot-msg 200ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes copilot-msg { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: none; } }
+.copilot-user-bubble { background: color-mix(in oklab, var(--muted) 85%, transparent); color: var(--foreground); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--border) 70%, transparent); }
+
+.copilot-wave span { transition: height 80ms linear; }
+
+@media (prefers-reduced-motion: reduce) {
+  .copilot-panel, .copilot-panel[data-closing="true"], .copilot-panel-content, .copilot-msg-in { animation: copilot-fade 160ms ease both; }
+  .copilot-orb2 .orb-arc, .copilot-orb2 .orb-core { animation: none !important; }
+}
+@keyframes copilot-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* Home — entrada do hero */
+@keyframes hero-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes hero-zoom { from { transform: scale(1.06); } to { transform: scale(1); } }
+.hero-in { animation: hero-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.hero-img { animation: hero-zoom 1.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.hero-line { animation: hero-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both; }
+@media (prefers-reduced-motion: reduce) { .hero-in, .hero-img, .hero-line { animation: none; } }
+
+/* Home (nova versão) — títulos de seção e entrada em cascata dos cartões.
+   Cada cartão sobe 16px e aparece; --card-d dá o atraso de cada um.
+   Só transform/opacity, uma vez, quando a seção entra na tela. */
+.home-title {
+  font-size: clamp(30px, 8.4vw, 36px);
+  line-height: 1.1;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+@media (min-width: 600px) {
+  .home-title { font-size: 40px; }
+}
+.home-subtitle {
+  margin-top: 6px;
+  font-size: clamp(16px, 4.4vw, 20px);
+  line-height: 1.3;
+  color: #bebebe;
+}
+.home-cards-pre .home-card {
+  opacity: 0;
+  transform: translateY(16px);
+}
+.home-cards-in .home-card {
+  animation: home-card-rise 560ms var(--ease-orium) backwards;
+  animation-delay: var(--card-d, 0ms);
+}
+@keyframes home-card-rise {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-cards-pre .home-card { opacity: 1; transform: none; }
+  .home-cards-in .home-card { animation: none; }
+}
+
+/* Hero: profundidade ao rolar (só onde o navegador suporta scroll-driven
+   animations — sem JS, sem listener de scroll). O vídeo afunda e cresce de
+   leve; o texto sobe e esmaece enquanto a página passa por cima. */
+@supports (animation-timeline: scroll()) {
+  @media (prefers-reduced-motion: no-preference) and (max-width: 1023px) {
+    .hero-depth {
+      animation: hero-depth linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 90vh;
+    }
+    .hero-copy-depth {
+      animation: hero-copy-depth linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 40vh 85vh;
+    }
+  }
+}
+@keyframes hero-depth {
+  from { transform: none; }
+  to { transform: translateY(14%) scale(1.06); }
+}
+@keyframes hero-copy-depth {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(-28px); }
+}
+
+/* Liquid glass escuro da Home — mesmo DNA no header, busca e busca fixa.
+   Blur constante (nunca animado); só cor/opacidade/borda transitam. */
+@utility glass-dark {
+  position: relative;
+  background: oklch(0.13 0.008 60 / var(--glass-a, 0.42));
+  backdrop-filter: blur(8px) saturate(135%);
+  border-color: oklch(1 0 0 / 0.08);
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.07),
+    inset 0 -1px 0 oklch(0 0 0 / 0.25),
+    0 10px 30px -18px oklch(0 0 0 / 0.7);
+  transition:
+    background-color 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ============================================================
+   Botão secundário premium (grafite vítreo) — sistema global.
+   Dourado sólido = CTA principal (intocado). Todo o resto que é
+   botão/chip/seletor escuro herda esta superfície.
+   ============================================================ */
+:root {
+  /* mesmo material dos seletores 2ml/5ml/10ml (.decant-vial) */
+  --glass-btn-top: oklch(0.2 0.006 70);
+  --glass-btn-bottom: oklch(0.15 0.005 60);
+  --glass-btn-edge: color-mix(in oklab, var(--gold) 14%, color-mix(in oklab, var(--foreground) 8%, transparent));
+  --glass-btn-edge-hi: color-mix(in oklab, var(--gold) 34%, color-mix(in oklab, var(--foreground) 10%, transparent));
+  --glass-btn-sheen: color-mix(in oklab, var(--foreground) 7%, transparent);
+  --glass-btn-sink: color-mix(in oklab, var(--background) 80%, transparent);
+}
+.btn-glass,
+:is(button, [role="button"], [role="tab"], [role="radio"], [role="option"], a, label):is(
+    [class^="bg-surface"], [class*=" bg-surface"], [class^="bg-secondary"], [class*=" bg-secondary"], [class^="bg-muted"], [class*=" bg-muted"], [class^="bg-card"], [class*=" bg-card"],
+    [class*=" bg-gold/5"], [class*=" bg-gold/10"], [class*=" bg-gold/15"], [class*=" bg-gold/20"]
+  ):not([class~="bg-gold"], [class~="bg-primary"], .decant-vial, .glass-dark, [disabled]) {
+  border-color: var(--glass-btn-edge);
+  background:
+    radial-gradient(120% 90% at 50% 0%, var(--glass-btn-sheen), transparent 62%),
+    linear-gradient(180deg, var(--glass-btn-top), var(--glass-btn-bottom));
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, var(--foreground) 8%, transparent),
+    inset 0 -10px 18px -12px var(--glass-btn-sink),
+    0 1px 2px color-mix(in oklab, var(--background) 60%, transparent);
+  transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1), border-color 250ms ease,
+    box-shadow 300ms ease, filter 250ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+/* garante contorno mesmo em elementos sem classe border */
+:is(button, [role="button"], [role="tab"], [role="radio"], [role="option"], a, label):is(
+    [class^="bg-surface"], [class*=" bg-surface"], [class^="bg-secondary"], [class*=" bg-secondary"], [class^="bg-muted"], [class*=" bg-muted"], [class^="bg-card"], [class*=" bg-card"]
+  ):not([class*="border"], [class~="bg-gold"], [class~="bg-primary"], .decant-vial, .glass-dark) {
+  border: 1px solid var(--glass-btn-edge);
+}
+@media (hover: hover) {
+  .btn-glass:hover,
+  :is(button, [role="button"], [role="tab"], [role="radio"], [role="option"], a, label):is(
+      [class^="bg-surface"], [class*=" bg-surface"], [class^="bg-secondary"], [class*=" bg-secondary"], [class^="bg-muted"], [class*=" bg-muted"], [class^="bg-card"], [class*=" bg-card"]
+    ):not([class~="bg-gold"], [class~="bg-primary"], .decant-vial, .glass-dark, [disabled]):hover {
+    border-color: var(--glass-btn-edge-hi);
+    filter: brightness(1.08);
+  }
+}
+.btn-glass:focus-visible,
+:is(button, [role="button"], [role="tab"], [role="radio"], [role="option"], a, label):is(
+    [class^="bg-surface"], [class*=" bg-surface"], [class^="bg-secondary"], [class*=" bg-secondary"], [class^="bg-muted"], [class*=" bg-muted"], [class^="bg-card"], [class*=" bg-card"]
+  ):focus-visible {
+  border-color: var(--glass-btn-edge-hi);
+  box-shadow: inset 0 1px 0 color-mix(in oklab, var(--foreground) 8%, transparent),
+    0 0 0 2px color-mix(in oklab, var(--gold) 30%, transparent);
+}
+.btn-glass:active,
+:is(button, [role="button"], [role="tab"], [role="radio"], [role="option"], a, label):is(
+    [class^="bg-surface"], [class*=" bg-surface"], [class^="bg-secondary"], [class*=" bg-secondary"], [class^="bg-muted"], [class*=" bg-muted"], [class^="bg-card"], [class*=" bg-card"],
+    [class*=" bg-gold/10"], [class*=" bg-gold/15"]
+  ):not([class~="bg-gold"], [class~="bg-primary"], .decant-vial, .glass-dark, [disabled]):active {
+  transform: scale(0.98);
+  filter: brightness(0.96);
+  box-shadow: inset 0 2px 6px var(--glass-btn-sink);
+}
+/* selecionado: mesma base, borda dourada evidente */
+[role="tab"][data-state="active"],
+.btn-glass:is([aria-pressed="true"], [aria-checked="true"], [aria-selected="true"], [data-state="active"], [data-state="on"]),
+:is(button, [role="button"], [role="tab"], [role="radio"], [role="option"], a, label):is(
+    [class^="bg-surface"], [class*=" bg-surface"], [class^="bg-secondary"], [class*=" bg-secondary"], [class^="bg-muted"], [class*=" bg-muted"], [class^="bg-card"], [class*=" bg-card"],
+    [class*=" bg-gold/5"], [class*=" bg-gold/10"], [class*=" bg-gold/15"], [class*=" bg-gold/20"]
+  ):not([class~="bg-gold"], [class~="bg-primary"], .decant-vial, .glass-dark, [disabled]):is(
+    [aria-pressed="true"], [aria-checked="true"], [aria-selected="true"], [data-state="active"], [data-state="on"],
+    [class~="border-gold"], [class*=" border-gold/"]
+  ) {
+  border-color: color-mix(in oklab, var(--gold) 62%, transparent);
+  /* seleção só pelo contorno dourado; sem brilho */
+  background: linear-gradient(180deg, var(--glass-btn-top), var(--glass-btn-bottom));
+  box-shadow: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn-glass, :is(button, [role="button"], a) { transition-duration: 1ms; }
+}
+
+/* ── Orium CTA principal (sistema único para todo botão dourado) ── */
+:root {
+  /* token único do dourado principal: CTAs e ilha do carrinho */
+  --orium-primary-gold: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--gold-soft) 92%, white 8%) 0%,
+    color-mix(in oklab, var(--gold) 92%, black 4%) 100%
+  );
+}
+.btn-cta,
+:is(button, a, [role="button"]):is(.bg-gold, .bg-primary) {
+  /* dourado do Figma: chapado, sem degradê e sem brilho */
+  background: #ffd599;
+  color: #15130f;
+  border-radius: 9999px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  gap: 0.5rem;
+  box-shadow: none;
+  transition: background-color 200ms ease, transform 180ms cubic-bezier(.2,.8,.2,1), opacity 200ms ease;
+}
+:is(.btn-cta, :is(button, a, [role="button"]):is(.bg-gold, .bg-primary)) svg { width: 1rem; height: 1rem; stroke-width: 2; }
+@media (hover: hover) {
+  :is(.btn-cta, :is(button, a, [role="button"]):is(.bg-gold, .bg-primary)):hover:not(:disabled) {
+    background: #f7ca8a;
+  }
+}
+:is(.btn-cta, :is(button, a, [role="button"]):is(.bg-gold, .bg-primary)):active:not(:disabled) {
+  transform: scale(0.985);
+}
+:is(.btn-cta, :is(button, a, [role="button"]):is(.bg-gold, .bg-primary)):focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--gold-soft) 80%, transparent);
+  outline-offset: 3px;
+}
+:is(.btn-cta, :is(button, a, [role="button"]):is(.bg-gold, .bg-primary)):disabled,
+:is(.btn-cta, :is(button, a, [role="button"]):is(.bg-gold, .bg-primary))[aria-disabled="true"] {
+  opacity: 0.45;
+  box-shadow: none;
+}
+:is(.btn-cta, :is(button, a, [role="button"]):is(.bg-gold, .bg-primary))[aria-busy="true"] { cursor: progress; opacity: 0.85; }
+
+/* ══ ADMIN — mesma linguagem da loja ══════════════════════════════════
+   Fundo #101010, barras #0A0A0A com fio de 6%, cartões #1A1A1A, controles
+   #1F1F1F, selecionado = branco (como os chips da loja), dourado #FFD599 só
+   como acento. Tudo chapado: sem degradê, sem brilho, sem desfoque.
+   Escopo: .admin-theme (páginas) e body.admin-mode (modais/sheets em portal). */
+.admin-theme, body.admin-mode {
+  --background: #101010;
+  --foreground: #ffffff;
+  --card: #1a1a1a;
+  --card-foreground: #ffffff;
+  --popover: #161616;
+  --popover-foreground: #ffffff;
+  --surface-1: #161616;
+  --surface-2: #1a1a1a;
+  --surface-3: #1f1f1f;
+  --muted: #1f1f1f;
+  --secondary: #1f1f1f;
+  --secondary-foreground: #ffffff;
+  --accent: #232323;
+  --accent-foreground: #ffffff;
+  --muted-foreground: #a9a9a9;
+  --border: rgb(255 255 255 / 0.07);
+  --input: rgb(255 255 255 / 0.1);
+  --ring: #ffd599;
+  --primary: #ffd599;
+  --primary-foreground: #15130f;
+  --gold: #ffd599;
+  --gold-soft: #ffddaa;
+  --gold-faint: rgb(255 213 153 / 0.12);
+  --gold-foreground: #15130f;
+  --success: #7fcf9f;
+  --warning: #f5c26b;
+  --sidebar: #0a0a0a;
+  --sidebar-border: rgb(255 255 255 / 0.06);
+  --shadow-soft: none;
+  --shadow-lift: 0 24px 48px -24px rgb(0 0 0 / 0.85);
+  --adm-control: #1f1f1f;
+  --adm-control-hover: #262626;
+}
+body.admin-mode { background-color: #101010; }
+
+/* barras */
+.adm-bar { background: #0a0a0a; border-bottom: 1px solid rgb(255 255 255 / 0.06); }
+.adm-tabbar { background: #0a0a0a; border-top: 1px solid rgb(255 255 255 / 0.06); }
+.adm-rail { background: #0a0a0a; border-right: 1px solid rgb(255 255 255 / 0.06); }
+.adm-scroll { scrollbar-width: none; }
+.adm-scroll::-webkit-scrollbar { display: none; }
+
+/* logo ⇄ título na barra do celular */
+.adm-bar-mark, .adm-bar-title {
+  transition: opacity 220ms var(--ease-orium), transform 320ms var(--ease-orium);
+}
+.adm-bar-mark.is-off { opacity: 0; transform: translateY(-6px) scale(0.9); }
+.adm-bar-title.is-off { opacity: 0; transform: translateY(8px); }
+.adm-bar-mark.is-on, .adm-bar-title.is-on { opacity: 1; transform: none; }
+
+/* itens do menu */
+.adm-nav { color: #a9a9a9; transition: background-color 160ms ease, color 160ms ease; }
+.adm-nav .adm-nav-ico { color: #8c8c8c; transition: color 160ms ease; }
+@media (hover: hover) {
+  .adm-nav:hover { background: rgb(255 255 255 / 0.04); color: #fff; }
+  .adm-nav:hover .adm-nav-ico { color: #fff; }
+}
+.adm-nav[data-active="true"] { background: #1a1a1a; color: #fff; }
+.adm-nav[data-active="true"] .adm-nav-ico { color: #ffd599; }
+
+/* cartões */
+.adm-card {
+  background: #1a1a1a;
+  border: 1px solid rgb(255 255 255 / 0.05);
+  border-radius: 22px;
+}
+.adm-card-gold {
+  background: #1a1a1a;
+  border: 1px solid rgb(255 213 153 / 0.32);
+  border-radius: 22px;
+}
+:is(.admin-theme, body.admin-mode) :is(.rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl).bg-card {
+  background: #1a1a1a;
+  border-color: rgb(255 255 255 / 0.05);
+  box-shadow: none;
+}
+:is(.admin-theme, body.admin-mode) .shadow-soft { box-shadow: none; }
+
+/* entrada do Início: subida curta em cascata (só transform/opacity) */
+@keyframes adm-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.adm-rise { animation: adm-rise 520ms var(--ease-orium) both; animation-delay: calc(var(--i, 0) * 50ms); }
+@keyframes adm-ping { 0% { transform: scale(1); opacity: 0.55; } 100% { transform: scale(2.6); opacity: 0; } }
+.adm-live { position: relative; }
+.adm-live::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; background: inherit;
+  animation: adm-ping 1.8s var(--ease-orium) infinite;
+}
+.adm-pulse { animation: none; }
+
+/* controles chapados (substitui o "vidro" da loja dentro do Admin) */
+:is(.admin-theme, body.admin-mode) :is(
+    .btn-glass,
+    :is(button, [role="button"], [role="tab"], [role="radio"], [role="option"], a, label):is(
+      [class*="bg-surface"], [class*="bg-secondary"], [class*="bg-muted"], [class*="bg-card"]
+    )
+  ):not(.bg-gold, .bg-primary, .decant-vial, .glass-dark) {
+  background: var(--adm-control) !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+@media (hover: hover) {
+  :is(.admin-theme, body.admin-mode) :is(
+      .btn-glass,
+      :is(button, [role="button"], [role="tab"], [role="radio"], [role="option"], a, label):is(
+        [class*="bg-surface"], [class*="bg-secondary"], [class*="bg-muted"], [class*="bg-card"]
+      )
+    ):not(.bg-gold, .bg-primary, .decant-vial, .glass-dark, [disabled]):hover {
+    background: var(--adm-control-hover) !important;
+  }
+}
+/* selecionado = branco, como os chips da loja */
+:is(.admin-theme, body.admin-mode) :is(
+    .btn-glass,
+    :is(button, [role="button"], [role="tab"], [role="radio"], [role="option"], a, label):is(
+      [class*="bg-surface"], [class*="bg-secondary"], [class*="bg-muted"], [class*="bg-card"]
+    ),
+    [role="tab"]
+  ):not(.bg-gold, .bg-primary, .decant-vial, .glass-dark):is(
+    [aria-pressed="true"], [aria-checked="true"], [aria-selected="true"], [data-state="active"], [data-state="on"]
+  ) {
+  background: #ffffff !important;
+  color: #15130f !important;
+  border-color: transparent !important;
+}
+:is(.admin-theme, body.admin-mode) :is([aria-pressed="true"], [aria-checked="true"], [aria-selected="true"], [role="tab"][data-state="active"]):not(.bg-gold, .bg-primary) :is(.text-muted-foreground, .text-foreground) {
+  color: inherit;
+}
+
+/* segmentado (período, origem…) */
+.adm-seg {
+  display: flex; gap: 2px; padding: 4px; border-radius: 9999px;
+  background: #1a1a1a;
+}
+.adm-seg > button {
+  flex: 1 1 0; min-width: 0; min-height: 36px; border-radius: 9999px; padding: 0 14px;
+  font-size: 14px; font-weight: 600; color: #a9a9a9; white-space: nowrap;
+  transition: background-color 200ms var(--ease-orium), color 200ms var(--ease-orium);
+}
+.adm-seg > button:hover { color: #fff; }
+.adm-seg > button[aria-pressed="true"] { background: #fff; color: #15130f; }
+.adm-seg > button:focus-visible { outline: 2px solid #ffd599; outline-offset: 1px; }
+
+/* abas do Radix */
+:is(.admin-theme, body.admin-mode) [role="tablist"] {
+  border-radius: 9999px;
+  border: 0;
+  background: #1a1a1a;
+  padding: 4px;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+:is(.admin-theme, body.admin-mode) [role="tablist"] [role="tab"] {
+  border-radius: 9999px; white-space: nowrap; font-weight: 600;
+  background: transparent !important; color: #a9a9a9;
+  transition: background-color 200ms var(--ease-orium), color 200ms var(--ease-orium);
+}
+:is(.admin-theme, body.admin-mode) [role="tablist"] [role="tab"]:is([data-state="active"], [aria-selected="true"]) {
+  background: #fff !important; color: #15130f !important; box-shadow: none;
+}
+
+/* chips */
+:is(.admin-theme, body.admin-mode) .chip:not([data-on]) { background: #1f1f1f; box-shadow: none; }
+
+/* campos */
+:is(.admin-theme, body.admin-mode) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, select):not([data-slot="input-group-control"]) {
+  border-radius: 14px;
+  border-color: rgb(255 255 255 / 0.06);
+  background-color: #1a1a1a;
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+:is(.admin-theme, body.admin-mode) :is(input, textarea, select):not([data-slot="input-group-control"]):focus-visible {
+  outline: none;
+  border-color: rgb(255 213 153 / 0.55);
+  background-color: #1d1d1d;
+  box-shadow: none;
+}
+:is(.admin-theme, body.admin-mode) :is(input, textarea)::placeholder { color: #6f6f6f; }
+
+/* janelas e folhas */
+body.admin-mode [role="dialog"] { box-shadow: 0 24px 48px -24px rgb(0 0 0 / 0.85); }
+body.admin-mode [role="dialog"][data-side="bottom"] { border-radius: 28px 28px 0 0; }
+body.admin-mode [role="menu"] { border-radius: 16px; background: #161616; border-color: rgb(255 255 255 / 0.07); }
+body.admin-mode [data-radix-popper-content-wrapper] [role="listbox"] { background: #161616; }
+body.admin-mode .backdrop-blur-sm, body.admin-mode .backdrop-blur { backdrop-filter: none; -webkit-backdrop-filter: none; }
+
+/* tabelas: cabeçalho discreto, sem caixa-alta */
+.admin-theme table th { font-size: 12.5px; letter-spacing: 0; text-transform: none; color: #8c8c8c; font-weight: 600; }
+.admin-theme table td { border-color: rgb(255 255 255 / 0.05); }
+.admin-theme main { overflow-x: clip; }
+
+/* rótulos em caixa-alta espaçada viram texto normal (mais calmo, como a loja) */
+.admin-theme :is(.uppercase.tracking-wide, .uppercase.tracking-wider, .uppercase.tracking-widest, [class*="uppercase"][class*="tracking-[0.1"]) {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Copilot dentro do Admin: chapado, sem brilho, acima da barra inferior */
+.copilot-island {
+  background: #1a1a1a;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: inset 0 0 0 1px rgb(255 213 153 / 0.28), 0 12px 28px -12px rgb(0 0 0 / 0.75);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 76px);
+}
+.copilot-island:hover { box-shadow: inset 0 0 0 1px rgb(255 213 153 / 0.5), 0 14px 30px -12px rgb(0 0 0 / 0.8); }
+@media (min-width: 1024px) { .copilot-island { right: 24px; bottom: 24px; } }
+.copilot-orb { background: #232323; box-shadow: inset 0 0 0 1px rgb(255 213 153 / 0.28); }
+.copilot-badge { box-shadow: 0 0 0 2px #1a1a1a; }
+.copilot-surface { background: #101010; }
+.copilot-glass {
+  background: #1a1a1a;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+}
+.copilot-card { background: #1a1a1a; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06); }
+.copilot-card-done { box-shadow: inset 0 0 0 1px rgb(255 213 153 / 0.3); }
+
+@keyframes adm-enter { from { opacity: 0; transform: translate3d(0, 4px, 0); } to { opacity: 1; transform: none; } }
+.admin-theme main > * { animation: adm-enter 200ms var(--ease-orium) both; }
+@media (prefers-reduced-motion: reduce) {
+  .admin-theme main > *, .adm-rise, .adm-live::after { animation: none; }
+  .adm-bar-mark, .adm-bar-title { transition: none; }
+}
+
+/* ── Carrinho: UM elemento dourado que se transforma (círculo ⇄ ilha) ──
+   Forma = clip-path ancorado à direita/baixo (sem reflow); conteúdo = transform/opacity.
+   Expansão: microcompressão → abre para a esquerda → conteúdo em sequência.
+   Recolhimento: conteúdo sai primeiro → forma contrai → círculo. */
+.cart-morph {
+  --cm-out: cubic-bezier(0.2, 0.9, 0.25, 1);     /* entrada rápida, desaceleração longa */
+  --cm-in: cubic-bezier(0.45, 0, 0.2, 1);        /* recolher sem pressa nem tranco */
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  height: 60px;
+  border-radius: 30px;
+  contain: layout paint style;
+  isolation: isolate;
+  transform-origin: right bottom;
+  clip-path: inset(4px 0 0 calc(100% - 56px) round 9999px); /* compacto = círculo 56×56 */
+  transition: clip-path 260ms var(--cm-in) 70ms, opacity 200ms var(--cm-out), transform 120ms var(--cm-out);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  backface-visibility: hidden;
+}
+.cart-morph.is-expanded {
+  clip-path: inset(0 0 0 0 round 30px);
+  transition: clip-path 320ms var(--cm-out) 40ms, opacity 200ms var(--cm-out), transform 120ms var(--cm-out);
+  animation: cm-press 320ms var(--cm-out);
+}
+@keyframes cm-press { 0% { transform: scale(1); } 14% { transform: scale(0.96); } 100% { transform: scale(1); } }
+.cart-morph.is-hidden { opacity: 0; transform: translate3d(0, 10px, 0); pointer-events: none; }
+.cart-morph:active { transform: scale(0.97); }
+.cart-morph-bg {
+  position: absolute; inset: 0; border-radius: inherit;
+  background: var(--orium-primary-gold);
+  box-shadow: inset 0 1px 0 color-mix(in oklab, white 45%, transparent), inset 0 -1px 0 color-mix(in oklab, black 12%, transparent);
+}
+.cart-morph-compact {
+  position: absolute; right: 0; bottom: 0;
+  width: 56px; height: 56px; aspect-ratio: 1 / 1; border-radius: 9999px;
+  display: grid; place-items: center; padding: 0;
+  transform-origin: center;
+  color: var(--gold-foreground);
+  transition: opacity 160ms var(--cm-out) 230ms, transform 220ms var(--cm-out) 230ms;
+}
+.cart-morph.is-expanded .cart-morph-compact { opacity: 0; transform: scale(0.8); transition: opacity 90ms linear, transform 160ms var(--cm-out); }
+.cart-morph-island {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.5rem 0.5rem 0.5rem 0.625rem;
+  color: var(--gold-foreground);
+  pointer-events: none;
+}
+/* peças: estado base = escondido; saem rápido e juntas no recolhimento */
+.cm-thumb, .cm-l1, .cm-l2, .cm-l3, .cart-island-cta {
+  opacity: 0;
+  transition: opacity 110ms linear, transform 160ms var(--cm-in);
+}
+.cm-thumb { transform: scale(0.92) translate3d(6px, 0, 0); }
+.cm-l1, .cm-l2, .cm-l3 { transform: translate3d(8px, 0, 0); }
+.cart-island-cta { transform: translate3d(10px, 0, 0) scale(0.96); }
+/* entrada em sequência (~200ms entre primeira e última peça) */
+.cart-morph.is-expanded :is(.cm-thumb, .cm-l1, .cm-l2, .cm-l3, .cart-island-cta) {
+  opacity: 1; transform: none;
+  transition: opacity 180ms var(--cm-out), transform 300ms var(--cm-out);
+}
+.cart-morph.is-expanded .cm-thumb { transition-delay: 150ms; }
+.cart-morph.is-expanded .cm-l1 { transition-delay: 210ms; }
+.cart-morph.is-expanded .cm-l2 { transition-delay: 250ms; }
+.cart-morph.is-expanded .cm-l3 { transition-delay: 280ms; }
+.cart-morph.is-expanded .cart-island-cta { transition-delay: 320ms; }
+/* troca de item com a ilha aberta: só o conteúdo faz crossfade curto */
+.cm-img { animation: cm-swap 220ms var(--cm-out) both; }
+.cart-island-text { animation: cm-swap 220ms var(--cm-out) both; }
+@keyframes cm-swap { from { opacity: 0; transform: translate3d(6px, 0, 0) scale(0.97); } to { opacity: 1; transform: none; } }
+.cart-island-check {
+  background: var(--gold-foreground);
+  color: var(--gold);
+  box-shadow: 0 0 0 2px var(--gold);
+  transform: scale(0.7); opacity: 0;
+  transition: transform 140ms var(--cm-in), opacity 100ms linear;
+}
+.cart-morph.is-expanded .cart-island-check { transform: scale(1); opacity: 1; transition: transform 240ms var(--cm-out) 190ms, opacity 140ms linear 190ms; }
+.cm-check-path { stroke-dasharray: 12; stroke-dashoffset: 12; }
+.cart-morph.is-expanded .cm-check-path { stroke-dashoffset: 0; transition: stroke-dashoffset 220ms var(--cm-out) 240ms; }
+.cart-island-cta {
+  background: var(--gold-foreground);
+  color: color-mix(in oklab, var(--gold-soft) 90%, white 10%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .cart-morph, .cart-morph.is-expanded { transition: opacity 160ms linear; animation: none; }
+  .cart-morph *, .cart-morph.is-expanded * { transform: none !important; animation: none !important; transition: opacity 160ms linear !important; transition-delay: 0ms !important; }
+  .cm-check-path { stroke-dashoffset: 0; }
+}
+
+
+
+/* ——— Header e barra inferior: vidro escuro do Figma ——— */
+/* Header, barra inferior e orbe: cor sólida (sem desfoque), um tom abaixo
+   do fundo do app, separados só por um fio de luz. */
+.orium-topbar {
+  background: #0a0a0a;
+  border-bottom: 1px solid rgb(255 255 255 / 0.06);
+  transition:
+    background-color 420ms var(--ease-orium),
+    border-color 420ms var(--ease-orium);
+}
+/* Home, sobre o vídeo: some o fundo; ao rolar (ou "Explorar perfumes") volta o preto */
+.orium-topbar.is-clear {
+  background: transparent;
+  border-bottom-color: transparent;
+}
+.orium-navbar {
+  background: #0a0a0a;
+  border-top: 1px solid rgb(255 255 255 / 0.06);
+}
+.orium-nav {
+  transition:
+    transform 620ms var(--ease-orium),
+    opacity 420ms var(--ease-orium);
+  will-change: transform;
+}
+.orium-nav.is-hidden {
+  transform: translate3d(0, calc(100% + 40px), 0);
+  opacity: 0;
+  pointer-events: none;
+}
+.orium-nav.is-shown {
+  transform: none;
+  opacity: 1;
+}
+/* o orbe chega um instante depois da barra, com um leve "assentar" */
+.orium-nav .orium-cart-orb {
+  transition:
+    transform 700ms cubic-bezier(0.34, 1.4, 0.64, 1) 60ms,
+    box-shadow 300ms ease;
+}
+.orium-nav.is-hidden .orium-cart-orb {
+  transform: translate3d(0, 24px, 0) scale(0.8);
+}
+.orium-nav.is-shown .orium-cart-orb:active {
+  transform: scale(0.94);
+  transition-duration: 90ms;
+}
+.orium-cart-orb {
+  isolation: isolate;
+  /* mesma cor sólida do header e da barra */
+  background: #0a0a0a;
+  box-shadow: 0 6px 16px -8px rgb(0 0 0 / 0.6);
+}
+/* aro dourado em degradê (#FFD599 → #EAB365), 1px, sem preencher o miolo */
+.orium-cart-orb::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(180deg, #ffd599, #eab365);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+.cart-bump {
+  animation: cart-bump 560ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes cart-bump {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.28) rotate(-8deg); }
+  60% { transform: scale(0.94) rotate(3deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+.badge-pop {
+  animation: badge-pop 420ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes badge-pop {
+  0% { transform: scale(0.4); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* aviso "Adicionado": sobe do carrinho e volta para ele */
+.cart-toast .cart-toast-card {
+  background: rgb(18 16 14 / 0.78);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 213 153 / 0.22),
+    0 18px 40px -16px rgb(0 0 0 / 0.8);
+  transform-origin: 50% 100%;
+  transform: translate3d(0, 34px, 0) scale(0.6);
+  opacity: 0;
+  filter: blur(4px);
+  transition:
+    transform 380ms var(--ease-orium),
+    opacity 260ms ease,
+    filter 300ms ease;
+}
+.cart-toast.is-open .cart-toast-card {
+  transform: none;
+  opacity: 1;
+  filter: none;
+  transition:
+    transform 560ms cubic-bezier(0.34, 1.32, 0.64, 1),
+    opacity 240ms ease,
+    filter 300ms ease;
+}
+.cart-toast.is-open .cart-toast-text {
+  animation: toast-text 420ms var(--ease-orium) 90ms backwards;
+}
+@keyframes toast-text {
+  from { opacity: 0; transform: translate3d(0, 6px, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orium-nav,
+  .orium-nav .orium-cart-orb,
+  .cart-toast .cart-toast-card {
+    transition-duration: 1ms !important;
+  }
+  .cart-bump,
+  .badge-pop,
+  .cart-toast.is-open .cart-toast-text {
+    animation: none;
+  }
+}
+
+/* ——— Home: vitrine do catálogo com "Ver tudo" (sem rolagem infinita) ——— */
+/* 4 linhas no celular (8), 3 no tablet (9), 3 no desktop (12) */
+@media (max-width: 599.98px) {
+  .home-preview > :nth-child(n + 9) { display: none; }
+}
+@media (min-width: 600px) and (max-width: 63.998rem) {
+  .home-preview > :nth-child(n + 10) { display: none; }
+}
+/* "Scroll Edge Effect – Soft" do Figma: desfoque que cresce para baixo + degradê até o fundo */
+.home-preview-fade {
+  position: absolute;
+  inset-inline: calc(var(--page-gutter, 20px) * -1);
+  bottom: -2px;
+  height: 230px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 22px;
+  pointer-events: none;
+  isolation: isolate;
+}
+.home-preview-fade::before,
+.home-preview-fade::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+}
+.home-preview-fade::before {
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 55%);
+  mask-image: linear-gradient(180deg, transparent 0%, #000 55%);
+}
+.home-preview-fade::after {
+  background: linear-gradient(180deg, transparent 0%, color-mix(in oklab, var(--background) 55%, transparent) 45%, var(--background) 100%);
+}
+.home-preview-cta {
+  pointer-events: auto;
+  height: 40px;
+  min-width: 136px;
+  padding-inline: 28px;
+  border-radius: 999px;
+  background: #fff;
+  color: #000;
+  font-size: 16px;
+  font-weight: 700;
+  transition:
+    transform var(--motion-fast) var(--ease-orium),
+    background-color 200ms ease;
+}
+@media (hover: hover) {
+  .home-preview-cta:hover {
+    background: #f2f1ed;
+  }
+}
+
+/* tela de pesquisa: entra de baixo, com o corpo um instante depois */
+.search-screen {
+  animation: search-screen-in 380ms var(--ease-orium) both;
+}
+.search-screen .search-screen-body {
+  animation: search-screen-body 520ms var(--ease-orium) 80ms both;
+}
+@keyframes search-screen-in {
+  from { opacity: 0; transform: translate3d(0, 14px, 0); }
+}
+@keyframes search-screen-body {
+  from { opacity: 0; transform: translate3d(0, 10px, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .search-screen,
+  .search-screen .search-screen-body { animation: none; }
+}
+
+/* Regra da casa: nada de brilho (glow) — o Figma não usa. Neutraliza os antigos. */
+.decant-vial__glow { display: none; }
+.wholesale-glow,
+.celebrate-glow,
+.price-glow { animation: none !important; }
+
+/* ——— Folha "Adicionar" ——— */
+.buy-sheet .bs-in {
+  animation: bs-rise 520ms var(--ease-orium) backwards;
+  animation-delay: calc(var(--bs-d, 0ms) + 120ms);
+}
+@keyframes bs-rise {
+  from { opacity: 0; transform: translate3d(0, 14px, 0); }
+}
+.buy-sheet .bs-size {
+  transition:
+    background-color 220ms var(--ease-orium),
+    color 220ms var(--ease-orium),
+    transform var(--motion-fast) var(--ease-orium);
+}
+.buy-sheet .bs-size[aria-checked="true"] {
+  animation: bs-pick 320ms cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+@keyframes bs-pick {
+  0% { transform: scale(0.96); }
+  100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .buy-sheet .bs-in,
+  .buy-sheet .bs-size[aria-checked="true"] { animation: none; }
+}
+
+/* ——— Pop-ups e avisos: um só material, igual ao resto do app ———
+   Folha escura translúcida, cantos grandes, borda quase invisível,
+   texto branco/cinza e um único botão dourado chapado. Sem brilho. */
+.o-pop {
+  background: rgb(20 20 20 / 0.94);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid rgb(255 255 255 / 0.07);
+  border-radius: 24px;
+  box-shadow: 0 24px 48px -24px rgb(0 0 0 / 0.85);
+  color: #fff;
+}
+.o-pop-close {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background: rgb(255 255 255 / 0.08);
+  color: #cfcfcf;
+  transition: background-color 180ms ease, transform var(--motion-fast) var(--ease-orium);
+}
+.o-pop-close:hover { background: rgb(255 255 255 / 0.14); }
+.o-pop-close:active { transform: scale(0.94); }
+.o-pop-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background: #232323;
+  color: #ffd599;
+}
+.o-pop-enter {
+  animation: o-pop-enter 460ms var(--ease-orium) backwards;
+}
+@keyframes o-pop-enter {
+  from { opacity: 0; transform: translate3d(0, 16px, 0) scale(0.98); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .o-pop-enter { animation: none; }
+}
+
+/* ——— Ajuda / cadastro rápido ——— */
+.lead-sheet .ls-field {
+  display: block;
+  width: 100%;
+  height: 52px;
+  padding-inline: 18px;
+  border-radius: 16px;
+  border: 1px solid transparent;
+  background: #1f1f1f;
+  color: #fff;
+  font-size: 16px;
+  outline: none;
+  transition: border-color 200ms ease, background-color 200ms ease;
+}
+.lead-sheet .ls-field::placeholder { color: #6e6e6e; }
+.lead-sheet .ls-field:focus {
+  border-color: rgb(255 213 153 / 0.6);
+  background: #222;
+}
+.lead-sheet .ls-input {
+  display: block;
+  width: 100%;
+  margin-top: 2px;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: #fff;
+  font-size: 18px;
+  line-height: 1.5;
+}
+.lead-sheet .ls-input::placeholder { color: #6e6e6e; }
+.lead-sheet .ls-row { transition: background-color 200ms ease; }
+.lead-sheet .ls-row:focus-within { background: #232323; }
+.lead-sheet .ls-in {
+  animation: bs-rise 520ms var(--ease-orium) backwards;
+  animation-delay: calc(var(--ls-d, 0ms) + 120ms);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lead-sheet .ls-input {
+  display: block;
+  width: 100%;
+  margin-top: 2px;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: #fff;
+  font-size: 18px;
+  line-height: 1.5;
+}
+.lead-sheet .ls-input::placeholder { color: #6e6e6e; }
+.lead-sheet .ls-row { transition: background-color 200ms ease; }
+.lead-sheet .ls-row:focus-within { background: #232323; }
+.lead-sheet .ls-in { animation: none; }
+}
+
+/* ——— Filtros ——— */
+.filters-sheet .fs-field {
+  display: block;
+  width: 100%;
+  height: 44px;
+  padding-right: 16px;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  background: #1f1f1f;
+  color: #fff;
+  font-size: 15px;
+  outline: none;
+  transition: border-color 200ms ease;
+}
+.filters-sheet .fs-field::placeholder { color: #6e6e6e; }
+.filters-sheet .fs-field:focus { border-color: rgb(255 213 153 / 0.6); }
+.filters-sheet .fs-pill {
+  transition: background-color 200ms var(--ease-orium), color 200ms var(--ease-orium), transform var(--motion-fast) var(--ease-orium);
+}
+
+/* ——— Catálogo ——— */
+.cat-head > * {
+  animation: bs-rise 560ms var(--ease-orium) backwards;
+}
+.cat-head > :nth-child(2) { animation-delay: 40ms; }
+.cat-head > :nth-child(3) { animation-delay: 80ms; }
+.cat-head > :nth-child(4) { animation-delay: 120ms; }
+.cat-head > :nth-child(5) { animation-delay: 160ms; }
+.applied-chip {
+  animation: badge-pop 360ms cubic-bezier(0.34, 1.4, 0.64, 1) backwards;
+}
+.sort-menu {
+  transform-origin: top right;
+  opacity: 0;
+  transform: translate3d(0, -6px, 0) scale(0.96);
+  transition:
+    opacity 180ms ease,
+    transform 260ms var(--ease-orium);
+}
+.sort-menu.is-open {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cat-head > *,
+  .applied-chip { animation: none; }
+  .sort-menu { transition-duration: 1ms; }
+}
+
+/* ——— Página do perfume ——— */
+.pd-photo { animation: pd-photo-in 620ms var(--ease-orium) backwards; }
+@keyframes pd-photo-in { from { opacity: 0; transform: scale(0.97); } }
+.pd-in { animation: bs-rise 560ms var(--ease-orium) 80ms backwards; }
+.pd-choice { transition: background-color 260ms var(--ease-orium), box-shadow 260ms var(--ease-orium), transform var(--motion-fast) var(--ease-orium); }
+.pd-choice.is-on { animation: bs-pick 320ms cubic-bezier(0.34, 1.4, 0.64, 1); }
+.pd-thumb { transition: transform 420ms cubic-bezier(0.34, 1.25, 0.64, 1); }
+.pd-price { animation: toast-text 380ms var(--ease-orium) backwards; }
+.pd-bar { animation: pd-bar-in 520ms var(--ease-orium) 200ms backwards; }
+@keyframes pd-bar-in { from { transform: translate3d(0, 100%, 0); } }
+.pd-reveal { opacity: 0; transform: translate3d(0, 18px, 0); transition: opacity 600ms var(--ease-orium), transform 600ms var(--ease-orium); }
+.pd-reveal.is-in { opacity: 1; transform: none; }
+.pd-stage { animation: toast-text 420ms var(--ease-orium) backwards; }
+.pd-stage .pd-note { animation: toast-text 420ms var(--ease-orium) backwards; animation-delay: calc(var(--i) * 60ms + 80ms); }
+.pd-reveal .pd-row { opacity: 0; transform: translate3d(0, 8px, 0); transition: opacity 500ms var(--ease-orium), transform 500ms var(--ease-orium); transition-delay: calc(var(--i) * 55ms + 120ms); }
+.pd-reveal.is-in .pd-row { opacity: 1; transform: none; }
+.pd-reveal .pd-dot { transform: scaleX(0); transform-origin: left; transition: transform 420ms var(--ease-orium); transition-delay: calc(var(--k) * 70ms + 380ms); }
+.pd-reveal.is-in .pd-dot { transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .pd-photo, .pd-in, .pd-price, .pd-bar, .pd-stage, .pd-stage .pd-note, .pd-choice.is-on { animation: none; }
+  .pd-reveal, .pd-reveal .pd-row, .pd-reveal .pd-dot { opacity: 1; transform: none; transition: none; }
+}
+
+/* ——— Campos escuros (sacola, finalizar pedido) ——— */
+.o-field {
+  display: block;
+  width: 100%;
+  height: 52px;
+  padding-inline: 16px;
+  border-radius: 16px;
+  border: 1px solid transparent;
+  background: #262626;
+  color: #fff;
+  font-size: 16px;
+  outline: none;
+  transition: border-color 200ms ease, background-color 200ms ease;
+}
+.o-field::placeholder { color: #707070; }
+.o-field:focus { border-color: rgb(255 213 153 / 0.6); background: #2a2a2a; }
+
+/* ——— Sacola: troca de etapa desliza, itens entram em cascata ——— */
+.cart-step-in { animation: cart-step-in 420ms var(--ease-orium) backwards; }
+.cart-step-back { animation: cart-step-back 420ms var(--ease-orium) backwards; }
+@keyframes cart-step-in { from { opacity: 0; transform: translate3d(28px, 0, 0); } }
+@keyframes cart-step-back { from { opacity: 0; transform: translate3d(-28px, 0, 0); } }
+.cart-sheet .cart-item { animation: bs-rise 460ms var(--ease-orium) backwards; }
+.cart-sheet .cart-item:nth-child(2) { animation-delay: 50ms; }
+.cart-sheet .cart-item:nth-child(3) { animation-delay: 100ms; }
+.cart-sheet .cart-item:nth-child(n + 4) { animation-delay: 150ms; }
+.cart-opt { transition: background-color 220ms var(--ease-orium), box-shadow 220ms var(--ease-orium), transform var(--motion-fast) var(--ease-orium); }
+.cart-opt[aria-checked="true"] { animation: bs-pick 300ms cubic-bezier(0.34, 1.4, 0.64, 1); }
+.cart-done-badge { animation: cart-done 620ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+@keyframes cart-done {
+  0% { transform: scale(0.3); opacity: 0; }
+  60% { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cart-step-in, .cart-step-back, .cart-sheet .cart-item, .cart-opt[aria-checked="true"], .cart-done-badge { animation: none; }
+}
+
+/* ——— Sacola em tela cheia ——— */
+.cart-page.is-in { animation: cart-page-in 420ms var(--ease-orium) both; }
+.cart-page.is-out { animation: cart-page-out 300ms cubic-bezier(0.4, 0, 1, 1) both; pointer-events: none; }
+@keyframes cart-page-in { from { transform: translate3d(100%, 0, 0); } to { transform: none; } }
+@keyframes cart-page-out { from { transform: none; } to { transform: translate3d(100%, 0, 0); } }
+.cart-page .g-input {
+  display: block;
+  width: 100%;
+  margin-top: 2px;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: #fff;
+  font-size: 18px;
+  line-height: 1.5;
+}
+.cart-page .g-input::placeholder { color: #6e6e6e; }
+.cart-page .g-field { transition: background-color 200ms ease; }
+.cart-page .g-field:focus-within { background: #1f1f1f; }
+@media (prefers-reduced-motion: reduce) {
+  .cart-page.is-in, .cart-page.is-out { animation-duration: 1ms; }
+}
+.hdr-swap { animation: toast-text 360ms var(--ease-orium) backwards; }
+@media (prefers-reduced-motion: reduce) { .hdr-swap { animation: none; } }
+.pip-on { animation: badge-pop 420ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards; animation-delay: var(--pip-d, 0ms); }
+@media (prefers-reduced-motion: reduce) { .pip-on { animation: none; } }
+
+/* ——— Entrar / Criar conta ——— */
+.auth-page .g-input { display: block; width: 100%; margin-top: 2px; background: transparent; border: 0; outline: none; color: #fff; font-size: 18px; line-height: 1.5; }
+.auth-page .g-input::placeholder { color: #6e6e6e; }
+.auth-page .g-field { transition: background-color 200ms ease; }
+.auth-page .g-field:focus-within { background: #1f1f1f; }
+.auth-page .auth-in { animation: bs-rise 520ms var(--ease-orium) backwards; }
+.auth-page .auth-in:nth-child(2) { animation-delay: 50ms; }
+.auth-page .auth-in:nth-child(3) { animation-delay: 90ms; }
+.auth-page .auth-in:nth-child(4) { animation-delay: 130ms; }
+.auth-page .auth-in:nth-child(5) { animation-delay: 170ms; }
+.acc-card { animation: bs-rise 480ms var(--ease-orium) backwards; }
+@media (prefers-reduced-motion: reduce) { .auth-page .auth-in, .acc-card { animation: none; } }
+
+/* ——— Transição da foto: card → página do perfume (View Transitions) ———
+   O quadro branco do card cresce até virar a foto da página; o resto da tela
+   faz um cruzamento curto. Sem suporte no navegador, nada disso roda. */
+.pd-hero-tile { view-transition-name: pd-hero; }
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 280ms;
+  animation-timing-function: var(--ease-orium);
+}
+::view-transition-group(pd-hero) {
+  animation-duration: 560ms;
+  animation-timing-function: cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+::view-transition-old(pd-hero),
+::view-transition-new(pd-hero) {
+  height: 100%;
+  object-fit: cover;
+  animation-duration: 360ms;
+  animation-timing-function: var(--ease-orium);
+}
+/* durante a transição a foto já chega no lugar: sem a entrada própria */
+html.vt-hero .pd-photo,
+html.vt-hero .route-in,
+html.vt-hero .route-in-forward,
+html.vt-hero .route-in-back { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) { animation: none !important; }
+}
+
+/* ——— Computador: navegação no topo ——— */
+.nav-dot {
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 999px;
+  background: #ffd599;
+  animation: badge-pop 420ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+@media (prefers-reduced-motion: reduce) { .nav-dot { animation: none; } }
+
+/* computador: o aviso "Adicionado" desce do canto da sacola, no topo */
+@media (min-width: 64rem) {
+  .cart-toast {
+    top: calc(68px + 12px);
+    bottom: auto !important;
+    justify-content: flex-end;
+    padding-inline: max(var(--page-gutter), calc((100vw - var(--shell-max)) / 2));
+  }
+  .cart-toast .cart-toast-card {
+    transform-origin: 100% 0;
+    transform: translate3d(0, -18px, 0) scale(0.85);
+  }
+}
+
+/* ——— Grade de produtos: uma só para catálogo, busca, favoritos e semelhantes ———
+   2 colunas no celular · 3 no tablet · 4 no computador · 5 em telas largas */
+@utility product-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  column-gap: 18px;
+  row-gap: 28px;
+  @media (min-width: 600px) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: 20px;
+    row-gap: 34px;
+  }
+  @media (min-width: 64rem) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    column-gap: 24px;
+    row-gap: 44px;
+  }
+  @media (min-width: 1180px) {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+/* prévia do catálogo na Home: sempre duas fileiras inteiras */
+@media (min-width: 64rem) and (max-width: 1179.98px) {
+  .home-preview > :nth-child(n + 9) { display: none; }
+}
+@media (min-width: 1180px) {
+  .home-preview > :nth-child(n + 11) { display: none; }
+}
+/* computador: passar o mouse aproxima a foto de leve */
+@media (hover: hover) and (pointer: fine) {
+  .tap-card:hover .img-fade.is-loaded { transform: scale(1.04); }
+}
+
+/* ——— Computador: Sacola e Conta viram painel lateral ——— */
+.side-scrim.is-in { animation: scrim-in 320ms var(--ease-orium) both; }
+.side-scrim.is-out { animation: scrim-out 280ms ease both; pointer-events: none; }
+@keyframes scrim-in { from { opacity: 0; } }
+@keyframes scrim-out { to { opacity: 0; } }
+@media (min-width: 64rem) {
+  .cart-page {
+    left: auto;
+    width: min(500px, 100vw);
+    border-left: 1px solid rgb(255 255 255 / 0.07);
+    box-shadow: -30px 0 80px -30px rgb(0 0 0 / 0.7);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .side-scrim.is-in, .side-scrim.is-out { animation-duration: 1ms; }
+}
+
+/* ——— Computador: gavetas da loja viram um cartão flutuante centralizado ———
+   (o painel administrativo mantém as gavetas como estão) */
+@media (min-width: 64rem) {
+  html:not(.is-admin) .store-sheet {
+    bottom: 24px;
+    max-width: 600px;
+    border-radius: 30px;
+    box-shadow: 0 40px 120px -30px rgb(0 0 0 / 0.85), 0 0 0 1px rgb(255 255 255 / 0.07);
+  }
+  html:not(.is-admin) .store-sheet .sheet-grip { opacity: 0; }
+}
+
+/* computador: títulos de seção um passo maiores, no mesmo ritmo */
+@media (min-width: 64rem) {
+  .home-title { font-size: 46px; letter-spacing: -0.035em; }
+  .home-subtitle { font-size: 19px; }
+}
+
+/* ——— Oferta de decants (faixa de preço sem frasco) ——— */
+.decant-offer .do-in { animation: bs-rise 540ms var(--ease-orium) backwards; animation-delay: calc(var(--do-d, 0ms) + 120ms); }
+.decant-offer .do-vials { animation: do-vials 900ms cubic-bezier(0.22, 1, 0.36, 1) 220ms backwards; }
+@keyframes do-vials { from { opacity: 0; transform: translate3d(0, 26px, 0) scale(0.96); } }
+.decant-offer .do-size { transition: background-color 220ms var(--ease-orium), color 220ms var(--ease-orium), transform var(--motion-fast) var(--ease-orium); }
+.decant-offer .do-size[aria-checked="true"] { animation: bs-pick 320ms cubic-bezier(0.34, 1.4, 0.64, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .decant-offer .do-in, .decant-offer .do-vials, .decant-offer .do-size[aria-checked="true"] { animation: none; }
+}
+
+/* ——— Avisos da Orium (PopCard) ———
+   Fundo sólido, cantos grandes, sombra profunda e um fio de luz no topo.
+   Entram subindo com mola curta; os itens de dentro chegam em sequência. */
+.pop-card {
+  position: relative;
+  padding: 18px 18px 16px;
+  border-radius: 28px;
+  background: #161616;
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.06),
+    0 0 0 1px rgb(255 255 255 / 0.07),
+    0 30px 60px -24px rgb(0 0 0 / 0.9),
+    0 12px 24px -12px rgb(0 0 0 / 0.6);
+}
+.pop-card.is-in { animation: pop-rise 620ms cubic-bezier(0.22, 1.18, 0.36, 1) both; }
+.pop-card.is-out { animation: pop-fall 260ms cubic-bezier(0.4, 0, 1, 1) both; pointer-events: none; }
+@keyframes pop-rise { from { opacity: 0; transform: translate3d(0, 46px, 0) scale(0.96); } }
+@keyframes pop-fall { to { opacity: 0; transform: translate3d(0, 40px, 0) scale(0.97); } }
+.pop-card .pop-step { animation: pop-step 520ms var(--ease-orium) backwards; animation-delay: calc(var(--pd, 0ms) + 120ms); }
+@keyframes pop-step { from { opacity: 0; transform: translate3d(0, 8px, 0); } }
+.pop-card .pop-thumb { animation: pop-thumb 560ms cubic-bezier(0.34, 1.4, 0.64, 1) backwards; animation-delay: calc(160ms + var(--ti, 0) * 70ms); }
+@keyframes pop-thumb { from { opacity: 0; transform: translate3d(-10px, 6px, 0) scale(0.7) rotate(-6deg); } }
+.pop-grip {
+  position: absolute;
+  top: 7px;
+  left: 50%;
+  width: 36px;
+  height: 4px;
+  margin-left: -18px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.16);
+}
+.pop-close {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.07);
+  color: #bdbdbd;
+  transition: background-color 180ms ease, color 180ms ease;
+}
+.pop-close:hover { background: rgb(255 255 255 / 0.13); color: #fff; }
+@media (prefers-reduced-motion: reduce) {
+  .pop-card.is-in, .pop-card.is-out, .pop-card .pop-step, .pop-card .pop-thumb { animation-duration: 1ms; animation-delay: 0ms; }
+}
+
+/* o "o-pop" antigo herda o mesmo acabamento (sem desfoque) */
+.o-pop {
+  background: #161616 !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  border-color: rgb(255 255 255 / 0.07) !important;
+  border-radius: 28px !important;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 30px 60px -24px rgb(0 0 0 / 0.9) !important;
+}
+.offer-card .offer-photo { animation: do-vials 900ms cubic-bezier(0.22, 1, 0.36, 1) 120ms backwards; }
+@media (prefers-reduced-motion: reduce) { .offer-card .offer-photo { animation: none; } }
+
+/* aviso "Adicionado": mesmo cartão sólido dos pop-ups (sem desfoque) */
+.cart-toast .cart-toast-card {
+  background: #161616;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* ——— Sacola que vira cápsula ("Adicionado") ———
+   Nasce do próprio botão da sacola: mesma cor, mesmo aro dourado, estica para
+   os lados com mola, mostra o produto e o total subindo e volta a ser botão. */
+.bag-island {
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 50px;
+  width: 50px;
+  padding: 0 6px 0 5px;
+  border-radius: 999px;
+  background: #0a0a0a;
+  color: #fff;
+  text-align: left;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%);
+  box-shadow: 0 14px 32px -14px rgb(0 0 0 / 0.85);
+  transition:
+    width 420ms cubic-bezier(0.55, 0, 0.3, 1),
+    opacity 160ms ease 300ms;
+  -webkit-tap-highlight-color: transparent;
+}
+.bag-island::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(180deg, #ffd599, #eab365);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+.bag-island.is-open {
+  width: min(340px, calc(100vw - 28px));
+  opacity: 1;
+  pointer-events: auto;
+  transition:
+    width 680ms cubic-bezier(0.3, 1.32, 0.5, 1),
+    opacity 90ms ease;
+}
+.bag-island:active { transform: translateX(-50%) scale(0.97); }
+.bag-island > * { opacity: 0; transition: opacity 140ms ease, transform 140ms ease; }
+.bag-island.is-open > * { opacity: 1; transition: opacity 360ms ease 170ms, transform 560ms cubic-bezier(0.3, 1.3, 0.5, 1) 140ms; }
+.bag-island-thumb {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #fff;
+  transform: scale(0.4) rotate(-20deg);
+}
+.bag-island.is-open .bag-island-thumb { transform: none; }
+.bag-island-text { min-width: 0; flex: 1; transform: translate3d(-10px, 0, 0); }
+.bag-island.is-open .bag-island-text { transform: none; }
+.bag-island-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 38px;
+  padding: 0 12px 0 14px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: #ffd599;
+  color: #15130f;
+  font-size: 13px;
+  font-weight: 800;
+  transform: scale(0.6);
+}
+.bag-island.is-open .bag-island-go { transform: none; }
+
+/* faíscas: 8 pontinhos dourados saindo da sacola quando o produto pousa */
+.orb-burst { position: absolute; inset: 0; pointer-events: none; }
+.orb-burst i {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 999px;
+  background: #ffd599;
+  opacity: 0;
+  animation: orb-burst 640ms cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
+}
+.orb-burst i:nth-child(even) { width: 3.5px; height: 3.5px; background: #fff3dc; animation-duration: 560ms; }
+@keyframes orb-burst {
+  0% { opacity: 1; transform: rotate(var(--a)) translateY(-14px) scale(1); }
+  100% { opacity: 0; transform: rotate(var(--a)) translateY(-40px) scale(0.3); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bag-island, .bag-island.is-open, .bag-island > * { transition-duration: 1ms !important; transition-delay: 0ms !important; }
+  .orb-burst { display: none; }
+}
+
+/* abertura do app: tela limpa — nenhum aviso por cima dela */
+html[data-splash] [data-sonner-toaster],
+html[data-splash] .cart-toast,
+html[data-splash] .bag-island,
+html.orium-booting [data-sonner-toaster] {
+  visibility: hidden !important;
+}
+
+/* sem zoom por duplo toque em todo o app (o gesto de pinça é bloqueado no <head>) */
+html { touch-action: manipulation; }
+
+/* ——— Pedido feito: abertura em tela cheia ——— */
+.os-intro {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: #101010;
+  transition: opacity 460ms var(--ease-orium), transform 460ms var(--ease-orium);
+}
+.os-intro.is-leaving { opacity: 0; transform: scale(1.04); pointer-events: none; }
+.os-flood {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 60px;
+  height: 60px;
+  margin: -30px 0 0 -30px;
+  border-radius: 9999px;
+  background: #ffd599;
+  transform: scale(0);
+  animation: os-flood 760ms cubic-bezier(0.7, 0, 0.2, 1) 120ms forwards;
+}
+@keyframes os-flood { to { transform: scale(60); } }
+.os-ring { transform: scale(0); animation: os-ring 620ms cubic-bezier(0.34, 1.56, 0.64, 1) 620ms forwards; }
+@keyframes os-ring { to { transform: scale(1); } }
+.os-check { stroke-dasharray: 48; stroke-dashoffset: 48; animation: os-check 420ms cubic-bezier(0.65, 0, 0.35, 1) 980ms forwards; }
+@keyframes os-check { to { stroke-dashoffset: 0; } }
+.os-rise { opacity: 0; transform: translate3d(0, 18px, 0); animation: os-rise 560ms var(--ease-orium) var(--od, 0ms) forwards; }
+@keyframes os-rise { to { opacity: 1; transform: none; } }
+.os-bar { width: 0; animation: os-bar 3500ms linear 1700ms forwards; }
+@keyframes os-bar { to { width: 100%; } }
+.os-piece {
+  position: absolute;
+  top: -24px;
+  opacity: 0;
+  will-change: transform, opacity;
+  animation-name: os-fall;
+  animation-timing-function: cubic-bezier(0.25, 0.6, 0.45, 1);
+  animation-fill-mode: both;
+}
+@keyframes os-fall {
+  0% { opacity: 0; transform: translate3d(0, 0, 0) rotate(0deg); }
+  8% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { opacity: 0; transform: translate3d(var(--drift, 0px), 105vh, 0) rotate(var(--rot, 360deg)); }
+}
+.os-wait { animation: os-wait 1.6s ease-in-out infinite; }
+@keyframes os-wait { 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) {
+  .os-flood { animation: none; transform: scale(60); }
+  .os-ring, .os-check, .os-rise { animation: none; transform: none; opacity: 1; stroke-dashoffset: 0; }
+  .os-bar { animation-duration: 1ms; animation-delay: 5000ms; }
+  .os-wait { animation: none; }
+}
+
+/* ══ ADMIN — painel em cartões (topo em pílulas, Início, Pedidos) ══════
+ * Mesma paleta da loja: #101010 fundo, #1A1A1A cartões, dourado só como
+ * destaque (cartão principal, ação principal). Selecionado = branco.
+ * Movimento só com --ease-orium; nada de brilho, desfoque ou degradê.
+ * ─────────────────────────────────────────────────────────────────── */
+.adm-top { background: #101010; }
+.adm-pill {
+  display: inline-flex; align-items: center; gap: 8px; height: 48px; padding: 0 20px;
+  border-radius: 999px; background: #1a1a1a; color: #d4d4d4; font-size: 15px; font-weight: 600;
+  white-space: nowrap; transition: background-color 180ms var(--ease-orium), color 180ms var(--ease-orium);
+}
+@media (hover: hover) { .adm-pill:hover { background: #222; color: #fff; } }
+.adm-pill[data-active="true"] { background: #fff; color: #15130f; }
+.adm-pill-count {
+  display: grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px;
+  background: #ffd599; color: #15130f; font-size: 11.5px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.adm-pill[data-active="true"] .adm-pill-count { background: #15130f; color: #ffd599; }
+.adm-search {
+  display: flex; align-items: center; gap: 12px; height: 48px; padding: 0 6px; border-radius: 999px;
+  background: #1a1a1a; color: #8c8c8c; font-size: 15px; transition: background-color 180ms var(--ease-orium);
+}
+@media (min-width: 80rem) { .adm-search { width: 300px; padding-right: 14px; } }
+@media (hover: hover) { .adm-search:hover { background: #202020; color: #d4d4d4; } }
+@keyframes adm-pop { from { opacity: 0; transform: translateY(-6px) scale(0.97); } to { opacity: 1; transform: none; } }
+.adm-pop { animation: adm-pop 240ms var(--ease-orium) both; transform-origin: top center; }
+@keyframes adm-fade-in { from { opacity: 0; } to { opacity: 1; } }
+.adm-fade { animation: adm-fade-in 200ms var(--ease-orium) both; }
+
+/* cartões do Início */
+.dash-card { background: #1a1a1a; border-radius: 28px; min-width: 0; }
+.dash-hero { background: #ffd599; color: #15130f; border-radius: 28px; min-width: 0; }
+.dash-ico {
+  display: grid; place-items: center; width: 44px; height: 44px; border-radius: 999px; flex-shrink: 0;
+  background: #232323; color: #fff; transition: transform 300ms var(--ease-orium), background-color 200ms var(--ease-orium);
+}
+.dash-hero .dash-ico { background: rgb(21 19 15 / 0.08); color: #15130f; }
+@media (hover: hover) { .dash-card:hover .dash-ico, .dash-hero:hover .dash-ico { transform: rotate(-12deg); } }
+.dash-dots {
+  display: grid; place-items: center; width: 44px; height: 44px; border-radius: 999px; background: #232323; color: #a9a9a9;
+  transition: background-color 180ms var(--ease-orium), color 180ms var(--ease-orium);
+}
+@media (hover: hover) { .dash-dots:hover { background: #2c2c2c; color: #fff; } }
+@keyframes dash-grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.dash-bar { transform-origin: bottom; animation: dash-grow 760ms var(--ease-orium) both; animation-delay: calc(var(--i, 0) * 45ms + 120ms); }
+@keyframes dash-draw { from { stroke-dashoffset: var(--len, 400); } }
+.dash-draw { animation: dash-draw 1100ms var(--ease-orium) both; animation-delay: 150ms; }
+.dash-ring { transition: stroke-dasharray 900ms var(--ease-orium); }
+@keyframes dash-tick { from { opacity: 0; transform: scaleY(0.2); } to { opacity: 1; transform: none; } }
+.dash-tick { transform-origin: center; animation: dash-tick 520ms var(--ease-orium) both; animation-delay: calc(var(--i, 0) * 30ms + 100ms); }
+
+/* pedidos: quadro e cartões */
+.ord-col { background: #141414; border-radius: 28px; transition: background-color 200ms var(--ease-orium), box-shadow 200ms var(--ease-orium); }
+.ord-col[data-over="true"] { background: #1a1813; box-shadow: inset 0 0 0 1.5px rgb(255 213 153 / 0.55); }
+.ord-card {
+  background: #1f1f1f; border-radius: 22px; cursor: pointer;
+  transition: transform 260ms var(--ease-orium), background-color 200ms var(--ease-orium), opacity 200ms var(--ease-orium);
+}
+@media (hover: hover) { .ord-card:hover { background: #242424; transform: translateY(-2px); } }
+.ord-card[data-dragging="true"] { opacity: 0.35; transform: scale(0.98); }
+.ord-card:focus-visible { outline: 2px solid #ffd599; outline-offset: 2px; }
+@keyframes ord-in { from { opacity: 0; transform: translateY(8px) scale(0.985); } to { opacity: 1; transform: none; } }
+.ord-in { animation: ord-in 420ms var(--ease-orium) both; animation-delay: calc(min(var(--i, 0), 12) * 35ms); }
+.ord-progress > span { transition: width 700ms var(--ease-orium); }
+@keyframes ord-bump { 0% { transform: scale(1); } 40% { transform: scale(1.25); } 100% { transform: scale(1); } }
+.ord-bump { animation: ord-bump 380ms var(--ease-orium); }
+.ord-tile { background: #1a1a1a; border-radius: 24px; transition: transform 260ms var(--ease-orium), background-color 200ms var(--ease-orium); }
+@media (hover: hover) { .ord-tile:hover { background: #202020; transform: translateY(-3px); } .ord-tile:hover .ord-tile-img { transform: scale(1.05); } }
+.ord-tile-img { transition: transform 500ms var(--ease-orium); }
+@keyframes ord-slide { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
+.ord-slide { animation: ord-slide 360ms var(--ease-orium) both; }
+@keyframes ord-check { from { stroke-dashoffset: 40; } to { stroke-dashoffset: 0; } }
+@keyframes ord-ring { from { transform: scale(0.4); opacity: 0; } 60% { transform: scale(1.06); opacity: 1; } to { transform: scale(1); } }
+.ord-ok-ring { animation: ord-ring 520ms var(--ease-orium) both; }
+.ord-ok-check { stroke-dasharray: 40; animation: ord-check 420ms var(--ease-orium) 320ms both; }
+.ord-step > i { transition: width 700ms var(--ease-orium), background-color 300ms var(--ease-orium); }
+
+@media (prefers-reduced-motion: reduce) {
+  .adm-pop, .adm-fade, .dash-bar, .dash-draw, .dash-tick, .ord-in, .ord-bump, .ord-slide, .ord-ok-ring, .ord-ok-check { animation: none; }
+  .ord-card, .ord-tile, .ord-tile-img, .dash-ico, .dash-ring { transition: none; }
+}
+@keyframes dash-growx { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.dash-barx { transform-origin: left; animation: dash-growx 820ms var(--ease-orium) both; animation-delay: calc(var(--i, 0) * 60ms + 150ms); }
+@media (prefers-reduced-motion: reduce) { .dash-barx { animation: none; } }
+/* painel do pedido: blocos entram em cascata depois que a janela cresce */
+.ord-cascade > * { animation: ord-in 560ms var(--ease-orium) both; }
+.ord-cascade > :nth-child(1) { animation-delay: 240ms; }
+.ord-cascade > :nth-child(2) { animation-delay: 310ms; }
+.ord-cascade > :nth-child(3) { animation-delay: 370ms; }
+.ord-cascade > :nth-child(4) { animation-delay: 420ms; }
+.ord-cascade > :nth-child(n + 5) { animation-delay: 470ms; }
+.ord-card:active { transform: scale(0.985); }
+@media (prefers-reduced-motion: reduce) { .ord-cascade > * { animation: none; } }
+@keyframes ord-pulse { 0% { box-shadow: 0 0 0 0 rgb(255 213 153 / 0.6); } 70% { box-shadow: 0 0 0 14px rgb(255 213 153 / 0); } 100% { box-shadow: 0 0 0 0 rgb(255 213 153 / 0); } }
+.ord-pulse { animation: ord-pulse 1.1s var(--ease-orium) 2; }
+@media (prefers-reduced-motion: reduce) { .ord-pulse { animation: none; outline: 2px solid #ffd599; } }
+/* linha do pedido: entra deslizando, sai encolhendo */
+.ord-line { grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows 320ms var(--ease-orium), opacity 220ms ease, transform 320ms var(--ease-orium); }
+.ord-line.is-leaving { grid-template-rows: 0fr; opacity: 0; transform: translateX(24px) scale(0.97); }
+@keyframes ord-sheet-up { from { transform: translate3d(0, 100%, 0); } to { transform: none; } }
+@keyframes ord-sheet-left { from { transform: translate3d(100%, 0, 0); } to { transform: none; } }
+.ord-sheet-up { animation: ord-sheet-up 460ms cubic-bezier(0.2, 0.9, 0.1, 1) both; }
+@media (min-width: 64rem) { .ord-sheet-up { animation-name: ord-sheet-left; } }
+@media (prefers-reduced-motion: reduce) { .ord-sheet-up { animation: none; } }

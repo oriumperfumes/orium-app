@@ -1,0 +1,54 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+.output
+.vinxi
+.tanstack/**
+.nitro
+*.local
+
+# Environment / secrets (keep only the template tracked)
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+
+# Wrangler / Cloudflare
+.wrangler/
+
+# Backup / temp files
+*.bak
+*.backup
+*.old
+*.orig
+*.rej
+*.tmp
+*~
+
+# Accidental nested copy of the project (extracted zip); safe to delete
+/oriumperfum-main/
+
+# OS files
+Thumbs.db
+Desktop.ini
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

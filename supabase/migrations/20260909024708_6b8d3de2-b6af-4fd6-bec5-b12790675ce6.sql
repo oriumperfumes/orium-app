@@ -1,0 +1,1 @@
+DROP FUNCTION IF EXISTS public.search_catalog(text, text, text, text, boolean, integer, integer, text, boolean, text[], text);

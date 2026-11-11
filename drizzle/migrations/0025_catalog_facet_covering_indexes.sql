@@ -1,0 +1,2 @@
+CREATE INDEX IF NOT EXISTS products_public_facets_cover_idx ON public.products (active, catalog_eligible) INCLUDE (brand, product_type, gender_norm, in_stock, decant_available);
+CREATE INDEX IF NOT EXISTS fragrance_accords_position_cover_idx ON public.fragrance_accords ("position") INCLUDE (product_id, accord_name);
