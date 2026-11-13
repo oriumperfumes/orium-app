@@ -171,7 +171,9 @@ export const compareProductOffers = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context);
     const { buildOfferComparison } = await import("@/lib/suppliers/hub.server");
-    return buildOfferComparison(context.supabase, data.productId, data.units ?? 1);
+    // A comparação lê colunas internas de products (estoque local, origem da disponibilidade): cliente de serviço após assertStaff.
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    return buildOfferComparison(supabaseAdmin, data.productId, data.units ?? 1);
   });
 
 /* ---------- Catálogo público por oferta ---------- */
@@ -182,7 +184,9 @@ export const listSupplierCatalogOffers = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context);
     const { listCatalogOffers } = await import("@/lib/suppliers/catalog.server");
-    return listCatalogOffers(context.supabase, data);
+    // O catálogo do fornecedor mostra o estoque local do produto vinculado (coluna interna): cliente de serviço após assertStaff.
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    return listCatalogOffers(supabaseAdmin, data);
   });
 
 export const setOfferCatalog = createServerFn({ method: "POST" })

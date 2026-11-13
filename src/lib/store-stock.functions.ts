@@ -58,7 +58,11 @@ export const stockSearch = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const q = data.q.trim().replace(/[%,()]/g, " ");
     if (q.length < 2) return [];
-    const { data: rows, error } = await context.supabase
+    // raw_name e local_stock são colunas internas de products: só a equipe, pelo cliente de serviço.
+    const { data: isStaff } = await context.supabase.rpc("is_staff", { _user_id: context.userId });
+    if (!isStaff) throw new Error("Sem permissão.");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: rows, error } = await supabaseAdmin
       .from("products")
       .select("id, canonical_name, raw_name, brand, image_url, volume_ml, local_stock")
       .or(`canonical_name.ilike.%${q}%,brand.ilike.%${q}%,raw_name.ilike.%${q}%`)

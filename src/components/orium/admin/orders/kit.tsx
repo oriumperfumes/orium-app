@@ -6,10 +6,10 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { forwardRef, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Check, Loader2, Plus, RotateCcw, Search, Trash2, Minus, X } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { decantPrice, decantUnitCost, type DecantMl } from "@/lib/decants";
 import { useServerFn } from "@tanstack/react-start";
 import { productCosts } from "@/lib/orders-control.functions";
+import { adminComposerProducts } from "@/lib/product-internal.functions";
 import { INTERNAL_REASON, productFromConsultOffer } from "@/lib/consult-offers.functions";
 import { Collapse } from "@/components/orium/admin/motion";
 import { composerSupply, linkOfferToProduct, searchSupplierOffers, type ComposerSupply, type SupplyOption } from "@/lib/composer-supply.functions";
@@ -74,21 +74,12 @@ type FilterKey = (typeof FILTERS)[number]["key"];
 export const lineKeyOf = (productId: string, size: Size) => `${productId}:${size}`;
 
 export function useCatalogProducts() {
+  // local_stock é coluna interna de products: vem pelo servidor (equipe confirmada), não pelo navegador.
+  const loadProducts = useServerFn(adminComposerProducts);
   return useQuery({
     queryKey: ["composer-products"],
     staleTime: 5 * 60_000,
-    queryFn: async () =>
-      ((
-        await supabase
-          .from("products")
-          .select(
-            "id, canonical_name, brand, volume_ml, image_url, retail_price, wholesale_price, decant_available, decant_price_2ml, decant_price_5ml, decant_price_10ml, local_stock, gender_norm, catalog_eligibility_reason",
-          )
-          .eq("active", true)
-          .or(`catalog_eligible.eq.true,catalog_eligibility_reason.eq.${INTERNAL_REASON}`)
-          .order("canonical_name")
-          .limit(3000)
-      ).data ?? []) as Product[],
+    queryFn: async () => (await loadProducts()) as unknown as Product[],
   });
 }
 

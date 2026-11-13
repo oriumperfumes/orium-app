@@ -17,6 +17,7 @@ import { brl, dateBR } from "@/lib/format";
 import { getPaymentPricing } from "@/lib/payment-rule";
 import { usePaymentSettings } from "@/lib/payment";
 import { saveProductMaintenance, researchProductIdentity } from "@/lib/admin-catalog.functions";
+import { getAdminProductRow } from "@/lib/admin-insight.functions";
 import { ProductImagePicker } from "@/components/orium/admin/ProductImagePicker";
 import { TYPE_LABEL, ALLOWED_TYPES, type ProductType, type Gender } from "@/lib/catalog/classify";
 import { DECANT_SIZES, decantPrice, type DecantMl } from "@/lib/decants";
@@ -88,6 +89,7 @@ export function ProductEditSheet({
   const qc = useQueryClient();
   const save = useServerFn(saveProductMaintenance);
   const research = useServerFn(researchProductIdentity);
+  const fetchProductRow = useServerFn(getAdminProductRow);
   const payment = usePaymentSettings();
   const [tab, setTab] = useState<Tab>(startTab);
   const [busy, setBusy] = useState(false);
@@ -118,13 +120,8 @@ export function ProductEditSheet({
     staleTime: 30_000,
     queryFn: async () => {
       const [row, cost, offers, suppliers, override, decants, history] = await Promise.all([
-        supabase
-          .from("products")
-          .select(
-            "decant_available, decant_price_2ml, decant_price_5ml, decant_price_10ml, created_at, updated_at, slug, dedupe_key, identity_key",
-          )
-          .eq("id", product.id)
-          .maybeSingle(),
+        // dedupe_key e identity_key são colunas internas: a linha vem pelo servidor (equipe confirmada).
+        fetchProductRow({ data: { id: product.id } }).then((data) => ({ data })),
         supabase.from("product_costs").select("best_cost, best_supplier_id, updated_at").eq("product_id", product.id).maybeSingle(),
         supabase
           .from("supplier_products")

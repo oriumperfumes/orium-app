@@ -6,19 +6,18 @@ import { supabase } from "@/integrations/supabase/client";
  * A fonte de verdade é products.ready_to_deliver (estoque lacrado local ou
  * liberação manual). Nunca inferir "sob encomenda" enquanto a consulta carrega
  * ou quando ela falha, para não prometer um prazo falso.
+ *
+ * Visitantes e clientes não leem a coluna (products.ready_to_deliver é interna):
+ * a função public_ready_to_deliver_ids() devolve só os ids em pronta entrega
+ * que já aparecem no catálogo (active e catalog_eligible).
  */
 const queryOptions = {
   queryKey: ["ready-to-deliver", "serializable-v2"] as const,
   queryFn: async () => {
-    const { data, error } = await supabase
-      .from("products")
-      .select("id")
-      .eq("ready_to_deliver", true)
-      .eq("active", true)
-      .limit(2000);
+    const { data, error } = await supabase.rpc("public_ready_to_deliver_ids");
     if (error) throw error;
     // O cache do TanStack Query precisa ser serializável no SSR/hydration.
-    return (data ?? []).map((r) => r.id as string);
+    return (data ?? []) as string[];
   },
   staleTime: 60_000,
 };

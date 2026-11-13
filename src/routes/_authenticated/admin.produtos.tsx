@@ -52,6 +52,7 @@ import { usePromotions } from "@/lib/use-promotions";
 import { priceUnit } from "@/lib/promotions";
 import { QuickEditSheet, type QuickKind, type AvailMode } from "@/components/orium/admin/ProductOps";
 import { productSetAvailability, productsResetPrice } from "@/lib/product-admin.functions";
+import { adminMaintenanceProducts } from "@/lib/product-internal.functions";
 
 /* ------------------------------------------------------------------ *
  * CENTRAL DE MANUTENÇÃO DO CATÁLOGO
@@ -235,18 +236,15 @@ function CatalogMaintenance() {
   const [bulkAvail, setBulkAvail] = useState<AvailMode | "PRICE_AUTO" | null>(null);
   const setAvailFn = useServerFn(productSetAvailability);
   const resetPriceFn = useServerFn(productsResetPrice);
+  const listProducts = useServerFn(adminMaintenanceProducts);
   const [limit, setLimit] = useState(60);
 
   const { data, isLoading } = useQuery({
     queryKey: ["maintenance-data"],
     queryFn: async () => {
       const [products, offers, brands, suppliers, costs, pyramid, overrides] = await Promise.all([
-        supabase
-          .from("products")
-          .select(
-            "id, canonical_name, raw_name, brand, brand_id, source, sale_mode, gender_norm, product_type, concentration, volume_ml, flanker, image_url, in_stock, stock_quantity, local_stock, availability_override, availability_source, manual_pricing, retail_price, wholesale_price, active, catalog_eligible, identity_status, identity_verified, canonical_identity_locked, brand_review_required, suspicious_price, search_aliases, created_at",
-          )
-          .order("canonical_name"),
+        // products: colunas internas (estoque local, identidade, custo) só pelo servidor, após confirmar a equipe.
+        listProducts().then((rows) => ({ data: rows })),
         supabase
           .from("supplier_products")
           .select("id, product_id, supplier_id, supplier_product_name, supplier_sku, ean, price, in_stock"),

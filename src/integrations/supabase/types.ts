@@ -6840,6 +6840,7 @@ export type Database = {
           starts_at: string
         }[]
       }
+      public_ready_to_deliver_ids: { Args: never; Returns: string[] }
       public_sale_modes: {
         Args: never
         Returns: {
