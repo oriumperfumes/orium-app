@@ -2,8 +2,8 @@
  * CONTROLES DO PEDIDO — feitos para não ter erro.
  *
  * - Datas com um toque: Hoje · Amanhã · próximos dias · outra data.
- * - Pagamento em 3 botões grandes: Não pagou · Pagou metade · Pagou tudo
- *   (+ "outro valor"), e o dia combinado para pagar.
+ * - Pagamento por valor: digita quanto o cliente já pagou (ou "+50" para
+ *   somar), com atalhos Nada · Metade · Tudo, e o dia combinado para pagar.
  * - Entrega: retirada/entrega, dia e horário com um toque.
  * As versões "Picker" só mostram/editam um valor (Novo pedido); as versões
  * "Control" gravam direto no pedido (painel do pedido).
@@ -12,14 +12,36 @@ import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useRef, useState } from "react";
 import { CalendarDays, Check, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
-import { setOrderDelivery, setOrderPayment, type PaymentMode } from "@/lib/orders.functions";
+import { setOrderDelivery, setOrderPayment } from "@/lib/orders.functions";
 import { setPaymentDueDate } from "@/lib/orders-control.functions";
 import { paymentInfo } from "@/components/orium/admin/OrderPayment";
 import { todayBR } from "@/lib/delivery";
 import { brl } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { Collapse } from "@/components/orium/admin/motion";
 
 /* ─────────────── datas ─────────────── */
+
+/**
+ * "Hoje" ao vivo: muda sozinho na virada do dia (aba aberta de ontem para
+ * hoje) e ao voltar para a aba — o que era "Amanhã" vira "Hoje".
+ */
+export function useToday() {
+  const [d, setD] = useState(() => todayBR());
+  useEffect(() => {
+    const tick = () => setD((prev) => (prev === todayBR() ? prev : todayBR()));
+    const id = window.setInterval(tick, 30_000);
+    const vis = () => document.visibilityState === "visible" && tick();
+    document.addEventListener("visibilitychange", vis);
+    window.addEventListener("focus", tick);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", vis);
+      window.removeEventListener("focus", tick);
+    };
+  }, []);
+  return d;
+}
 
 export const addDays = (ymd: string, n: number) => {
   const d = new Date(`${ymd}T12:00:00Z`);
@@ -69,7 +91,7 @@ export function DateChips({
   days?: number;
   busy?: boolean;
 }) {
-  const t = todayBR();
+  const t = useToday();
   const quick = Array.from({ length: days }, (_, i) => addDays(t, i));
   const custom = value && !quick.includes(value) ? value : null;
   const inputRef = useRef<HTMLInputElement>(null);
@@ -156,95 +178,258 @@ export function TimeChips({ value, onChange, busy }: { value: string | null; onC
 
 /* ─────────────── pagamento ─────────────── */
 
-export type PayMode = "unpaid" | "deposit" | "paid";
+/**
+ * Rascunho do pagamento: atalhos (nada/metade/tudo) acompanham o total do
+ * pedido; "value" é o que foi digitado ("+50" soma ao que já tinha pago).
+ */
+export type PayDraft = { mode: "none" | "half" | "all" | "value"; text: string };
 
-/** Três botões grandes. `amounts` mostra quanto cada opção representa. */
-export function PayButtons({
+/** "1.234,50" · "150" · "99.9" → número (NaN se inválido). */
+export function parseMoney(s: string) {
+  let t = (s ?? "").replace(/[^\d,.]/g, "");
+  if (!t) return NaN;
+  if (t.includes(",")) t = t.replace(/\./g, "").replace(",", ".");
+  else if ((t.match(/\./g) ?? []).length > 1 || /\.\d{3}$/.test(t)) t = t.replace(/\./g, "");
+  return Number(t);
+}
+const fmtMoney = (n: number) => (Math.round(n * 100) / 100).toFixed(2).replace(".", ",").replace(/,00$/, "");
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Quanto o cliente terá pago (total acumulado), ou null se o texto for inválido. */
+export function resolvePaid(d: PayDraft, total: number, base = 0, pct = 50): number | null {
+  if (d.mode === "none") return 0;
+  if (d.mode === "half") return r2((total * pct) / 100);
+  if (d.mode === "all") return r2(total);
+  const add = d.text.trim().startsWith("+");
+  const n = parseMoney(d.text);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return r2(Math.min(total, (add ? base : 0) + n));
+}
+
+/** Rascunho inicial a partir do que já foi pago. */
+export function draftFrom(paid: number, total: number, pct = 50): PayDraft {
+  if (paid <= 0) return { mode: "none", text: "" };
+  if (total > 0 && paid >= total) return { mode: "all", text: "" };
+  if (Math.abs(paid - r2((total * pct) / 100)) < 0.01) return { mode: "half", text: "" };
+  return { mode: "value", text: fmtMoney(paid) };
+}
+
+/**
+ * Valor livre do pagamento: o Admin digita quanto o cliente já pagou e tem
+ * atalhos de um toque. Mostra a barra "pago de total" e quanto falta.
+ */
+export function PayAmount({
   value,
   onChange,
   total,
+  base = 0,
+  pct = 50,
   busy,
-  depositPct = 50,
+  items,
+  paidKeys,
+  onPaidKeys,
 }: {
-  value: PayMode | "other";
-  onChange: (v: PayMode) => void;
+  value: PayDraft;
+  onChange: (v: PayDraft) => void;
   total: number;
-  busy?: PayMode | null;
-  depositPct?: number;
+  /** quanto já estava pago (permite "+50") */
+  base?: number;
+  pct?: number;
+  busy?: boolean;
+  /** pagamento por perfume: cada item com o valor dele */
+  items?: PayItem[];
+  paidKeys?: Set<string>;
+  onPaidKeys?: (keys: Set<string>) => void;
 }) {
-  const opts: Array<{ v: PayMode; title: string; amount: number; tone: string }> = [
-    { v: "unpaid", title: "Não pagou", amount: 0, tone: "bg-[#2E2E2E]" },
-    { v: "deposit", title: "Pagou metade", amount: Math.round(total * depositPct) / 100, tone: "bg-[#FFD599]" },
-    { v: "paid", title: "Pagou tudo", amount: total, tone: "bg-[#7FCF9F]" },
+  const paid = resolvePaid(value, total, base, pct);
+  const shown = paid ?? 0;
+  const due = r2(Math.max(0, total - shown));
+  const ratio = total > 0 ? Math.min(1, shown / total) : 0;
+  const full = total > 0 && due <= 0.009;
+  const text = value.mode === "value" ? value.text : value.mode === "none" ? "" : fmtMoney(shown);
+  const chips: Array<{ v: PayDraft["mode"]; label: string; amount: number }> = [
+    { v: "none", label: "Nada ainda", amount: 0 },
+    { v: "half", label: pct === 50 ? "Metade" : `Sinal ${pct}%`, amount: r2((total * pct) / 100) },
+    { v: "all", label: "Tudo", amount: total },
   ];
   return (
-    <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Pagamento">
-      {opts.map((o) => {
-        const on = value === o.v;
-        return (
-          <button
-            key={o.v}
-            type="button"
-            role="radio"
-            aria-checked={on}
-            onClick={() => onChange(o.v)}
-            className={cn(
-              "press relative flex min-h-[92px] flex-col justify-between overflow-hidden rounded-[20px] p-3 text-left transition-[background-color,box-shadow] duration-300",
-              on ? "bg-white text-[#15130F]" : "bg-[#1F1F1F] text-white hover:bg-[#262626]",
-            )}
-          >
-            <span className="flex items-center justify-between">
-              <span className={cn("grid size-6 place-items-center rounded-full", o.tone, o.v === "unpaid" ? "text-white" : "text-[#15130F]")}>
-                {busy === o.v ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : o.v === "unpaid" ? (
-                  <X className="size-3.5" strokeWidth={3} />
-                ) : o.v === "deposit" ? (
-                  <span className="block size-2.5 rounded-full bg-[#15130F]" style={{ clipPath: "inset(0 50% 0 0)" }} />
-                ) : (
-                  <Check className="size-3.5" strokeWidth={3} />
+    <div className={cn("rounded-[22px] bg-[#1F1F1F] p-3.5", busy && "pointer-events-none opacity-70")}>
+      <div className="flex items-center justify-between gap-2 px-0.5">
+        <p className="text-[13px] font-semibold text-[#A9A9A9]">Quanto o cliente já pagou?</p>
+        <span
+          className={cn(
+            "shrink-0 rounded-full px-2.5 py-0.5 text-[12px] font-bold",
+            full ? "bg-[#1C2A21] text-[#7FCF9F]" : shown > 0 ? "bg-[#2A2418] text-[#FFD599]" : "bg-[#2A1A18] text-[#FF9A8A]",
+          )}
+        >
+          {paid == null ? "Valor inválido" : full ? "Pago" : shown > 0 ? `Falta ${brl(due)}` : "Não pagou"}
+        </span>
+      </div>
+      <label className="mt-1.5 flex items-baseline gap-1.5 rounded-[16px] px-0.5 focus-within:ring-0">
+        <span className="text-[18px] font-bold text-[#8C8C8C]">R$</span>
+        <input
+          data-slot="input-group-control"
+          inputMode="decimal"
+          value={text}
+          placeholder="0"
+          aria-label="Quanto o cliente já pagou, em reais"
+          onFocus={(e) => e.currentTarget.select()}
+          onChange={(e) => onChange({ mode: "value", text: e.target.value.replace(/[^\d,.+]/g, "") })}
+          className="min-w-0 flex-1 bg-transparent text-[30px] leading-[1.15] font-bold tracking-[-0.03em] tabular-nums outline-none placeholder:text-[#4A4A4A]"
+        />
+        <span className="shrink-0 text-[13px] text-[#8C8C8C] tabular-nums">de {brl(total)}</span>
+      </label>
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#2E2E2E]" aria-hidden>
+        <div
+          className={cn("h-full rounded-full transition-[width,background-color] duration-500", full ? "bg-[#7FCF9F]" : "bg-[#FFD599]")}
+          style={{ width: `${ratio * 100}%`, transitionTimingFunction: "var(--ease-orium)" }}
+        />
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-1.5" role="group" aria-label="Atalhos de pagamento">
+        {chips.map((c) => {
+          const on = value.mode === c.v;
+          return (
+            <button
+              key={c.v}
+              type="button"
+              aria-pressed={on}
+              onClick={() => {
+                onChange({ mode: c.v, text: "" });
+                // "Tudo" marca todos os perfumes como pagos; "Nada ainda" desmarca
+                if (items?.length && onPaidKeys && (c.v === "all" || c.v === "none")) {
+                  onPaidKeys(new Set(c.v === "all" ? items.map((i) => i.key) : []));
+                }
+              }}
+              className={cn(
+                "press flex h-[54px] flex-col items-center justify-center rounded-[16px] leading-tight transition-colors duration-200",
+                on ? "bg-white text-[#15130F]" : "bg-[#2A2A2A] text-white hover:bg-[#333]",
+              )}
+            >
+              <span className="text-[13px] font-bold">{c.label}</span>
+              <span className={cn("text-[11.5px] tabular-nums", on ? "text-[#15130F]/60" : "text-[#8C8C8C]")}>{brl(c.amount)}</span>
+            </button>
+          );
+        })}
+      </div>
+      {items && items.length > 1 && paidKeys && onPaidKeys ? (
+        <PaidByItem
+          items={items}
+          paidKeys={paidKeys}
+          onToggle={(key) => {
+            const next = new Set(paidKeys);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
+            onPaidKeys(next);
+            // o valor pago passa a ser a soma dos perfumes marcados (todos = total, com frete)
+            const sum = r2(items.filter((i) => next.has(i.key)).reduce((t, i) => t + i.amount, 0));
+            if (next.size === items.length) onChange({ mode: "all", text: "" });
+            else if (sum <= 0) onChange({ mode: "none", text: "" });
+            else onChange({ mode: "value", text: fmtMoney(sum) });
+          }}
+        />
+      ) : null}
+      {base > 0 && base < total ? (
+        <p className="mt-2 px-0.5 text-[12px] text-[#8C8C8C]">
+          Já tinha pago {brl(base)}. Recebeu mais? Digite <b className="text-white">+50</b> para somar.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+export type PayItem = { key: string; name: string; detail: string; amount: number };
+
+/** "Pagou quais?": um toque por perfume; o valor pago acompanha. */
+function PaidByItem({ items, paidKeys, onToggle }: { items: PayItem[]; paidKeys: Set<string>; onToggle: (key: string) => void }) {
+  return (
+    <div className="mt-3 border-t border-white/[0.06] pt-3">
+      <p className="px-0.5 text-[13px] font-semibold text-[#A9A9A9]">Pagou quais perfumes?</p>
+      <ul className="ui-cascade mt-1.5 space-y-1.5">
+        {items.map((it, i) => {
+          const on = paidKeys.has(it.key);
+          return (
+            <li key={it.key} style={{ ["--i" as string]: i }}>
+              <button
+                type="button"
+                role="checkbox"
+                aria-checked={on}
+                onClick={() => onToggle(it.key)}
+                className={cn(
+                  "press flex min-h-12 w-full items-center gap-3 rounded-[16px] px-3 py-2 text-left transition-colors",
+                  on ? "bg-[#1C2A21]" : "bg-[#2A2A2A] hover:bg-[#333]",
                 )}
-              </span>
-              {on ? <Check className="size-4" strokeWidth={3} /> : null}
-            </span>
-            <span>
-              <span className="block text-[14px] leading-tight font-bold">{o.title}</span>
-              <span className={cn("block text-[12px] tabular-nums", on ? "text-[#15130F]/60" : "text-[#8C8C8C]")}>{brl(o.amount)}</span>
-            </span>
-          </button>
-        );
-      })}
+              >
+                <span
+                  data-on={on}
+                  className={cn(
+                    "ui-check grid size-6 shrink-0 place-items-center rounded-full border-2 transition-colors duration-300",
+                    on ? "border-[#7FCF9F] bg-[#7FCF9F] text-[#15130F]" : "border-[#5A5A5A]",
+                  )}
+                >
+                  {on ? <Check className="size-3.5" strokeWidth={3.2} /> : null}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[14px] font-bold">{it.name}</span>
+                  <span className="block truncate text-[12px] text-[#8C8C8C]">{it.detail}</span>
+                </span>
+                <span className="shrink-0 text-right">
+                  <span className="block text-[14px] font-bold tabular-nums">{brl(it.amount)}</span>
+                  <span className={cn("block text-[11.5px] font-semibold", on ? "text-[#7FCF9F]" : "text-[#FF9A8A]")}>{on ? "Pago" : "Falta"}</span>
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
 
 /** Pagamento do pedido, gravando direto (painel do pedido). */
-export function PaymentControl({ order, onChanged }: { order: any; onChanged: () => void }) {
+export function PaymentControl({ order, onChanged, lines }: { order: any; onChanged: () => void; lines?: any[] }) {
   const set = useServerFn(setOrderPayment);
+  const items: PayItem[] = (lines ?? []).map((l) => ({
+    key: l.id,
+    name: l.product_name_snapshot ?? "Perfume",
+    detail: `${l.quantity}× ${l.variant === "DECANT" ? `decant ${l.decant_ml ?? "?"}ml` : (l.variant_label ?? "frasco")}`,
+    amount: r2(Number(l.subtotal ?? Number(l.unit_sale_price ?? 0) * Number(l.quantity ?? 1))),
+  }));
+  const savedKeys = (lines ?? []).filter((l) => l.paid).map((l) => l.id as string).sort().join(",");
+  const [paidKeys, setPaidKeys] = useState<Set<string>>(() => new Set(savedKeys ? savedKeys.split(",") : []));
+  useEffect(() => setPaidKeys(new Set(savedKeys ? savedKeys.split(",") : [])), [savedKeys]);
+  const keysDirty = [...paidKeys].sort().join(",") !== savedKeys;
   const setDue = useServerFn(setPaymentDueDate);
   const p = paymentInfo(order);
-  const exactHalf = Math.abs(p.paid - Math.round(p.total * p.pct) / 100) < 0.01;
-  const current: PayMode | "other" = p.status === "unpaid" ? "unpaid" : p.status === "paid" ? "paid" : exactHalf ? "deposit" : "other";
-  const [busy, setBusy] = useState<PayMode | null>(null);
-  const [other, setOther] = useState(false);
-  const [amount, setAmount] = useState("");
+  const [draft, setDraft] = useState<PayDraft>(() => draftFrom(p.paid, p.total, p.pct));
+  const [busy, setBusy] = useState(false);
   const [due, setDueLocal] = useState<string | null>(order.payment_due_date ?? null);
   const [savingDue, setSavingDue] = useState(false);
+  useEffect(() => setDraft(draftFrom(p.paid, p.total, p.pct)), [p.paid, p.total, p.pct]);
   useEffect(() => setDueLocal(order.payment_due_date ?? null), [order.payment_due_date]);
   const info = dueInfo({ ...order, payment_due_date: due });
+  const next = resolvePaid(draft, p.total, p.paid, p.pct);
+  const delta = next == null ? 0 : r2(next - p.paid);
+  const dirty = next != null && (Math.abs(delta) >= 0.01 || keysDirty);
 
-  const apply = async (mode: PaymentMode, value?: number) => {
-    if (busy) return;
-    setBusy(mode === "amount" ? "deposit" : mode);
+  const save = async () => {
+    if (busy || next == null || !dirty) return;
+    setBusy(true);
     try {
-      await set({ data: { orderId: order.id, mode, ...(value != null ? { amount: value } : {}) } });
-      toast.success(mode === "unpaid" ? "Marcado como não pago." : mode === "paid" ? "Pagamento completo registrado." : "Pagamento registrado.");
-      setOther(false);
+      await set({ data: { orderId: order.id, mode: "amount", amount: next, ...(items.length > 1 ? { paidItemIds: [...paidKeys] } : {}) } });
+      toast.success(
+        next >= p.total
+          ? "Pago! Pedido quitado."
+          : delta > 0
+            ? `Recebido ${brl(delta)}. Falta ${brl(p.total - next)}.`
+            : Math.abs(delta) < 0.01
+              ? "Perfumes pagos atualizados."
+              : `Pagamento ajustado para ${brl(next)}.`,
+      );
       onChanged();
     } catch (e: any) {
       toast.error(e?.message ?? "Não foi possível atualizar o pagamento.");
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   };
   const saveDue = async (v: string | null) => {
@@ -264,44 +449,35 @@ export function PaymentControl({ order, onChanged }: { order: any; onChanged: ()
 
   return (
     <div>
-      <PayButtons value={current} total={p.total} busy={busy} depositPct={p.pct} onChange={(v) => v !== current && apply(v)} />
-      {current === "other" ? (
-        <p className="mt-2 rounded-[14px] bg-[#2A2418] px-3 py-2 text-[13px] font-semibold text-[#FFD599]">
-          Pagou {brl(p.paid)} · falta {brl(p.due)}
-        </p>
-      ) : null}
-      {other ? (
-        <form
-          className="adm-pop mt-2 flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const n = Number(amount.replace(/\./g, "").replace(",", "."));
-            if (!Number.isFinite(n) || n < 0) return void toast.warning("Valor inválido.");
-            if (n > p.total) return void toast.warning(`O valor passa do total do pedido (${brl(p.total)}).`);
-            void apply("amount", n);
-          }}
-        >
-          <label className="flex h-12 min-w-0 flex-1 items-center gap-1 rounded-full bg-[#1F1F1F] px-4 focus-within:ring-2 focus-within:ring-[#FFD599]/50">
-            <span className="text-[13px] text-[#8C8C8C]">R$</span>
-            <input
-              data-slot="input-group-control"
-              autoFocus
-              inputMode="decimal"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value.replace(/[^\d,.]/g, ""))}
-              placeholder="Quanto já pagou no total"
-              className="min-w-0 flex-1 bg-transparent text-[15px] font-bold outline-none placeholder:font-normal placeholder:text-[#6F6F6F]"
-            />
-          </label>
-          <button type="submit" className="press h-12 rounded-full bg-white px-5 text-[14px] font-bold text-[#15130F]">
-            Salvar
+      <PayAmount
+        value={draft}
+        onChange={setDraft}
+        total={p.total}
+        base={p.paid}
+        pct={p.pct}
+        busy={busy}
+        items={items}
+        paidKeys={paidKeys}
+        onPaidKeys={setPaidKeys}
+      />
+      <Collapse open={dirty}>
+        <div className="mt-2 flex gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setDraft(draftFrom(p.paid, p.total, p.pct));
+              setPaidKeys(new Set(savedKeys ? savedKeys.split(",") : []));
+            }}
+            className="press h-12 rounded-full bg-[#1F1F1F] px-4 text-[14px] font-bold text-[#A9A9A9]"
+          >
+            Desfazer
           </button>
-        </form>
-      ) : (
-        <button type="button" onClick={() => setOther(true)} className="press mt-2 px-1 text-[13px] font-semibold text-[#A9A9A9] hover:text-white">
-          Pagou outro valor?
-        </button>
-      )}
+          <button type="button" onClick={save} className="press flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-white px-5 text-[14.5px] font-bold text-[#15130F]">
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" strokeWidth={3} />}
+            {Math.abs(delta) < 0.01 ? "Salvar perfumes pagos" : delta > 0 ? `Registrar +${brl(delta)}` : `Corrigir para ${brl(next ?? 0)}`}
+          </button>
+        </div>
+      </Collapse>
 
       {p.due > 0 ? (
         <div className="mt-4">

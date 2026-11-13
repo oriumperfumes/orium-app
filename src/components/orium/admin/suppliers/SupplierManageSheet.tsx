@@ -8,9 +8,9 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { AdminPrimaryAction, AdminSecondaryAction } from "@/components/orium/admin/AdminUI";
+import { AdminConfirm, AdminPrimaryAction, AdminSecondaryAction } from "@/components/orium/admin/AdminUI";
 import { supabase } from "@/integrations/supabase/client";
-import { updateSupplierSettings } from "@/lib/supplier-hub.functions";
+import { setSupplierRemoved, updateSupplierSettings } from "@/lib/supplier-hub.functions";
 import { testSupplierConnection } from "@/lib/sync.functions";
 import { PRIORITY_LABEL, SUPPLY_MODE_LABEL, leadText, type SupplyMode } from "@/lib/supplier-lead";
 import { brl, dateBR } from "@/lib/format";
@@ -43,6 +43,24 @@ export function SupplierManageSheet({ supplier, onOpenChange, onSync, syncing }:
   const [form, setForm] = useState<Supplier>({});
   const [busy, setBusy] = useState(false);
   const [health, setHealth] = useState<any>(null);
+  const removeFn = useServerFn(setSupplierRemoved);
+  const [askRemove, setAskRemove] = useState(false);
+  const remove = async () => {
+    if (!supplier) return;
+    setAskRemove(false);
+    setBusy(true);
+    try {
+      await removeFn({ data: { id: supplier.id, removed: true } });
+      toast.success(`${supplier.name} saiu do site. Dá para trazer de volta em Fornecedores › Removidos.`);
+      qc.invalidateQueries({ queryKey: ["admin-suppliers"] });
+      qc.invalidateQueries({ queryKey: ["composer-supply"] });
+      onOpenChange(false);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Não foi possível remover.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   useEffect(() => {
     setForm(supplier ? { ...supplier } : {});
@@ -144,10 +162,29 @@ export function SupplierManageSheet({ supplier, onOpenChange, onSync, syncing }:
               <Field label="Margem mínima (%, vazio = geral)" k="min_margin_pct" form={form} set={set} numeric />
             </div>
             <AdminPrimaryAction className="w-full" loading={busy} onClick={() => submit(["priority", "catalog_mode", "sync_interval_minutes", "min_margin_pct", ...PERMS.map((p) => p[0])])}>Salvar configurações</AdminPrimaryAction>
+            <div className="mt-2 border-t border-white/[0.06] pt-5">
+              <button
+                type="button"
+                onClick={() => setAskRemove(true)}
+                className="press h-12 w-full rounded-full bg-[#2A1A18] text-[14px] font-bold text-[#FF9A8A] hover:bg-[#33201D]"
+              >
+                Remover fornecedor
+              </button>
+              <p className="mt-2 text-center text-[12px] text-[#8C8C8C]">Para de sincronizar e some de preços, compras e pedidos. Nada é apagado.</p>
+            </div>
+            <AdminConfirm
+              open={askRemove}
+              onOpenChange={setAskRemove}
+              title={`Remover ${supplier?.name ?? "fornecedor"}?`}
+              description="Ele para de sincronizar e os perfumes dele saem de preços, compras e do Novo pedido. Pedidos antigos continuam iguais. Dá para trazer de volta depois."
+              confirmLabel="Remover"
+              danger
+              onConfirm={remove}
+            />
           </div>
         ) : null}
 
-        {tab === "Produtos" && supplier ? <SupplierCatalogPanel supplierId={supplier.id} onSync={onSync} syncing={syncing} /> : null}
+        {tab === "Produtos" && supplier ? <SupplierCatalogPanel supplierId={supplier.id} onSync={onSync} syncing={syncing} consult={(supplier as any).priority === "reference" && (supplier as any).use_for_pricing === false && (supplier as any).use_for_purchasing === false} /> : null}
 
         {tab === "Logística" ? (
           <div className="mt-5 space-y-4">

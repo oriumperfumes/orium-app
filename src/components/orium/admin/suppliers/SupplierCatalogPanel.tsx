@@ -9,6 +9,23 @@ import { AdminSecondaryAction } from "@/components/orium/admin/AdminUI";
 import { listSupplierCatalogOffers, setOfferCatalog } from "@/lib/supplier-hub.functions";
 import { brl } from "@/lib/format";
 import { OfferThumb } from "./OfferThumb";
+import { ManualProductSheet, type ManualProductPrefill } from "@/components/orium/ManualProductSheet";
+
+/** "Lattafa Yara 100ml EDP" → nome sem volume/concentração, volume e concentração separados. */
+function prefillFrom(r: { name: string; brand: string | null; volume_ml: number | null; image_url: string | null }, consult: boolean): ManualProductPrefill {
+  const vol = r.volume_ml ?? (Number(r.name.match(/(\d{2,3})\s?ml\b/i)?.[1] ?? 0) || null);
+  const conc = r.name.match(/\b(EDP|EDT|Extrait|Parfum|Eau de Parfum|Eau de Toilette)\b/i)?.[1] ?? "";
+  let name = r.name.replace(/\s*-?\s*\d{2,3}\s?ml\b/i, "").replace(/\b(EDP|EDT|Eau de Parfum|Eau de Toilette)\b/i, "").replace(/\s{2,}/g, " ").trim();
+  if (r.brand && name.toLowerCase().startsWith(r.brand.toLowerCase())) name = name.slice(r.brand.length).trim();
+  return {
+    name,
+    newBrandName: r.brand ?? "",
+    volume: vol ? String(vol) : "",
+    concentration: /parfum$/i.test(conc) && !/eau/i.test(conc) ? "Parfum" : /toilette|edt/i.test(conc) ? "EDT" : conc ? "EDP" : "",
+    imageUrl: r.image_url,
+    priceOnRequest: consult,
+  };
+}
 
 const AVAIL: Record<string, string> = { AVAILABLE: "disponível", UNAVAILABLE: "indisponível", UNKNOWN: "a confirmar" };
 
@@ -17,7 +34,19 @@ const DEC_LABEL = { inherit: "Seguir fornecedor", allow: "Permitir", deny: "Não
 type Dec = keyof typeof DEC_LABEL;
 
 /** Lista de ofertas do fornecedor com decisão individual de catálogo e ações em lote. */
-export function SupplierCatalogPanel({ supplierId, onSync, syncing }: { supplierId: string; onSync?: ((id: string) => Promise<void> | void) | undefined; syncing?: boolean | undefined }) {
+export function SupplierCatalogPanel({
+  supplierId,
+  onSync,
+  syncing,
+  consult,
+}: {
+  supplierId: string;
+  onSync?: ((id: string) => Promise<void> | void) | undefined;
+  syncing?: boolean | undefined;
+  /** Fornecedor só de consulta (ex.: Rasha): o preço lido é referência e o perfume entra no site "sob consulta". */
+  consult?: boolean;
+}) {
+  const [adding, setAdding] = useState<ManualProductPrefill | null>(null);
   const list = useServerFn(listSupplierCatalogOffers);
   const apply = useServerFn(setOfferCatalog);
   const qc = useQueryClient();
@@ -79,7 +108,7 @@ export function SupplierCatalogPanel({ supplierId, onSync, syncing }: { supplier
               <p className="break-words text-sm">{r.name}</p>
               <p className="text-xs text-muted-foreground">{[r.brand, r.volume_ml ? `${r.volume_ml}ml` : null].filter(Boolean).join(" · ") || "marca/volume não informados"}</p>
               <p className="text-xs text-muted-foreground">
-                {r.price != null ? brl(r.price) : "sem preço"} · {AVAIL[r.availability] ?? r.availability} · {r.product_name ? `vinculado: ${r.product_name}` : "sem vínculo"}
+                {r.price != null ? `${brl(r.price)}${consult ? " (referência)" : ""}` : "sem preço"} · {AVAIL[r.availability] ?? r.availability} · {r.product_name ? `vinculado: ${r.product_name}` : "sem vínculo"}
                 {r.product_public != null ? ` · site: ${r.product_public ? "disponível" : "indisponível"}` : ""}
               </p>
               <div className="mt-2 grid grid-cols-3 gap-1 rounded-full border border-border/60 p-0.5">
@@ -92,7 +121,17 @@ export function SupplierCatalogPanel({ supplierId, onSync, syncing }: { supplier
                   );
                 })}
               </div>
-              <p className="mt-1 text-[11px] text-muted-foreground">Esta oferta {r.offer_public ? "pode" : "não pode"} sustentar o catálogo.</p>
+              {consult ? (
+                r.product_id ? (
+                  <p className="mt-1 text-[11px] text-muted-foreground">Já está no site.</p>
+                ) : (
+                  <AdminSecondaryAction className="mt-2" onClick={() => setAdding(prefillFrom(r, true))}>
+                    Adicionar ao site (sob consulta)
+                  </AdminSecondaryAction>
+                )
+              ) : (
+                <p className="mt-1 text-[11px] text-muted-foreground">Esta oferta {r.offer_public ? "pode" : "não pode"} sustentar o catálogo.</p>
+              )}
             </div>
           </li>
         ))}
@@ -114,6 +153,15 @@ export function SupplierCatalogPanel({ supplierId, onSync, syncing }: { supplier
           <AdminSecondaryAction disabled={page + 1 >= pages} onClick={() => setPage((p) => p + 1)}>Próxima</AdminSecondaryAction>
         </div>
       ) : null}
+      <ManualProductSheet
+        open={!!adding}
+        prefill={adding}
+        onClose={() => setAdding(null)}
+        onSaved={() => {
+          toast.success("Perfume no site com “Consultar no WhatsApp”.");
+          qc.invalidateQueries({ queryKey: ["price-on-request-ids"] });
+        }}
+      />
       <AlertDialog open={!!confirm} onOpenChange={(v) => !v && setConfirm(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>

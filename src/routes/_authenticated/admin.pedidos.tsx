@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
@@ -12,7 +12,10 @@ import {
   Trash2,
   RotateCcw,
   X,
-  ClipboardList,
+  CopyPlus,
+  Eye,
+  PackageCheck,
+  Truck,
   SlidersHorizontal,
   Pencil,
   LayoutGrid,
@@ -28,19 +31,23 @@ import { AdminShell } from "@/components/orium/AdminShell";
 import { OrderBoard, OrderCard, type CardDeps, type Quick } from "@/components/orium/admin/orders/OrderBoard";
 import { OrderPanel } from "@/components/orium/admin/orders/OrderPanel";
 import { OrderComposer } from "@/components/orium/admin/orders/OrderComposer";
-import { burst, type Stage } from "@/components/orium/admin/orders/model";
+import { burst, isLivePurchase, orderTotal, type Stage } from "@/components/orium/admin/orders/model";
 import { OrdersDashboard, JOURNEY, buyByOrder, journeyOf } from "@/components/orium/admin/orders/OrdersDashboard";
 import { PurchasesView } from "@/components/orium/admin/orders/PurchasesView";
 import { dueInfo } from "@/components/orium/admin/orders/controls";
-import { purchaseBoard } from "@/lib/orders-control.functions";
+import { markReceived, purchaseBoard } from "@/lib/orders-control.functions";
+import { TrackBoard, type TrackActions } from "@/components/orium/admin/orders/OrderTrack";
+import { LedgerSummary, OrderLedger } from "@/components/orium/admin/orders/OrderLedger";
+import { PHASE, phaseOf, supplyByOrder } from "@/components/orium/admin/orders/phase";
 import { imgVariant } from "@/lib/product-img";
 import { cn } from "@/lib/utils";
-import { AdminConfirm, AdminEmpty, AdminMore, type AdminAction } from "@/components/orium/admin/AdminUI";
+import { PillTrack, ViewSwap } from "@/components/orium/admin/motion";
+import { AdminConfirm, AdminEmpty, AdminMore } from "@/components/orium/admin/AdminUI";
+import { OrderMenuProvider, OrderMenuZone, type MenuItem, type OrderMenuInfo, type OrderMenuModel } from "@/components/orium/admin/orders/OrderMenu";
 import { brl, whatsappLink } from "@/lib/format";
 import { useAuth } from "@/lib/auth";
 import { OrderEditSheet } from "@/components/orium/OrderEditSheet";
 import { DELIVERY_FILTERS, deliveryRank, deliveryState, todayBR } from "@/lib/delivery";
-import { OrderRestockSheet } from "@/components/orium/admin/OrderRestockSheet";
 import { PAY_FILTERS, paymentInfo } from "@/components/orium/admin/OrderPayment";
 import {
   cancelOrder,
@@ -85,10 +92,10 @@ const VIEWS: Array<{ key: View; label: string; icon: LucideIcon }> = [
 // Pedido feito = pago, aguardando entrega (prioridade). Pendente = só enviado ao WhatsApp.
 const MAIN_TABS = [
   { key: "todos", label: "Todos" },
-  { key: "pedido feito", label: "Pedido feito" },
-  { key: "pendente", label: "Pendentes" },
-  { key: "entregue", label: "Entregues" },
+  { key: "andamento", label: "Em andamento" },
   { key: "pg_due", label: "A receber" },
+  { key: "entregue", label: "Entregues" },
+  { key: "cancelado", label: "Cancelados" },
 ] as const;
 
 /** Prioridade operacional: pago aguardando entrega → pendente → entregue → resto. */
@@ -114,7 +121,6 @@ const EXTRA_TABS = [
 function AdminOrders() {
   const qc = useQueryClient();
   const { role } = useAuth();
-  const navigate = useNavigate();
   const { pedido, tab: tabParam, novo, busca } = Route.useSearch();
   const [tab, setTab] = useState<string>(tabParam ?? "todos");
   // quadro por padrão; filtro vindo por link (ex.: "A receber" no Início) abre a lista
@@ -167,6 +173,7 @@ function AdminOrders() {
   const duplicate = useServerFn(duplicateOrder);
   const status = useServerFn(setOrderStatus);
   const pay = useServerFn(setOrderPayment);
+  const received = useServerFn(markReceived);
   const [deliverAsk, setDeliverAsk] = useState<any | null>(null);
   /** Entregar: se ainda houver saldo, avisa antes (não bloqueia). */
   const deliver = (o: any, at?: { x: number; y: number }) => {
@@ -198,7 +205,6 @@ function AdminOrders() {
     }
   };
 
-  const [restockId, setRestockId] = useState<string | null>(null);
   const [sort, setSort] = useState<"recentes" | "antigos" | "valor" | "entrega">("recentes");
 
   const { data, isPending } = useQuery({
@@ -222,6 +228,10 @@ function AdminOrders() {
         products: products.data ?? [],
       };
     },
+    // painel "ao vivo": atualiza sozinho e ao voltar para a aba
+    staleTime: 15_000,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
   });
 
 
@@ -229,12 +239,14 @@ function AdminOrders() {
   const purchases = useQuery({
     queryKey: ["purchase-board"],
     queryFn: () => loadPurchases(),
-    staleTime: 20_000,
-    refetchInterval: 90_000,
+    staleTime: 15_000,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
   });
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ["purchase-board"] });
+    qc.invalidateQueries({ queryKey: ["supplier-orders"] });
     qc.invalidateQueries({ queryKey: ["orders-central"] });
     qc.invalidateQueries({ queryKey: ["admin-restock"] });
     qc.invalidateQueries({ queryKey: ["active-orders"] });
@@ -294,6 +306,7 @@ function AdminOrders() {
     const live = (data?.orders ?? []).filter((o: any) => !o.deleted_at);
     return {
       todos: live.length,
+      andamento: live.filter((o: any) => o.status !== "entregue" && o.status !== "cancelado").length,
       aguardando: live.filter((o: any) => !o.is_confirmed && o.status !== "cancelado").length,
       confirmados: live.filter((o: any) => o.is_confirmed && o.status !== "cancelado").length,
       pendente: live.filter((o: any) => o.status === "pendente").length,
@@ -307,6 +320,7 @@ function AdminOrders() {
   }, [data]);
 
   const buyMap = useMemo(() => buyByOrder(purchases.data?.items), [purchases.data]);
+  const supplyMap = useMemo(() => supplyByOrder(purchases.data?.items), [purchases.data]);
   const list = useMemo(() => {
     const q = search.trim().toLowerCase();
     const digits = q.replace(/\D/g, "");
@@ -315,6 +329,7 @@ function AdminOrders() {
         if (!o.deleted_at) return false;
       } else if (o.deleted_at) return false;
 
+      if (tab === "andamento" && (o.status === "entregue" || o.status === "cancelado")) return false;
       if (tab === "aguardando" && (o.is_confirmed || o.status === "cancelado")) return false;
       if (tab === "confirmados" && (!o.is_confirmed || o.status === "cancelado")) return false;
       if (["pendente", "pedido feito", "entregue", "cancelado"].includes(tab) && o.status !== tab) return false;
@@ -413,86 +428,112 @@ function AdminOrders() {
     }
   };
 
-  /** Ações secundárias do pedido — todas dentro do "⋯". */
-  const moreActions = (o: any): AdminAction[] => {
+  /**
+   * Menu do pedido ("⋯", botão direito ou segurar o dedo na linha).
+   * Atalhos no topo; o próximo passo em destaque; cancelar/lixeira separados.
+   * Sem "Marcar como…" nem "Reposição": a etapa vem da fase do pedido e as
+   * compras ficam na aba Compras.
+   */
+  const menuOf = (o: any): OrderMenuModel => {
     const wa = whatsappLink(o.customer_phone);
+    const name = o.customer_name ?? "Cliente";
+    const open = () => {
+      setOriginEl(document.querySelector<HTMLElement>(`[data-order-id="${o.id}"]`));
+      setDetailId(o.id);
+    };
+    const copy = async () => {
+      const lines = itemsByOrder.get(o.id) ?? [];
+      const text = [
+        `Pedido${o.order_number ? ` #${o.order_number}` : ""} · ${name}`,
+        ...lines.map((l: any) => `${l.quantity ?? 1}× ${l.variant === "DECANT" ? `Decant ${l.decant_ml ?? ""}ml ` : ""}${l.product_name_snapshot ?? "Perfume"}`),
+        `Total: ${brl(orderTotal(o))}`,
+        paymentInfo(o).due > 0 ? `Falta pagar: ${brl(paymentInfo(o).due)}` : "Pago",
+      ].join("\n");
+      try {
+        await navigator.clipboard.writeText(text);
+        toast.success("Resumo do pedido copiado.");
+      } catch {
+        toast.error("Não foi possível copiar.");
+      }
+    };
+    const ic = "size-4";
+
     if (o.deleted_at) {
-      const items: AdminAction[] = [
-        {
-          label: "Restaurar",
-          icon: <RotateCcw className="size-4" />,
-          onSelect: () => run(() => restore({ data: { orderId: o.id } }), "Pedido restaurado."),
-        },
-      ];
-      if (role === "owner")
-        items.push({
-          label: "Excluir definitivamente",
-          icon: <Trash2 className="size-4" />,
-          danger: true,
-          separated: true,
-          onSelect: () => setToDelete({ id: o.id, name: o.customer_name ?? "Cliente", trash: false }),
-        });
-      return items;
+      return {
+        quick: [],
+        main: [
+          { key: "open", label: "Ver pedido", icon: <Eye className={ic} />, onSelect: open },
+          {
+            key: "restore",
+            label: "Restaurar pedido",
+            icon: <RotateCcw className={ic} />,
+            primary: true,
+            onSelect: () => run(() => restore({ data: { orderId: o.id } }), "Pedido restaurado."),
+          },
+        ],
+        danger:
+          role === "owner"
+            ? [{ key: "purge", label: "Excluir para sempre", icon: <Trash2 className={ic} />, danger: true, onSelect: () => setToDelete({ id: o.id, name, trash: false }) }]
+            : [],
+      };
     }
 
-    const items: AdminAction[] = [
-      { label: "Ver pedido", onSelect: () => setDetailId(o.id) },
+    const quick: MenuItem[] = [
+      { key: "open", label: "Abrir", icon: <Eye />, onSelect: open },
       {
-        label: "Editar pedido",
-        icon: <Pencil className="size-4" />,
+        key: "edit",
+        label: "Editar",
+        icon: <Pencil />,
         // fecha o pedido aberto antes: a edição nunca fica por baixo
         onSelect: () => {
           setDetailId(null);
           setEditId(o.id);
         },
       },
+      wa ? { key: "wa", label: "WhatsApp", icon: <MessageCircle />, href: wa } : { key: "wa", label: "WhatsApp", icon: <MessageCircle />, disabled: true },
+      { key: "copy", label: "Copiar", icon: <Copy />, onSelect: copy },
     ];
-    if (!o.is_confirmed)
-      items.push({ label: "Confirmar pedido", icon: <Check className="size-4" />, onSelect: () => confirmNow(o.id) });
-    ["pendente", "pedido feito", "entregue"]
-      .filter((s) => s !== o.status)
-      .forEach((s) =>
-        items.push({
-          label: `Marcar como ${s}`,
-          onSelect: () =>
-            s === "entregue" ? deliver(o) : run(() => status({ data: { orderId: o.id, status: s } }), "Status atualizado."),
-        }),
-      );
-    items.push({
-      label: "Duplicar",
-      icon: <Copy className="size-4" />,
-      separated: true,
-      onSelect: () => run(() => duplicate({ data: { orderId: o.id } }), "Pedido duplicado."),
-    });
-    if (wa) items.push({ label: "Abrir WhatsApp", icon: <MessageCircle className="size-4" />, href: wa });
-    if (o.status !== "cancelado")
-      items.push({
-        label: "Enviar para reposição",
-        icon: <ClipboardList className="size-4" />,
-        onSelect: () => setRestockId(o.id),
-      });
 
-    if (o.is_confirmed)
-      items.push({
-        label: "Ver na reposição",
-        icon: <ClipboardList className="size-4" />,
-        onSelect: () => navigate({ to: "/admin/reposicao", search: { pedido: o.id } }),
+    const main: MenuItem[] = [];
+    const due = paymentInfo(o).due;
+    const canceled = o.status === "cancelado";
+    const next = quickOf(o);
+    const ph = phaseOf(o, purchases.data?.items, supplyMap);
+    if (canceled) {
+      main.push({ key: "reopen", label: "Reabrir pedido", icon: <RotateCcw className={ic} />, primary: true, onSelect: () => confirmNow(o.id) });
+    } else if (!o.is_confirmed) {
+      main.push({ key: "confirm", label: "Confirmar pedido", icon: <Check className={ic} />, primary: true, onSelect: () => confirmNow(o.id) });
+    } else if (next && ph?.key !== "pagamento") {
+      const icon = ph?.key === "comprar" ? <ShoppingCart className={ic} /> : ph?.key === "entregar" ? <PackageCheck className={ic} /> : <Truck className={ic} />;
+      main.push({ key: "next", label: next.label, icon, primary: true, onSelect: (at) => next.run(at) });
+    }
+    if (!canceled && due > 0)
+      main.push({
+        key: "paid",
+        label: "Recebi o pagamento",
+        hint: brl(due),
+        icon: <HandCoins className={ic} />,
+        primary: ph?.key === "pagamento" && o.is_confirmed,
+        onSelect: (at) => receivedNow(o, at),
       });
-    if (o.status !== "cancelado")
-      items.push({
-        label: "Cancelar pedido",
-        icon: <X className="size-4" />,
-        danger: true,
-        separated: true,
-        onSelect: () => run(() => cancel({ data: { orderId: o.id } }), "Pedido cancelado."),
-      });
-    items.push({
-      label: "Excluir pedido",
-      icon: <Trash2 className="size-4" />,
-      danger: true,
-      onSelect: () => setToDelete({ id: o.id, name: o.customer_name ?? "Cliente", trash: true }),
-    });
-    return items;
+    main.push({ key: "dup", label: "Duplicar pedido", icon: <CopyPlus className={ic} />, onSelect: () => run(() => duplicate({ data: { orderId: o.id } }), "Pedido duplicado.") });
+
+    const danger: MenuItem[] = [];
+    if (!canceled)
+      danger.push({ key: "cancel", label: "Cancelar pedido", icon: <X className={ic} />, danger: true, onSelect: () => run(() => cancel({ data: { orderId: o.id } }), "Pedido cancelado.") });
+    danger.push({ key: "trash", label: "Mover para a lixeira", icon: <Trash2 className={ic} />, danger: true, onSelect: () => setToDelete({ id: o.id, name, trash: true }) });
+    return { quick, main, danger };
+  };
+  const menuInfo = (o: any): OrderMenuInfo => {
+    const ph = o.deleted_at ? null : phaseOf(o, purchases.data?.items, supplyMap);
+    const phase = o.deleted_at
+      ? { label: "Na lixeira", dot: "#6F6F6F" }
+      : o.status === "cancelado"
+        ? { label: "Cancelado", dot: "#FF9A8A" }
+        : ph
+          ? { label: PHASE[ph.key].short, dot: PHASE[ph.key].dot }
+          : null;
+    return { phase, total: orderTotal(o) };
   };
 
   const activeExtra = EXTRA_TABS.find((t) => t.key === tab);
@@ -501,12 +542,38 @@ function AdminOrders() {
   const quickOf = (o: any): Quick => {
     if (o.deleted_at || o.status === "cancelado") return null;
     if (!o.is_confirmed) return { label: "Confirmar", run: () => confirmNow(o.id) };
-    const rest = restockState.get(o.id) ?? "nao";
-    if (o.status === "pendente")
-      return { label: "Mover p/ Pagos", run: () => moveTo(o, "pago") };
-    if (o.status === "pedido feito" && rest === "nao" && !(itemsByOrder.get(o.id) ?? []).length) return null;
-    if (o.status === "pedido feito") return { label: "Entregar", run: (at) => deliver(o, at) };
-    return null;
+    if (o.status === "entregue") return null;
+    // o botão principal segue a FASE do pedido (mesma regra do trilho)
+    const ph = phaseOf(o, purchases.data?.items, supplyMap);
+    if (!ph) return null;
+    switch (ph.key) {
+      case "pagamento":
+        return {
+          label: "Receber pagamento",
+          run: () => {
+            const el = document.getElementById(`pay-${o.id}`);
+            if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+            else deps.onOpen(o);
+          },
+        };
+      case "comprar":
+        return {
+          label: "Pedir no fornecedor",
+          run: () => {
+            setDetailId(null);
+            setView("compras");
+          },
+        };
+      case "chegando":
+        return {
+          label: "Chegou",
+          run: (at) => void trackActions.onArrived(o, ph.supply.filter((x) => x.status === "chegando").map((x) => x.itemId), at),
+        };
+      case "entregar":
+        return { label: "Entregar", run: (at) => deliver(o, at) };
+      default:
+        return null;
+    }
   };
 
   /** Arrastou no quadro: muda a etapa (entregar pergunta do saldo, como sempre). */
@@ -532,12 +599,30 @@ function AdminOrders() {
       return src ? (imgVariant(src, "thumb") ?? src) : null;
     },
     quickOf,
-    moreOf: moreActions,
     onOpen: (o, from) => {
       setOriginEl(from ?? null);
       setDetailId(o.id);
     },
     busyId: confirming,
+    phaseOf: (o) => phaseOf(o, purchases.data?.items, supplyMap),
+  };
+  /** Ações do trilho (Painel e Quadro): o botão "próximo passo" de cada pedido. */
+  const trackActions: TrackActions = {
+    onOpen: (o, el) => deps.onOpen(o, el),
+    onDeliver: (o, at) => deliver(o, at),
+    onGoPurchases: () => setView("compras"),
+    onArrived: async (o, itemIds, at) => {
+      if (!itemIds.length) return;
+      try {
+        const res: any = await received({ data: { itemIds } });
+        if (!res?.updated) return void toast.info("Esse perfume já estava marcado como recebido.");
+        burst(at?.x ?? window.innerWidth / 2, at?.y ?? window.innerHeight / 2);
+        toast.success(`Chegou! O pedido de ${(o.customer_name ?? "cliente").split(" ")[0]} está pronto para entregar.`);
+        refresh();
+      } catch (e: any) {
+        toast.error(e?.message ?? "Não foi possível marcar como recebido.");
+      }
+    },
   };
 
   const live = (data?.orders ?? []).filter((o: any) => !o.deleted_at && o.status !== "cancelado");
@@ -550,19 +635,20 @@ function AdminOrders() {
       .reduce((s: number, o: any) => s + Number(o.final_total ?? o.grand_total ?? o.sales_total ?? 0), 0),
   };
   const searching = search.trim().length > 0;
-  const boardMode = view === "quadro" && !searching;
-  const listMode = view === "lista" || (view === "quadro" && searching);
+  const boardMode = view === "quadro";
+  const listMode = view === "lista";
   const live2 = (data?.orders ?? []).filter((o: any) => !o.deleted_at && o.status !== "cancelado");
   const alerts =
     live2.filter((o: any) => o.status !== "entregue" && ["late", "today"].includes(deliveryState(o))).length +
     live2.filter((o: any) => ["late", "today"].includes(dueInfo(o).state) || (o.status === "entregue" && paymentInfo(o).due > 0)).length +
-    (purchases.data?.items ?? []).filter((p) => p.status === "a comprar" && p.plannedDate && p.plannedDate <= todayBR()).length;
-  const toBuyCount = (purchases.data?.items ?? []).filter((p) => p.status === "a comprar").length;
+    (purchases.data?.items ?? []).filter((p) => p.status === "a comprar" && isLivePurchase(p) && p.plannedDate && p.plannedDate <= todayBR()).length;
+  const toBuyCount = (purchases.data?.items ?? []).filter((p) => p.status === "a comprar" && isLivePurchase(p)).length;
   const receivedNow = (o: any, at?: { x: number; y: number }) =>
     void celebrate(() => pay({ data: { orderId: o.id, mode: "paid", origin: "cobranca" } }), "Pagamento recebido. Tudo certo!", at);
   const detailOrder = (data?.orders ?? []).find((o: any) => o.id === detailId) ?? null;
 
   return (
+    <OrderMenuProvider build={menuOf} linesOf={deps.linesOf} imageOf={deps.imageOf} infoOf={menuInfo}>
     <AdminShell
       title="Pedidos"
       wide
@@ -613,13 +699,10 @@ function AdminOrders() {
         })}
       </nav>
 
-      {view === "quadro" || view === "lista" ? (
+      {view === "lista" ? (
         <>
-          <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
-            <Stat i={0} hero label="Para entregar" value={String(stats.toDeliver)} hint="pagos, esperando" onClick={() => { setView("quadro"); setSearch(""); }} />
-            <Stat i={1} label="Novos" value={String(stats.unpaid)} hint="aguardando pagamento" onClick={() => { setView("lista"); setTab("pendente"); }} />
-            <Stat i={2} label="A receber" value={brl(stats.due)} hint="saldo em aberto" onClick={() => { setView("lista"); setTab("pg_due"); }} />
-            <Stat i={3} label="Este mês" value={brl(stats.month)} hint="em pedidos" />
+          <div className="mt-4">
+            <LedgerSummary orders={data?.orders ?? []} onPick={(t) => { setSearch(""); setTab(t); }} />
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-2.5">
         <label className="flex h-[52px] min-w-0 flex-1 basis-[280px] items-center gap-3 rounded-full bg-[#1A1A1A] px-5 focus-within:ring-2 focus-within:ring-[#FFD599]/50">
@@ -639,15 +722,16 @@ function AdminOrders() {
           </div>
       {listMode ? (
         <div className="mt-3 flex items-center gap-2">
-          <div className="-mx-1 flex min-w-0 flex-1 gap-1.5 overflow-x-auto px-1 pb-1">
+          <PillTrack activeKey={tab} label="Filtrar pedidos" className="flex min-w-0 flex-1 gap-1 overflow-x-auto rounded-full bg-[#1A1A1A] p-1">
             {MAIN_TABS.map((t) => (
               <button
                 key={t.key}
                 type="button"
+                aria-pressed={tab === t.key}
                 onClick={() => setTab(t.key)}
                 className={cn(
-                  "press h-10 shrink-0 rounded-full px-4 text-[14px] font-semibold transition-colors",
-                  tab === t.key ? "bg-white text-[#15130F]" : "bg-[#1A1A1A] text-[#A9A9A9] hover:text-white",
+                  "press h-9 shrink-0 rounded-full px-4 text-[14px] font-semibold transition-colors",
+                  tab === t.key ? "text-[#15130F]" : "text-[#A9A9A9] hover:bg-white/[0.05] hover:text-white",
                 )}
               >
                 {t.label}
@@ -655,11 +739,11 @@ function AdminOrders() {
               </button>
             ))}
             {activeExtra ? (
-              <button type="button" onClick={() => setTab("todos")} className="press h-10 shrink-0 rounded-full bg-white px-4 text-[14px] font-semibold text-[#15130F]">
+              <button type="button" aria-pressed onClick={() => setTab("todos")} className="press h-9 shrink-0 rounded-full px-4 text-[14px] font-semibold text-[#15130F]">
                 {activeExtra.label} <X className="ml-1 inline size-3.5" />
               </button>
             ) : null}
-          </div>
+          </PillTrack>
           <AdminMore
             label="Filtros e ordem"
             actions={[
@@ -680,7 +764,8 @@ function AdminOrders() {
         </>
       ) : null}
 
-      <div className="mt-4">
+      <OrderMenuZone className="mt-4" orderOf={(id) => (data?.orders ?? []).find((o: any) => o.id === id) ?? null}>
+      <ViewSwap id={view}>
         {isPending ? (
           <div className="grid gap-4 lg:grid-cols-3">
             {[0, 1, 2].map((i) => (
@@ -699,6 +784,8 @@ function AdminOrders() {
             purchases={purchases.data?.items}
             onOpen={(o, el) => deps.onOpen(o, el)}
             onDeliver={(o, at) => deliver(o, at)}
+            onArrived={trackActions.onArrived}
+            busyId={confirming}
             onReceived={receivedNow}
             onGoPurchases={() => setView("compras")}
             onJourney={(j) => {
@@ -719,25 +806,28 @@ function AdminOrders() {
             }}
           />
         ) : boardMode ? (
-          <OrderBoard
+          <TrackBoard
             orders={data?.orders ?? []}
-            deps={deps}
-            onMove={moveTo}
-            onShowAllDone={() => {
-              setView("lista");
-              setTab("entregue");
-            }}
+            purchases={purchases.data?.items}
+            linesOf={deps.linesOf}
+            imageOf={deps.imageOf}
+            actions={trackActions}
+            busyId={confirming}
           />
         ) : list.length === 0 ? (
           <AdminEmpty>{searching ? `Nenhum pedido com “${search.trim()}”.` : "Nenhum pedido por aqui."}</AdminEmpty>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 wide:grid-cols-4">
-            {list.map((o: any, i: number) => (
-              <OrderCard key={o.id} o={o} i={i} deps={deps} />
-            ))}
-          </div>
+          <OrderLedger
+            orders={list}
+            grouped={sort === "recentes" || sort === "antigos"}
+            linesOf={deps.linesOf}
+            imageOf={deps.imageOf}
+            phaseOf={(o) => phaseOf(o, purchases.data?.items, supplyMap)}
+            onOpen={(o, el) => deps.onOpen(o, el)}
+          />
         )}
-      </div>
+      </ViewSwap>
+      </OrderMenuZone>
 
       <OrderComposer
         open={newOpen}
@@ -766,6 +856,7 @@ function AdminOrders() {
         inRestock={detailId ? linkedOrders.has(detailId) : false}
         alreadyBought={detailId ? orderedOrders.has(detailId) : false}
         quick={detailOrder ? quickOf(detailOrder) : null}
+        phase={detailOrder ? phaseOf(detailOrder, purchases.data?.items, supplyMap) : null}
         busy={confirming === detailId}
         onClose={() => {
           setDetailId(null);
@@ -776,15 +867,9 @@ function AdminOrders() {
           setEditId(id);
         }}
         onChanged={refresh}
-        more={moreActions}
         originEl={originEl}
       />
 
-      <OrderRestockSheet
-        orderId={restockId}
-        orderNumber={(data?.orders ?? []).find((o: any) => o.id === restockId)?.order_number}
-        onClose={() => setRestockId(null)}
-      />
 
 
       <OrderEditSheet
@@ -871,6 +956,7 @@ function AdminOrders() {
         }}
       />
     </AdminShell>
+    </OrderMenuProvider>
   );
 }
 

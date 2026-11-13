@@ -1,4 +1,5 @@
 import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
+import { isOnRequest, useConsultIds } from "@/lib/price-on-request";
 import { createPortal } from "react-dom";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, Clock, Search as SearchIcon } from "lucide-react";
@@ -32,12 +33,14 @@ function Highlight({ text, query }: { text: string; query: string }) {
 function ResultPrice({ product }: { product: CatalogProduct }) {
   const view = usePriceView();
   const settings = useDecantSettings();
+  const consult = isOnRequest(product as never, useConsultIds());
   const decant = canDecant(product as never) && view !== "frasco";
   const value = decant
     ? decantPrice(product as never, settings, view as 2 | 5 | 10)
     : canFullBottle(product as never) && product.retail_price != null
       ? Number(product.retail_price)
       : null;
+  if (consult) return <span className="shrink-0 text-right text-[12px] font-semibold text-gold">Sob consulta</span>;
   if (value == null) return null;
   return (
     <span className="shrink-0 text-right">

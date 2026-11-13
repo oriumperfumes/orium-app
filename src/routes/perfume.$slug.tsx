@@ -6,7 +6,7 @@ import { createFileRoute, Link, useCanGoBack, useRouter } from "@tanstack/react-
 import { useQuery } from "@tanstack/react-query";
 import { withQueryTimeout } from "@/lib/request-timeout";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ChevronLeft, Share, ShoppingBag } from "lucide-react";
+import { ChevronLeft, MessageCircle, Share, ShoppingBag } from "lucide-react";
 import { toast } from "sonner";
 import { registerCartTarget } from "@/lib/fly-to-cart";
 import { supabase } from "@/integrations/supabase/client";
@@ -30,6 +30,7 @@ import { usePublicPricingSettings } from "@/lib/pricing-settings";
 import { AdminInternalSection } from "@/components/orium/AdminInternalSection";
 import { HelpChooseButton } from "@/components/orium/HelpChooseButton";
 import { ProductPurchase, type BuyMode } from "@/components/orium/ProductPurchase";
+import { consultLink } from "@/lib/price-on-request";
 import { ProductScent } from "@/components/orium/ProductScent";
 import { track, watchProductDwell } from "@/lib/analytics";
 
@@ -38,7 +39,7 @@ import { track, watchProductDwell } from "@/lib/analytics";
  * conferência de identidade, que ficam restritos à equipe.
  */
 const PUBLIC_PRODUCT_COLUMNS =
-  "id, slug, canonical_name, brand, brand_id, gender, gender_norm, concentration, volume_ml, image_url, image_urls, product_line, flanker, product_type, active, catalog_eligible, in_stock, stock_quantity, sale_mode, full_bottle_available, retail_price, wholesale_price, decant_available, decant_price_2ml, decant_price_5ml, decant_price_10ml, weight_g, height_cm, width_cm, length_cm, created_at, updated_at";
+  "id, slug, canonical_name, brand, brand_id, gender, gender_norm, concentration, volume_ml, image_url, image_urls, product_line, flanker, product_type, active, catalog_eligible, in_stock, stock_quantity, sale_mode, full_bottle_available, retail_price, wholesale_price, decant_available, decant_price_2ml, decant_price_5ml, decant_price_10ml, weight_g, height_cm, width_cm, length_cm, price_on_request, created_at, updated_at";
 
 export const Route = createFileRoute("/perfume/$slug")({
   validateSearch: (search: Record<string, unknown>): { frasco?: number; ml?: number } => {
@@ -315,6 +316,8 @@ function ProductPageContent({
                 <div className="h-[124px] skeleton rounded-[20px]" />
                 <div className="h-12 skeleton rounded-full" />
               </div>
+            ) : (data as any).price_on_request ? (
+              <ConsultPanel product={data as any} />
             ) : (
               <ProductPurchase
                 product={data as unknown as CatalogProduct}
@@ -332,7 +335,7 @@ function ProductPageContent({
               />
             )}
 
-            {!data.in_stock ? (
+            {!data.in_stock && !(data as any).price_on_request ? (
               <div className="mt-5">
                 <StockAlertCard productId={data.id} name={data.canonical_name} />
               </div>
@@ -631,4 +634,24 @@ function BelowFold({ children }: { children: ReactNode }) {
     return () => io.disconnect();
   }, [show]);
   return <div ref={ref}>{show ? children : <div className="mt-12 h-40 rounded-3xl bg-muted/40" />}</div>;
+}
+
+/** Perfume sob consulta: no lugar do preço e do carrinho, conversa direta no WhatsApp. */
+function ConsultPanel({ product }: { product: { id: string; canonical_name: string; brand?: string | null; volume_ml?: number | null } }) {
+  return (
+    <div className="mt-8 rounded-[24px] bg-[#1A1A1A] p-5">
+      <p className="text-[13px] font-semibold text-[#8C8C8C]">{product.volume_ml ? `Frasco ${product.volume_ml}ml` : "Frasco completo"}</p>
+      <p className="mt-1 text-[28px] leading-tight font-bold tracking-[-0.02em] text-[#FFD599]">Sob consulta</p>
+      <p className="mt-1 text-[14px] leading-snug text-[#A9A9A9]">Fale com a Orium para saber o preço e a disponibilidade deste perfume.</p>
+      <a
+        href={consultLink(product)}
+        target="_blank"
+        rel="noreferrer"
+        onClick={() => track("consultant_help_clicked", { productId: product.id, meta: { reason: "sob-consulta" } })}
+        className="press mt-4 flex h-14 w-full items-center justify-center gap-2 rounded-full bg-[#FFD599] text-[16px] font-bold text-black transition-colors hover:bg-[#FFDDAA]"
+      >
+        <MessageCircle className="size-5" strokeWidth={2.4} /> Consultar no WhatsApp
+      </a>
+    </div>
+  );
 }

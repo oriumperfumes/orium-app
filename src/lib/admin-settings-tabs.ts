@@ -1,6 +1,7 @@
 /** Categorias existentes em Admin → Configurações. Não criar abas vazias. */
 export const SETTINGS_TABS = [
   { id: "entregas", label: "Entregas", description: "Origem, retirada, frete e embalagens." },
+  { id: "equipe", label: "Equipe", description: "Quem acessa o painel Admin: donos e admins." },
   { id: "integracoes", label: "Integrações", description: "Conexões externas já disponíveis." },
   { id: "ia", label: "Inteligência Artificial", description: "OpenAI, modelos, consumo e Copilot." },
 ] as const;

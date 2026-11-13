@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { CopilotSettings } from "@/components/orium/copilot/CopilotSettings";
 import { AiCenter } from "@/components/orium/admin/AiCenter";
+import { TeamSettings } from "@/components/orium/admin/TeamSettings";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
@@ -106,6 +107,12 @@ function AdminSettings() {
         {showTab("entregas") && (
           <section id="settings-panel-entregas" role="tabpanel" aria-labelledby="settings-tab-entregas" hidden={activeTab !== "entregas"} className="min-w-0">
             <ShippingSettings onProviderChange={setProviderDraft} />
+          </section>
+        )}
+
+        {showTab("equipe") && (
+          <section id="settings-panel-equipe" role="tabpanel" aria-labelledby="settings-tab-equipe" hidden={activeTab !== "equipe"} className="min-w-0">
+            <TeamSettings />
           </section>
         )}
 

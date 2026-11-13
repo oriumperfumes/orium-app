@@ -8,7 +8,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 import { ArrowRight, Check, ClipboardList, Loader2, MessageCircle, Pencil, Phone } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { AdminMore, type AdminAction } from "@/components/orium/admin/AdminUI";
+import { OrderMenuButton } from "./OrderMenu";
 import { paymentEventLabel, paymentInfo } from "@/components/orium/admin/OrderPayment";
 import { DeliveryControl, PaymentControl } from "./controls";
 import { deliveryEventLabel } from "@/components/orium/admin/Delivery";
@@ -17,6 +17,7 @@ import { brl, fullDateTime, listDateTime, whatsappLink } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { DeliveryChip, PanelClose, SidePanel, initials, orderTotal, originOf } from "./model";
 import type { Quick } from "./OrderBoard";
+import { PhaseTrack, RewindControl, SupplyChip, type PhaseInfo } from "./phase";
 
 const FULFILLMENT: Record<string, string> = { PICKUP: "Retirada na loja", LOCAL: "Entrega local", SHIPPING: "Envio pelos Correios" };
 
@@ -29,14 +30,15 @@ export function OrderPanel({
   inRestock,
   alreadyBought,
   quick,
+  phase,
   busy,
   onClose,
   onEdit,
   onChanged,
-  more,
   originEl,
 }: {
   originEl?: HTMLElement | null;
+  phase?: PhaseInfo | null;
   order: any | null;
   lines: any[];
   imageOf: (l: any) => string | null | undefined;
@@ -49,7 +51,6 @@ export function OrderPanel({
   onClose: () => void;
   onEdit: (id: string) => void;
   onChanged: () => void;
-  more: (o: any) => AdminAction[];
 }) {
   // mantém o último pedido enquanto o painel anima a saída
   const [last, setLast] = useState<{ o: any; l: any[] } | null>(null);
@@ -69,11 +70,11 @@ export function OrderPanel({
           inRestock={inRestock}
           alreadyBought={alreadyBought}
           quick={quick}
+          phase={phase ?? null}
           busy={busy}
           onClose={onClose}
           onEdit={onEdit}
           onChanged={onChanged}
-          more={more}
         />
       ) : null}
     </SidePanel>
@@ -89,12 +90,13 @@ function PanelBody({
   inRestock,
   alreadyBought,
   quick,
+  phase,
   busy,
   onClose,
   onEdit,
   onChanged,
-  more,
 }: {
+  phase: PhaseInfo | null;
   o: any;
   lines: any[];
   imageOf: (l: any) => string | null | undefined;
@@ -107,7 +109,6 @@ function PanelBody({
   onClose: () => void;
   onEdit: (id: string) => void;
   onChanged: () => void;
-  more: (o: any) => AdminAction[];
 }) {
   const navigate = useNavigate();
   const [notice, setNotice] = useState(false);
@@ -124,12 +125,6 @@ function PanelBody({
       (await supabase.from("order_events").select("*").eq("order_id", o.id).order("created_at", { ascending: false })).data ?? [],
   });
 
-  const steps: Array<{ label: string; state: "done" | "half" | "todo" }> = [
-    { label: "Recebido", state: "done" },
-    { label: "Pago", state: pay.status === "paid" ? "done" : pay.status === "partial" ? "half" : "todo" },
-    { label: "Reposição", state: restock === "enviada" ? "done" : restock === "parcial" ? "half" : "todo" },
-    { label: "Entregue", state: o.status === "entregue" ? "done" : "todo" },
-  ];
   const address = o.shipping_street
     ? `${o.shipping_street}, ${o.shipping_number ?? ""}${o.shipping_complement ? ` — ${o.shipping_complement}` : ""}\n${o.shipping_district ?? ""} · ${o.shipping_city ?? ""}/${o.shipping_state ?? ""} · CEP ${o.shipping_cep ?? ""}`
     : null;
@@ -145,7 +140,7 @@ function PanelBody({
             {o.order_number ? ` · #${o.order_number}` : ""}
           </p>
         </div>
-        <AdminMore actions={more(o)} />
+        <OrderMenuButton o={o} />
         <PanelClose onClose={onClose} />
       </header>
 
@@ -159,23 +154,11 @@ function PanelBody({
             </div>
             <DeliveryChip order={o} className="mb-1 h-7 px-3 text-[12.5px]" />
           </div>
-          {!closed ? (
-            <ol className="mt-5 grid grid-cols-4 gap-1.5">
-              {steps.map((s, i) => (
-                <li key={s.label} className="min-w-0">
-                  <span className="ord-step block h-1.5 overflow-hidden rounded-full bg-[#2E2E2E]">
-                    <i
-                      className={cn("block h-full rounded-full", s.state === "todo" ? "bg-transparent" : "bg-[#FFD599]")}
-                      style={{ width: s.state === "done" ? "100%" : s.state === "half" ? "50%" : "0%", transitionDelay: `${i * 90}ms` }}
-                    />
-                  </span>
-                  <span className={cn("mt-2 flex items-center gap-1 truncate text-[12px] font-semibold", s.state === "todo" ? "text-[#6F6F6F]" : "text-white")}>
-                    {s.state === "done" ? <Check className="size-3.5 text-[#FFD599]" strokeWidth={3} /> : null}
-                    {s.label}
-                  </span>
-                </li>
-              ))}
-            </ol>
+          {!closed && phase ? (
+            <div className="mt-5 border-t border-white/[0.06] pt-5">
+              <PhaseTrack info={phase} />
+              <RewindControl order={o} info={phase} onDone={onChanged} />
+            </div>
           ) : null}
           {quick || wa ? (
             <div className="mt-5 flex gap-2">
@@ -214,6 +197,8 @@ function PanelBody({
         }>
           <ul className="space-y-2">
             {lines.map((l, i) => {
+              // selo por perfume só quando o pagamento foi marcado item a item (parte paga)
+              const byItem = lines.length > 1 && lines.some((x: any) => x.paid) && !lines.every((x: any) => x.paid);
               const img = imageOf(l);
               const decant = l.variant === "DECANT";
               const listed = Number(l.unit_base_price ?? 0);
@@ -233,6 +218,14 @@ function PanelBody({
                       <span className="text-[12.5px] whitespace-nowrap text-[#8C8C8C] tabular-nums">
                         {l.quantity}× {brl(sold)}
                       </span>
+                      {byItem ? (
+                        <span className={cn("rounded-full px-2 py-px text-[11px] font-bold whitespace-nowrap", l.paid ? "bg-[#1C2A21] text-[#7FCF9F]" : "bg-[#2A1A18] text-[#FF9A8A]")}>
+                          {l.paid ? "Pago" : "Falta pagar"}
+                        </span>
+                      ) : null}
+                      {phase && !closed && o.status !== "entregue" ? (
+                        <SupplyChip line={phase.supply.find((x) => x.productId && x.productId === l.product_id)} />
+                      ) : null}
                     </span>
                   </span>
                   <span className="shrink-0 text-right">
@@ -272,9 +265,13 @@ function PanelBody({
             </span>
           }
         >
-          <div className="rounded-[22px] bg-[#1A1A1A] p-3.5">
-            {!closed ? <PaymentControl order={o} onChanged={onChanged} /> : <p className="text-[14px] text-[#8C8C8C]">Pedido {o.deleted_at ? "na lixeira" : "cancelado"}.</p>}
-          </div>
+          {!closed ? (
+            <div id={`pay-${o.id}`} className="scroll-mt-24">
+              <PaymentControl order={o} onChanged={onChanged} lines={lines} />
+            </div>
+          ) : (
+            <p className="rounded-[22px] bg-[#1A1A1A] p-3.5 text-[14px] text-[#8C8C8C]">Pedido {o.deleted_at ? "na lixeira" : "cancelado"}.</p>
+          )}
         </Block>
 
         {/* entrega */}

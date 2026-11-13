@@ -5,7 +5,7 @@
  */
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Loader2, MessageCircle } from "lucide-react";
-import { AdminMore, type AdminAction } from "@/components/orium/admin/AdminUI";
+import { OrderMenuButton } from "./OrderMenu";
 import { brl, whatsappLink } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
@@ -23,13 +23,16 @@ import {
 
 export type Quick = { label: string; run: (at?: { x: number; y: number }) => void } | null;
 
+import { PhaseBar, PhaseChip, type PhaseInfo } from "./phase";
+
 export type CardDeps = {
   linesOf: (o: any) => any[];
   imageOf: (line: any) => string | null | undefined;
   quickOf: (o: any) => Quick;
-  moreOf: (o: any) => AdminAction[];
   onOpen: (o: any, from?: HTMLElement | null) => void;
   busyId: string | null;
+  /** fase do pedido (pagamento → fornecedor → a caminho → pronto → entregue) */
+  phaseOf?: (o: any) => PhaseInfo | null;
 };
 
 export function OrderCard({ o, i = 0, draggable, onDragState, deps }: { o: any; i?: number; draggable?: boolean; onDragState?: (id: string | null) => void; deps: CardDeps }) {
@@ -38,6 +41,7 @@ export function OrderCard({ o, i = 0, draggable, onDragState, deps }: { o: any; 
   const wa = whatsappLink(o.customer_phone);
   const [dragging, setDragging] = useState(false);
   const closed = o.deleted_at || o.status === "cancelado";
+  const phase = deps.phaseOf?.(o) ?? null;
   const first = lines[0];
   const firstName = first?.product_name_snapshot ?? "Pedido sem itens";
   const variant = first ? (first.variant === "DECANT" ? `Decant ${first.decant_ml ?? ""}ml` : first.variant_label ?? "Frasco") : "";
@@ -99,7 +103,7 @@ export function OrderCard({ o, i = 0, draggable, onDragState, deps }: { o: any; 
               <MessageCircle className="size-[17px]" strokeWidth={2} />
             </a>
           ) : null}
-          <AdminMore actions={deps.moreOf(o)} />
+          <OrderMenuButton o={o} />
         </div>
       </div>
 
@@ -113,6 +117,13 @@ export function OrderCard({ o, i = 0, draggable, onDragState, deps }: { o: any; 
           </p>
         </div>
       </div>
+
+      {phase && !closed ? (
+        <div className="mt-3.5 rounded-[16px] bg-[#161616] p-2.5">
+          <PhaseChip phase={phase.key} />
+          <PhaseBar info={phase} className="mt-2.5 px-0.5" />
+        </div>
+      ) : null}
 
       {!closed ? <PayBar order={o} className="mt-3.5" /> : null}
 

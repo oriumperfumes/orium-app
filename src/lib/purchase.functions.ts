@@ -222,7 +222,7 @@ export const purchaseAddToRestock = createServerFn({ method: "POST" })
     const { data: done } = await db.from("activity_logs").select("id").eq("action", "purchase_restock").eq("entity_id", data.request_id).limit(1);
     if (done?.length) return { added: 0, updated: 0, already: true };
     const listId = await openRestockList(db, (context as Ctx).userId);
-    const { data: current } = await db.from("restock_items").select("id, product_id, supplier_id, quantity").eq("restock_list_id", listId);
+    const { data: current } = await db.from("restock_items").select("id, product_id, supplier_id, quantity").eq("restock_list_id", listId).eq("status", "a comprar");
     let added = 0;
     let updated = 0;
     for (const l of data.lines) {

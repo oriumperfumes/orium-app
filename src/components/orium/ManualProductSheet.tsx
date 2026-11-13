@@ -68,7 +68,11 @@ type Draft = {
   decant2: string;
   decant5: string;
   decant10: string;
+  /** Preço sob consulta: o site mostra "Consultar no WhatsApp" em vez do preço. */
+  priceOnRequest: boolean;
 };
+
+export type ManualProductPrefill = Partial<Pick<Draft, "name" | "newBrandName" | "volume" | "concentration" | "imageUrl" | "priceOnRequest">>;
 
 const emptyDraft: Draft = {
   id: null,
@@ -93,6 +97,7 @@ const emptyDraft: Draft = {
   decant2: "",
   decant5: "",
   decant10: "",
+  priceOnRequest: false,
 };
 
 const SALE_MODES: Array<{ value: SaleModeInput; label: string; hint: string }> = [
@@ -125,11 +130,14 @@ export function ManualProductSheet({
   productId,
   onClose,
   onSaved,
+  prefill,
 }: {
   open: boolean;
   productId?: string | null;
   onClose: () => void;
   onSaved?: () => void;
+  /** Cadastro a partir de um perfume de fornecedor (ex.: Rasha, sob consulta). */
+  prefill?: ManualProductPrefill | null;
 }) {
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [loading, setLoading] = useState(false);
@@ -140,7 +148,7 @@ export function ManualProductSheet({
   useEffect(() => {
     if (!open) return;
     if (!productId) {
-      setDraft(emptyDraft);
+      setDraft({ ...emptyDraft, ...(prefill ?? {}), ...(prefill?.priceOnRequest ? { saleMode: "FULL" as SaleModeInput } : {}) });
       return;
     }
     setLoading(true);
@@ -179,6 +187,7 @@ export function ManualProductSheet({
           decant2: num("decant_price_2ml"),
           decant5: num("decant_price_5ml"),
           decant10: num("decant_price_10ml"),
+          priceOnRequest: p["price_on_request"] === true,
         });
       })
       .catch((e) => toast.error((e as Error).message))
@@ -316,6 +325,7 @@ function ManualProductForm({
           decantPrice2ml: toNumber(draft.decant2),
           decantPrice5ml: toNumber(draft.decant5),
           decantPrice10ml: toNumber(draft.decant10),
+          priceOnRequest: draft.priceOnRequest,
         },
       });
       set({ id: res.id });
@@ -506,6 +516,25 @@ function ManualProductForm({
         </div>
       </Field>
 
+      {/* Preço no site: normal ou sob consulta (WhatsApp) */}
+      <Field label="Preço no site">
+        <div className="flex flex-wrap gap-2">
+          <Chip active={!draft.priceOnRequest} onClick={() => set({ priceOnRequest: false })}>
+            Mostrar preço
+          </Chip>
+          <Chip active={draft.priceOnRequest} onClick={() => set({ priceOnRequest: true, saleMode: "FULL" })}>
+            Sob consulta (WhatsApp)
+          </Chip>
+        </div>
+        {draft.priceOnRequest ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            No site aparece <b>“Consultar no WhatsApp”</b> no lugar do preço, e o cliente fala direto com a Orium sobre este perfume. Não entra no carrinho.
+          </p>
+        ) : null}
+      </Field>
+
+      {draft.priceOnRequest ? null : (
+      <>
       {/* Como este produto será vendido */}
       <Field label="Como este produto será vendido?">
         <div className="flex flex-wrap gap-2">
@@ -632,6 +661,8 @@ function ManualProductForm({
           )}
         </div>
       ) : null}
+      </>
+      )}
 
       <Field label="Disponibilidade">
         <div className="flex flex-wrap gap-2">

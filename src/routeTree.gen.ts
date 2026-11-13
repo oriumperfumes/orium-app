@@ -33,6 +33,7 @@ import { Route as AuthenticatedAdminManutencaoRouteImport } from './routes/_auth
 import { Route as AuthenticatedAdminMarcasRouteImport } from './routes/_authenticated/admin.marcas'
 import { Route as AuthenticatedAdminNegociacaoRouteImport } from './routes/_authenticated/admin.negociacao'
 import { Route as AuthenticatedAdminPedidosRouteImport } from './routes/_authenticated/admin.pedidos'
+import { Route as AuthenticatedAdminWidgetsRouteImport } from './routes/_authenticated/admin.widgets'
 import { Route as AuthenticatedAdminPrecificacaoRouteImport } from './routes/_authenticated/admin.precificacao'
 import { Route as AuthenticatedAdminProdutosRouteImport } from './routes/_authenticated/admin.produtos'
 import { Route as AuthenticatedAdminReposicaoRouteImport } from './routes/_authenticated/admin.reposicao'
@@ -40,10 +41,13 @@ import { Route as AuthenticatedAdminRevisarRouteImport } from './routes/_authent
 import { Route as AuthenticatedAdminVendasLojaRouteImport } from './routes/_authenticated/admin.vendas-loja'
 import { Route as ApiPublicNegociacaoFotoRouteImport } from './routes/api/public/negociacao-foto'
 import { Route as ApiPublicProdutoFotoRouteImport } from './routes/api/public/produto-foto'
+import { Route as ApiPublicWidgetRouteImport } from './routes/api/public/widget'
+import { Route as ApiPublicAgendaRouteImport } from './routes/api/public/agenda'
 import { Route as AuthenticatedAdminCopilotThreadIdRouteImport } from './routes/_authenticated/admin.copilot.$threadId'
 import { Route as AuthenticatedAdminProdutosIdRouteImport } from './routes/_authenticated/admin.produtos.$id'
 import { Route as ApiPublicHooksCatalogHygieneRouteImport } from './routes/api/public/hooks/catalog-hygiene'
 import { Route as ApiPublicHooksEnrichFragrancesRouteImport } from './routes/api/public/hooks/enrich-fragrances'
+import { Route as ApiPublicHooksConsultEnrichRouteImport } from './routes/api/public/hooks/consult-enrich'
 import { Route as ApiPublicHooksSyncSuppliersRouteImport } from './routes/api/public/hooks/sync-suppliers'
 import { Route as ApiPublicHooksWhatsappRouteImport } from './routes/api/public/hooks/whatsapp'
 
@@ -210,6 +214,12 @@ const AuthenticatedAdminVendasLojaRoute =
     path: '/vendas-loja',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAdminWidgetsRoute =
+  AuthenticatedAdminWidgetsRouteImport.update({
+    id: '/widgets',
+    path: '/widgets',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
 const ApiPublicNegociacaoFotoRoute = ApiPublicNegociacaoFotoRouteImport.update({
   id: '/api/public/negociacao-foto',
   path: '/api/public/negociacao-foto',
@@ -218,6 +228,16 @@ const ApiPublicNegociacaoFotoRoute = ApiPublicNegociacaoFotoRouteImport.update({
 const ApiPublicProdutoFotoRoute = ApiPublicProdutoFotoRouteImport.update({
   id: '/api/public/produto-foto',
   path: '/api/public/produto-foto',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicWidgetRoute = ApiPublicWidgetRouteImport.update({
+  id: '/api/public/widget',
+  path: '/api/public/widget',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicAgendaRoute = ApiPublicAgendaRouteImport.update({
+  id: '/api/public/agenda',
+  path: '/api/public/agenda',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedAdminCopilotThreadIdRoute =
@@ -244,6 +264,11 @@ const ApiPublicHooksEnrichFragrancesRoute =
     path: '/api/public/hooks/enrich-fragrances',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksConsultEnrichRoute = ApiPublicHooksConsultEnrichRouteImport.update({
+  id: '/api/public/hooks/consult-enrich',
+  path: '/api/public/hooks/consult-enrich',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicHooksSyncSuppliersRoute =
   ApiPublicHooksSyncSuppliersRouteImport.update({
     id: '/api/public/hooks/sync-suppliers',
@@ -284,13 +309,17 @@ export interface FileRoutesByFullPath {
   '/admin/reposicao': typeof AuthenticatedAdminReposicaoRoute
   '/admin/revisar': typeof AuthenticatedAdminRevisarRoute
   '/admin/vendas-loja': typeof AuthenticatedAdminVendasLojaRoute
+  '/admin/widgets': typeof AuthenticatedAdminWidgetsRoute
   '/api/public/negociacao-foto': typeof ApiPublicNegociacaoFotoRoute
   '/api/public/produto-foto': typeof ApiPublicProdutoFotoRoute
+  '/api/public/widget': typeof ApiPublicWidgetRoute
+  '/api/public/agenda': typeof ApiPublicAgendaRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
   '/admin/copilot/$threadId': typeof AuthenticatedAdminCopilotThreadIdRoute
   '/admin/produtos/$id': typeof AuthenticatedAdminProdutosIdRoute
   '/api/public/hooks/catalog-hygiene': typeof ApiPublicHooksCatalogHygieneRoute
   '/api/public/hooks/enrich-fragrances': typeof ApiPublicHooksEnrichFragrancesRoute
+  '/api/public/hooks/consult-enrich': typeof ApiPublicHooksConsultEnrichRoute
   '/api/public/hooks/sync-suppliers': typeof ApiPublicHooksSyncSuppliersRoute
   '/api/public/hooks/whatsapp': typeof ApiPublicHooksWhatsappRoute
 }
@@ -321,13 +350,17 @@ export interface FileRoutesByTo {
   '/admin/reposicao': typeof AuthenticatedAdminReposicaoRoute
   '/admin/revisar': typeof AuthenticatedAdminRevisarRoute
   '/admin/vendas-loja': typeof AuthenticatedAdminVendasLojaRoute
+  '/admin/widgets': typeof AuthenticatedAdminWidgetsRoute
   '/api/public/negociacao-foto': typeof ApiPublicNegociacaoFotoRoute
   '/api/public/produto-foto': typeof ApiPublicProdutoFotoRoute
+  '/api/public/widget': typeof ApiPublicWidgetRoute
+  '/api/public/agenda': typeof ApiPublicAgendaRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/admin/copilot/$threadId': typeof AuthenticatedAdminCopilotThreadIdRoute
   '/admin/produtos/$id': typeof AuthenticatedAdminProdutosIdRoute
   '/api/public/hooks/catalog-hygiene': typeof ApiPublicHooksCatalogHygieneRoute
   '/api/public/hooks/enrich-fragrances': typeof ApiPublicHooksEnrichFragrancesRoute
+  '/api/public/hooks/consult-enrich': typeof ApiPublicHooksConsultEnrichRoute
   '/api/public/hooks/sync-suppliers': typeof ApiPublicHooksSyncSuppliersRoute
   '/api/public/hooks/whatsapp': typeof ApiPublicHooksWhatsappRoute
 }
@@ -361,13 +394,17 @@ export interface FileRoutesById {
   '/_authenticated/admin/reposicao': typeof AuthenticatedAdminReposicaoRoute
   '/_authenticated/admin/revisar': typeof AuthenticatedAdminRevisarRoute
   '/_authenticated/admin/vendas-loja': typeof AuthenticatedAdminVendasLojaRoute
+  '/_authenticated/admin/widgets': typeof AuthenticatedAdminWidgetsRoute
   '/api/public/negociacao-foto': typeof ApiPublicNegociacaoFotoRoute
   '/api/public/produto-foto': typeof ApiPublicProdutoFotoRoute
+  '/api/public/widget': typeof ApiPublicWidgetRoute
+  '/api/public/agenda': typeof ApiPublicAgendaRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/_authenticated/admin/copilot/$threadId': typeof AuthenticatedAdminCopilotThreadIdRoute
   '/_authenticated/admin/produtos/$id': typeof AuthenticatedAdminProdutosIdRoute
   '/api/public/hooks/catalog-hygiene': typeof ApiPublicHooksCatalogHygieneRoute
   '/api/public/hooks/enrich-fragrances': typeof ApiPublicHooksEnrichFragrancesRoute
+  '/api/public/hooks/consult-enrich': typeof ApiPublicHooksConsultEnrichRoute
   '/api/public/hooks/sync-suppliers': typeof ApiPublicHooksSyncSuppliersRoute
   '/api/public/hooks/whatsapp': typeof ApiPublicHooksWhatsappRoute
 }
@@ -401,13 +438,17 @@ export interface FileRouteTypes {
     | '/admin/reposicao'
     | '/admin/revisar'
     | '/admin/vendas-loja'
+    | '/admin/widgets'
     | '/api/public/negociacao-foto'
     | '/api/public/produto-foto'
+    | '/api/public/widget'
+    | '/api/public/agenda'
     | '/admin/'
     | '/admin/copilot/$threadId'
     | '/admin/produtos/$id'
     | '/api/public/hooks/catalog-hygiene'
     | '/api/public/hooks/enrich-fragrances'
+    | '/api/public/hooks/consult-enrich'
     | '/api/public/hooks/sync-suppliers'
     | '/api/public/hooks/whatsapp'
   fileRoutesByTo: FileRoutesByTo
@@ -438,13 +479,17 @@ export interface FileRouteTypes {
     | '/admin/reposicao'
     | '/admin/revisar'
     | '/admin/vendas-loja'
+    | '/admin/widgets'
     | '/api/public/negociacao-foto'
     | '/api/public/produto-foto'
+    | '/api/public/widget'
+    | '/api/public/agenda'
     | '/admin'
     | '/admin/copilot/$threadId'
     | '/admin/produtos/$id'
     | '/api/public/hooks/catalog-hygiene'
     | '/api/public/hooks/enrich-fragrances'
+    | '/api/public/hooks/consult-enrich'
     | '/api/public/hooks/sync-suppliers'
     | '/api/public/hooks/whatsapp'
   id:
@@ -477,13 +522,17 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/reposicao'
     | '/_authenticated/admin/revisar'
     | '/_authenticated/admin/vendas-loja'
+    | '/_authenticated/admin/widgets'
     | '/api/public/negociacao-foto'
     | '/api/public/produto-foto'
+    | '/api/public/widget'
+    | '/api/public/agenda'
     | '/_authenticated/admin/'
     | '/_authenticated/admin/copilot/$threadId'
     | '/_authenticated/admin/produtos/$id'
     | '/api/public/hooks/catalog-hygiene'
     | '/api/public/hooks/enrich-fragrances'
+    | '/api/public/hooks/consult-enrich'
     | '/api/public/hooks/sync-suppliers'
     | '/api/public/hooks/whatsapp'
   fileRoutesById: FileRoutesById
@@ -499,8 +548,11 @@ export interface RootRouteChildren {
   PerfumeSlugRoute: typeof PerfumeSlugRoute
   ApiPublicNegociacaoFotoRoute: typeof ApiPublicNegociacaoFotoRoute
   ApiPublicProdutoFotoRoute: typeof ApiPublicProdutoFotoRoute
+  ApiPublicWidgetRoute: typeof ApiPublicWidgetRoute
+  ApiPublicAgendaRoute: typeof ApiPublicAgendaRoute
   ApiPublicHooksCatalogHygieneRoute: typeof ApiPublicHooksCatalogHygieneRoute
   ApiPublicHooksEnrichFragrancesRoute: typeof ApiPublicHooksEnrichFragrancesRoute
+  ApiPublicHooksConsultEnrichRoute: typeof ApiPublicHooksConsultEnrichRoute
   ApiPublicHooksSyncSuppliersRoute: typeof ApiPublicHooksSyncSuppliersRoute
   ApiPublicHooksWhatsappRoute: typeof ApiPublicHooksWhatsappRoute
 }
@@ -710,6 +762,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminVendasLojaRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/admin/widgets': {
+      id: '/_authenticated/admin/widgets'
+      path: '/widgets'
+      fullPath: '/admin/widgets'
+      preLoaderRoute: typeof AuthenticatedAdminWidgetsRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/api/public/negociacao-foto': {
       id: '/api/public/negociacao-foto'
       path: '/api/public/negociacao-foto'
@@ -722,6 +781,20 @@ declare module '@tanstack/react-router' {
       path: '/api/public/produto-foto'
       fullPath: '/api/public/produto-foto'
       preLoaderRoute: typeof ApiPublicProdutoFotoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/widget': {
+      id: '/api/public/widget'
+      path: '/api/public/widget'
+      fullPath: '/api/public/widget'
+      preLoaderRoute: typeof ApiPublicWidgetRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/agenda': {
+      id: '/api/public/agenda'
+      path: '/api/public/agenda'
+      fullPath: '/api/public/agenda'
+      preLoaderRoute: typeof ApiPublicAgendaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/admin/copilot/$threadId': {
@@ -750,6 +823,13 @@ declare module '@tanstack/react-router' {
       path: '/api/public/hooks/enrich-fragrances'
       fullPath: '/api/public/hooks/enrich-fragrances'
       preLoaderRoute: typeof ApiPublicHooksEnrichFragrancesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/hooks/consult-enrich': {
+      id: '/api/public/hooks/consult-enrich'
+      path: '/api/public/hooks/consult-enrich'
+      fullPath: '/api/public/hooks/consult-enrich'
+      preLoaderRoute: typeof ApiPublicHooksConsultEnrichRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/hooks/sync-suppliers': {
@@ -803,6 +883,7 @@ interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminReposicaoRoute: typeof AuthenticatedAdminReposicaoRoute
   AuthenticatedAdminRevisarRoute: typeof AuthenticatedAdminRevisarRoute
   AuthenticatedAdminVendasLojaRoute: typeof AuthenticatedAdminVendasLojaRoute
+  AuthenticatedAdminWidgetsRoute: typeof AuthenticatedAdminWidgetsRoute
   AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
   AuthenticatedAdminCopilotThreadIdRoute: typeof AuthenticatedAdminCopilotThreadIdRoute
 }
@@ -828,6 +909,7 @@ const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
   AuthenticatedAdminReposicaoRoute: AuthenticatedAdminReposicaoRoute,
   AuthenticatedAdminRevisarRoute: AuthenticatedAdminRevisarRoute,
   AuthenticatedAdminVendasLojaRoute: AuthenticatedAdminVendasLojaRoute,
+  AuthenticatedAdminWidgetsRoute: AuthenticatedAdminWidgetsRoute,
   AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
   AuthenticatedAdminCopilotThreadIdRoute:
     AuthenticatedAdminCopilotThreadIdRoute,
@@ -858,8 +940,11 @@ const rootRouteChildren: RootRouteChildren = {
   PerfumeSlugRoute: PerfumeSlugRoute,
   ApiPublicNegociacaoFotoRoute: ApiPublicNegociacaoFotoRoute,
   ApiPublicProdutoFotoRoute: ApiPublicProdutoFotoRoute,
+  ApiPublicWidgetRoute: ApiPublicWidgetRoute,
+  ApiPublicAgendaRoute: ApiPublicAgendaRoute,
   ApiPublicHooksCatalogHygieneRoute: ApiPublicHooksCatalogHygieneRoute,
   ApiPublicHooksEnrichFragrancesRoute: ApiPublicHooksEnrichFragrancesRoute,
+  ApiPublicHooksConsultEnrichRoute: ApiPublicHooksConsultEnrichRoute,
   ApiPublicHooksSyncSuppliersRoute: ApiPublicHooksSyncSuppliersRoute,
   ApiPublicHooksWhatsappRoute: ApiPublicHooksWhatsappRoute,
 }

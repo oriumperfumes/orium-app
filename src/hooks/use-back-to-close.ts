@@ -142,7 +142,10 @@ export function useBackToClose(
       id = ++seq;
       window.history.pushState({ ...(window.history.state ?? {}), [KEY]: id }, "");
     }
-    const layer: Layer = { id, close: () => closeRef.current(), y: window.scrollY };
+    // se a rolagem já foi travada (body fixo), a posição real está no "top" negativo
+    const body = document.body;
+    const lockedY = body.style.position === "fixed" ? -parseFloat(body.style.top || "0") || 0 : null;
+    const layer: Layer = { id, close: () => closeRef.current(), y: lockedY ?? window.scrollY };
     stack.push(layer);
 
     return () => {

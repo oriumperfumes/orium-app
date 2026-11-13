@@ -182,6 +182,32 @@ export const purgeOrder = createServerFn({ method: "POST" })
     return { ok: true as const };
   });
 
+/**
+ * Oferta escolhida na mão para um item. Precisa ser do mesmo perfume; oferta
+ * de fornecedor de consulta ainda solta (mesmo nome) fica ligada a ele agora.
+ */
+async function chosenOffer(db: any, offerId: string, productId: string) {
+  if (typeof offerId !== "string" || offerId.length > 64) return null;
+  const { data: o } = await db
+    .from("supplier_products")
+    .select("id, supplier_id, product_id, price, url, suppliers(name, use_for_pricing, use_for_purchasing)")
+    .eq("id", offerId)
+    .maybeSingle();
+  if (!o) return null;
+  const consult = o.suppliers?.use_for_pricing === false && o.suppliers?.use_for_purchasing === false;
+  if (o.product_id !== productId) {
+    if (o.product_id || !consult) return null;
+    await db.from("supplier_products").update({ product_id: productId }).eq("id", o.id).is("product_id", null);
+  }
+  return {
+    id: o.id as string,
+    supplierId: o.supplier_id as string,
+    supplier: (o.suppliers?.name as string) ?? null,
+    cost: o.price == null ? null : Number(o.price),
+    url: (o.url as string) ?? null,
+  };
+}
+
 /** Pedido lançado à mão (WhatsApp ou balcão), com custo e fornecedor do momento. */
 export const createManualOrder = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -194,6 +220,8 @@ export const createManualOrder = createServerFn({ method: "POST" })
       origin?: "MANUAL" | "WHATSAPP";
       notes?: string;
       payment?: "unpaid" | "deposit" | "paid";
+      /** quanto o cliente já pagou (valor livre); tem prioridade sobre `payment` */
+      paidAmount?: number | null;
       /**
        * variant/decantMl/unitPrice são opcionais: sem eles o item é um frasco
        * com o preço vigente (comportamento antigo). unitPrice = preço que a loja
@@ -205,8 +233,14 @@ export const createManualOrder = createServerFn({ method: "POST" })
         variant?: "FULL" | "DECANT";
         decantMl?: 2 | 5 | 10 | null;
         unitPrice?: number | null;
+        /** fornecedor escolhido no pedido (supplier_products.id); a Compras respeita */
+        supplierProductId?: string | null;
+        /** o cliente já pagou este item */
+        paid?: boolean;
       }>;
       paymentMethod?: "PIX" | "CARD" | null;
+      /** preço de atacado combinado na mão (vale mesmo com menos frascos que o mínimo) */
+      wholesale?: boolean;
       /** dia combinado para o cliente pagar (AAAA-MM-DD) */
       paymentDueDate?: string | null;
       fulfillmentType?: "PICKUP" | "LOCAL";
@@ -229,7 +263,7 @@ export const createManualOrder = createServerFn({ method: "POST" })
     // atacado conta só frascos (decant tem preço fixo por tamanho)
     const totalQuantity = items.reduce((s, i) => s + Number(i.quantity), 0);
     const bottleQuantity = items.filter((i) => i.variant !== "DECANT").reduce((s, i) => s + Number(i.quantity), 0);
-    const tier = bottleQuantity >= minQty ? "atacado" : "varejo";
+    const tier = bottleQuantity >= minQty || data.wholesale === true ? "atacado" : "varejo";
     const hasDecant = items.some((i) => i.variant === "DECANT");
     const { data: decantSettings } = hasDecant
       ? await db.from("decant_settings").select("*").maybeSingle()
@@ -261,21 +295,25 @@ export const createManualOrder = createServerFn({ method: "POST" })
       const custom = item.unitPrice != null && Number.isFinite(Number(item.unitPrice)) && Number(item.unitPrice) >= 0;
       const unitPrice = custom ? Math.round(Number(item.unitPrice) * 100) / 100 : listPrice;
       const subtotal = Number((unitPrice * qty).toFixed(2));
-      const unitCost = decant ? decantUnitCost(pricing.baseCost, pricing.volumeMl, ml!) : pricing.baseCost;
+      let unitCost = decant ? decantUnitCost(pricing.baseCost, pricing.volumeMl, ml!) : pricing.baseCost;
       const best = pricing.offers.find((o: any) => o.supplierId === pricing.winningSupplierId) ?? null;
+      const chosen = !decant && item.supplierProductId ? await chosenOffer(db, item.supplierProductId, pricing.productId) : null;
+      if (chosen?.cost != null) unitCost = chosen.cost;
       salesTotal += subtotal;
       costTotal += Number(unitCost ?? 0) * qty;
       rows.push({
         product_id: pricing.productId,
-        supplier_id: pricing.winningSupplierId,
-        supplier_product_id: best?.supplierProductId ?? null,
+        supplier_id: chosen?.supplierId ?? pricing.winningSupplierId,
+        supplier_product_id: chosen?.id ?? best?.supplierProductId ?? null,
+        supplier_chosen: !!chosen,
+        paid: item.paid === true,
         quantity: qty,
         unit_base_price: listPrice,
         unit_sale_price: unitPrice,
         unit_cost_snapshot: unitCost,
         subtotal,
-        supplier_snapshot: pricing.winningSupplierName,
-        supplier_url_snapshot: best?.url ?? null,
+        supplier_snapshot: chosen?.supplier ?? pricing.winningSupplierName,
+        supplier_url_snapshot: chosen ? chosen.url : (best?.url ?? null),
         product_name_snapshot: pricing.productName,
         variant: decant ? "DECANT" : "FULL",
         decant_ml: ml,
@@ -292,6 +330,17 @@ export const createManualOrder = createServerFn({ method: "POST" })
       if (!c) throw new Error("Cliente selecionado não encontrado.");
       crmId = c.id;
     }
+    const orderTotal = Number(salesTotal.toFixed(2));
+    const typed = data.paidAmount != null && Number.isFinite(Number(data.paidAmount)) ? Math.max(0, Number(data.paidAmount)) : null;
+    const paidNow =
+      typed != null
+        ? Math.min(orderTotal, Math.round(typed * 100) / 100)
+        : data.payment === "paid"
+          ? orderTotal
+          : data.payment === "deposit"
+            ? Math.round(orderTotal * 50) / 100
+            : 0;
+    const fullyPaid = paidNow >= orderTotal && orderTotal > 0;
     const { data: order, error } = await db
       .from("catalog_orders")
       .insert({
@@ -306,7 +355,7 @@ export const createManualOrder = createServerFn({ method: "POST" })
         grand_total: Number(salesTotal.toFixed(2)),
         final_total: Number(salesTotal.toFixed(2)),
         ...(data.paymentMethod ? { payment_method: data.paymentMethod } : {}),
-        ...(data.payment !== "paid" && cleanDate(data.paymentDueDate) ? { payment_due_date: cleanDate(data.paymentDueDate) } : {}),
+        ...(!fullyPaid && cleanDate(data.paymentDueDate) ? { payment_due_date: cleanDate(data.paymentDueDate) } : {}),
         status: "pendente",
         origin: data.origin ?? "MANUAL",
         order_origin: data.origin ?? "MANUAL",
@@ -326,12 +375,10 @@ export const createManualOrder = createServerFn({ method: "POST" })
 
     await db.from("catalog_order_items").insert(rows.map((r) => ({ ...r, order_id: order.id })));
     await logEvent(db, order.id, "pedido_criado", context.userId, { origin: data.origin ?? "MANUAL" });
-    if (data.payment === "deposit" || data.payment === "paid") {
-      const total = Number(salesTotal.toFixed(2));
-      const paid = data.payment === "paid" ? total : Math.round(total * 50) / 100;
-      await db.from("catalog_orders").update({ amount_paid: paid }).eq("id", order.id);
-      await logEvent(db, order.id, data.payment === "paid" ? "pagamento_integral" : "pagamento_sinal", context.userId, {
-        amount: paid, before: 0, after: paid, total, origin: "novo_pedido",
+    if (paidNow > 0) {
+      await db.from("catalog_orders").update({ amount_paid: paidNow }).eq("id", order.id);
+      await logEvent(db, order.id, fullyPaid ? "pagamento_integral" : "pagamento_sinal", context.userId, {
+        amount: paidNow, before: 0, after: paidNow, total: orderTotal, origin: "novo_pedido",
       });
     }
     const sync = await syncOrderToRestock(db, order.id, context.userId);
@@ -444,9 +491,23 @@ export const updateOrderItems = createServerFn({ method: "POST" })
 export type PaymentMode = "unpaid" | "deposit" | "paid" | "amount";
 export const setOrderPayment = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { orderId: string; mode: PaymentMode; amount?: number; origin?: string }) => data)
+  .inputValidator(
+    (data: {
+      orderId: string;
+      mode: PaymentMode;
+      amount?: number;
+      origin?: string;
+      /** itens que o cliente já pagou (pagamento por perfume); omitido = não muda */
+      paidItemIds?: string[];
+    }) => data,
+  )
   .handler(async ({ data, context }) => {
     const db = await requireStaff(context as never);
+    if (Array.isArray(data.paidItemIds)) {
+      const ids = data.paidItemIds.filter((x) => typeof x === "string").slice(0, 200);
+      await db.from("catalog_order_items").update({ paid: false }).eq("order_id", data.orderId);
+      if (ids.length) await db.from("catalog_order_items").update({ paid: true }).eq("order_id", data.orderId).in("id", ids);
+    }
     const { data: o, error } = await db
       .from("catalog_orders")
       .select("id, final_total, grand_total, sales_total, amount_paid, deposit_percent")
@@ -473,6 +534,45 @@ export const setOrderPayment = createServerFn({ method: "POST" })
       amount: delta, before, after, total, origin: data.origin ?? "admin",
     });
     return { ok: true as const, amount_paid: after };
+  });
+
+/**
+ * VOLTAR ETAPA (clicou sem querer / teste).
+ * - "pronto": desfaz a entrega (volta para Pronto para entregar).
+ * - "fornecedor": volta para "pagamento feito, falta pedir no fornecedor" —
+ *   os perfumes deste pedido saem do pedido ao fornecedor e voltam para
+ *   Compras. O pagamento não muda.
+ * O histórico dessas etapas é apagado, como se nunca tivessem acontecido.
+ */
+export const rewindOrder = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { orderId: string; to: "pronto" | "fornecedor" }) => data)
+  .handler(async ({ data, context }) => {
+    const db = await requireStaff(context as never);
+    const { data: o } = await db.from("catalog_orders").select("id, status, deleted_at").eq("id", data.orderId).maybeSingle();
+    if (!o || o.deleted_at) throw new Error("Pedido não encontrado.");
+    if (o.status === "cancelado") throw new Error("Pedido cancelado não volta etapa.");
+    const now = new Date().toISOString();
+    if (o.status === "entregue") {
+      await db.from("catalog_orders").update({ status: "pedido feito", updated_at: now }).eq("id", data.orderId);
+    }
+    if (data.to === "pronto") {
+      await db.from("order_events").delete().eq("order_id", data.orderId).in("event", ["status_entregue"]);
+      return { ok: true as const };
+    }
+    const { detachOrderFromItem } = await import("@/lib/orders-restock.server");
+    const { data: srcs } = await db.from("restock_item_sources").select("id").eq("order_id", data.orderId);
+    for (const src of srcs ?? []) await detachOrderFromItem(db, src.id);
+    // garante que todo perfume do pedido está em Compras
+    await syncOrderToRestock(db, data.orderId, context.userId);
+    // histórico limpo: fica só criação, confirmação e pagamentos
+    await db
+      .from("order_events")
+      .delete()
+      .eq("order_id", data.orderId)
+      .not("event", "in", "(pedido_criado,pedido_confirmado,pedido_editado,pagamento_combinado)")
+      .not("event", "like", "pagamento_%");
+    return { ok: true as const };
   });
 
 /** Status operacional: pendente → pedido feito → entregue. */

@@ -13,11 +13,11 @@ import { AlertTriangle, ArrowLeft, Check, Loader2, ShoppingBag } from "lucide-re
 import { toast } from "sonner";
 import { createManualOrder } from "@/lib/orders.functions";
 import { CustomerPicker, type PickedCustomer } from "@/components/orium/admin/CustomerPicker";
-import { DateChips, DeliveryPicker, PayButtons, dayLabel, type DeliveryDraft } from "./controls";
+import { DateChips, DeliveryPicker, PayAmount, dayLabel, resolvePaid, type DeliveryDraft, type PayDraft } from "./controls";
 import { brl } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { PanelClose, SidePanel, burst } from "./model";
-import { Field, LineRow, Seg, Vitrine, useFly, useLineCost, useOrderLines } from "./kit";
+import { Field, LineRow, Seg, Vitrine, WholesaleToggle, nameOf, supplyOptionsOf, useComposerSupply, useFly, useLineCost, useOrderLines, type Line } from "./kit";
 import { AnimatedMetric } from "@/components/orium/AnimatedMetric";
 
 export function OrderComposer({ open, onClose, onCreated, originEl }: { open: boolean; onClose: () => void; onCreated: (id: string) => void; originEl?: HTMLElement | null }) {
@@ -30,16 +30,31 @@ export function OrderComposer({ open, onClose, onCreated, originEl }: { open: bo
 
 function Composer({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
   const create = useServerFn(createManualOrder);
-  const { lines, add, patch, remove, inCart, wholesale, reference, unit, total, count } = useOrderLines();
+  const { lines, add, patch, remove, inCart, wholesale, autoWholesale, forceWholesale, setForceWholesale, reference, unit, total, count } = useOrderLines();
   const { fly, bump, deskTarget, mobTarget } = useFly();
   const [cust, setCust] = useState<PickedCustomer>({ customerId: null, name: "", phone: "" });
   const [origin, setOrigin] = useState<"WHATSAPP" | "MANUAL">("WHATSAPP");
   const [method, setMethod] = useState<"PIX" | "CARD">("PIX");
-  const [pay, setPay] = useState<"unpaid" | "deposit" | "paid">("unpaid");
+  const [pay, setPay] = useState<PayDraft>({ mode: "none", text: "" });
+  /** perfumes que o cliente já pagou (pagamento por item) */
+  const [paidKeys, setPaidKeys] = useState<Set<string>>(() => new Set());
   const [delivery, setDelivery] = useState<DeliveryDraft>({ type: "PICKUP", date: null, time: null, notes: "" });
   const [payDue, setPayDue] = useState<string | null>(null);
   const [lossAsk, setLossAsk] = useState(false);
-  const lineCost = useLineCost();
+  const baseCost = useLineCost();
+  const { data: supply } = useComposerSupply();
+  /** fornecedor do item: o escolhido na mão ou o primeiro (disponível, compra normal, mais barato) */
+  const supplierOf = (l: Line) => {
+    const options = supplyOptionsOf(supply, l.product);
+    return { options, chosen: options.find((o) => o.id === l.supplierProductId) ?? null, value: l.supplierProductId ?? options[0]?.id ?? null };
+  };
+  const lineCost = (l: Line) => {
+    // frasco: custo do fornecedor marcado (escolhido ou o padrão); decant: parte do frasco
+    const { options, value } = supplierOf(l);
+    const picked = options.find((o) => o.id === value);
+    if (l.size === "FULL" && picked?.cost != null) return picked.cost;
+    return baseCost(l);
+  };
   const losses = lines.filter((l) => {
     const c = lineCost(l);
     return c != null && unit(l) < c - 0.009;
@@ -59,7 +74,9 @@ function Composer({ onClose, onCreated }: { onClose: () => void; onCreated: (id:
     }, 60);
   };
 
-  const ready = cust.name.trim().length >= 2 && lines.length > 0;
+  const paidNow = resolvePaid(pay, total);
+  const fullyPaid = paidNow != null && total > 0 && paidNow >= total - 0.009;
+  const ready = cust.name.trim().length >= 2 && lines.length > 0 && paidNow != null;
 
   const submit = async (force = false) => {
     if (!ready || saving) return;
@@ -74,17 +91,20 @@ function Composer({ onClose, onCreated }: { onClose: () => void; onCreated: (id:
           customerId: cust.customerId,
           origin,
           ...(notes.trim() ? { notes: notes.trim() } : {}),
-          payment: pay,
+          paidAmount: paidNow ?? 0,
           paymentMethod: method,
+          wholesale: wholesale,
           items: lines.map((l) => ({
             productId: l.product.id,
             quantity: l.qty,
+            paid: paidKeys.has(l.key) || pay.mode === "all",
             variant: l.size === "FULL" ? "FULL" : "DECANT",
             decantMl: l.size === "FULL" ? null : l.size,
             ...(l.price != null ? { unitPrice: l.price } : {}),
+            ...(l.size === "FULL" && l.supplierProductId ? { supplierProductId: l.supplierProductId } : {}),
           })),
           fulfillmentType: delivery.type === "LOCAL" ? "LOCAL" : "PICKUP",
-          paymentDueDate: pay !== "paid" ? payDue : null,
+          paymentDueDate: !fullyPaid ? payDue : null,
           expectedDeliveryDate: delivery.date || null,
           expectedDeliveryTime: delivery.time || null,
           deliveryNotes: delivery.notes || null,
@@ -133,7 +153,7 @@ function Composer({ onClose, onCreated }: { onClose: () => void; onCreated: (id:
                     {count}
                   </span>
                 </h3>
-                {wholesale ? <span className="rounded-full bg-[#2A2418] px-2.5 py-1 text-[11.5px] font-bold text-[#FFD599]">Preço de atacado</span> : null}
+                <WholesaleToggle auto={autoWholesale} on={forceWholesale} onChange={setForceWholesale} />
               </div>
               {lines.length === 0 ? (
                 <div className="grid min-h-[132px] place-items-center rounded-[22px] border-[1.5px] border-dashed border-white/10 px-6 text-center">
@@ -147,6 +167,10 @@ function Composer({ onClose, onCreated }: { onClose: () => void; onCreated: (id:
                   {lines.map((l) => (
                     <LineRow
                       cost={lineCost(l)}
+                      supply={(() => {
+                        const s = supplierOf(l);
+                        return { options: s.options, value: s.value, onChange: (id: string) => patch(l.key, { supplierProductId: id }) };
+                      })()}
                       key={l.key}
                       l={l}
                       suggested={reference(l)}
@@ -186,12 +210,24 @@ function Composer({ onClose, onCreated }: { onClose: () => void; onCreated: (id:
                 ]}
               />
               <div className="mt-2.5">
-                <PayButtons value={pay} onChange={setPay} total={total} />
+                <PayAmount
+                  value={pay}
+                  onChange={setPay}
+                  total={total}
+                  items={lines.map((l) => ({
+                    key: l.key,
+                    name: nameOf(l.product),
+                    detail: `${l.qty}× ${l.size === "FULL" ? `frasco${l.product.volume_ml ? ` ${l.product.volume_ml}ml` : ""}` : `decant ${l.size}ml`}`,
+                    amount: Math.round(unit(l) * l.qty * 100) / 100,
+                  }))}
+                  paidKeys={new Set([...paidKeys].filter((k) => lines.some((l) => l.key === k)))}
+                  onPaidKeys={setPaidKeys}
+                />
               </div>
-              {pay !== "paid" && lines.length ? (
+              {!fullyPaid && lines.length ? (
                 <div className="adm-pop mt-3">
                   <p className="mb-2 px-1 text-[13px] font-semibold text-[#A9A9A9]">
-                    {pay === "deposit" ? "Quando paga o resto?" : "Quando vai pagar?"}
+                    {(paidNow ?? 0) > 0 ? "Quando paga o resto?" : "Quando vai pagar?"}
                     {payDue ? <span className="text-white"> · {dayLabel(payDue)}</span> : null}
                   </p>
                   <DateChips value={payDue} onChange={setPayDue} clearLabel="Sem data" />

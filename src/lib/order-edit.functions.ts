@@ -29,6 +29,8 @@ export type EditItemInput = {
 
 export type EditOrderInput = {
   orderId: string;
+  /** preço de atacado no pedido (automático ou combinado na mão); omitido = não muda */
+  wholesale?: boolean;
   /** trava otimista: updated_at que o Admin tinha na tela */
   expectedUpdatedAt?: string | null;
   reason?: string | null;
@@ -367,6 +369,7 @@ export const saveOrderEdit = createServerFn({ method: "POST" })
         customer_phone_normalized: phone ? `55${phone}` : null,
         ...(data.customerId !== undefined ? { crm_customer_id: data.customerId } : {}),
         notes: data.notes ?? order.notes ?? null,
+        ...(typeof data.wholesale === "boolean" ? { pricing_tier: data.wholesale ? "atacado" : "varejo" } : {}),
         fulfillment_type: fulfillment,
         shipping_cep: keepAddress ? digits(keepAddress.cep) : null,
         shipping_street: keepAddress?.street ?? null,

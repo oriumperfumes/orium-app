@@ -14,6 +14,9 @@ import { cn } from "@/lib/utils";
 
 /** As três colunas do quadro. Cancelados e lixeira ficam na lista. */
 export type Stage = "novo" | "pago" | "entregue";
+
+/** Item de compra que ainda importa: de pedido em andamento, ou para o estoque (sem pedido). */
+export const isLivePurchase = (p: { sources: Array<{ active: boolean }> }) => p.sources.length === 0 || p.sources.some((s) => s.active);
 export const STAGES: Array<{ key: Stage; title: string; hint: string; status: string }> = [
   { key: "novo", title: "Novos", hint: "aguardando pagamento", status: "pendente" },
   { key: "pago", title: "Pagos", hint: "separar e entregar", status: "pedido feito" },
@@ -172,8 +175,9 @@ export function SidePanel({
   const originRef = useRef<HTMLElement | null>(null);
   if (open && originEl) originRef.current = originEl;
 
-  useBodyScrollLock(open);
+  // a ordem importa: guardar a posição da página ANTES de travar a rolagem
   useBackToClose(open, onClose);
+  useBodyScrollLock(open);
   useEffect(() => {
     if (open) setMounted(true);
   }, [open]);
@@ -217,12 +221,27 @@ export function SidePanel({
       setMounted(false);
     };
     if (!panel || !back || !body || reduced()) return finish();
-    back.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 360, easing: "ease-in", fill: "both" });
+    back.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 520, easing: "ease-out", fill: "both" });
     const to = origin && origin.isConnected ? morphFrom(panel, origin) : null;
     let anim: Animation;
     if (to) {
-      body.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 140, easing: "ease-out", fill: "both" });
-      anim = panel.animate([{ transform: "none" }, to], { duration: 460, easing: EASE, fill: "both" });
+      // o conteúdo some, o painel encolhe com calma até o cartão e, no fim,
+      // se dissolve enquanto o cartão de verdade aparece por baixo — sem
+      // sobrar um quadrado escuro vazio
+      const D = 640;
+      body.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 180, easing: "ease-out", fill: "both" });
+      if (origin) {
+        origin.style.visibility = "";
+        origin.animate([{ opacity: 0 }, { opacity: 0, offset: 0.55 }, { opacity: 1 }], { duration: D, easing: "ease-out" });
+      }
+      anim = panel.animate(
+        [
+          { transform: "none", opacity: 1, backgroundColor: "#121212" },
+          { opacity: 1, backgroundColor: "#1a1a1a", offset: 0.62 },
+          { ...to, opacity: 0, backgroundColor: "#202020" },
+        ],
+        { duration: D, easing: "cubic-bezier(0.32, 0.72, 0, 1)", fill: "both" },
+      );
     } else {
       if (origin) origin.style.visibility = "";
       anim = panel.animate([{ transform: "none" }, { transform: slideOff() }], { duration: 380, easing: "cubic-bezier(0.4, 0, 1, 1)", fill: "both" });

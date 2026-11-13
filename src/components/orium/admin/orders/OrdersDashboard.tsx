@@ -1,39 +1,39 @@
 /**
- * PAINEL DE PEDIDOS — a primeira coisa que aparece em Pedidos.
+ * PAINEL DE PEDIDOS — limpo, no estilo "cartões + uma tabela".
  *
- * 1. Quatro números do mês (cartão dourado = pedidos em aberto).
- * 2. "Onde estão os pedidos": o caminho de cada pedido em 5 etapas
- *    (Esperando pagamento → Comprar no fornecedor → Chegando → Pronto para
- *    entregar → Entregue). Tocar numa etapa abre só aqueles pedidos.
- * 3. Agenda da semana: entregas, pagamentos combinados e compras por dia.
- * 4. De onde vêm os pedidos · pedidos por dia · melhores clientes.
- * 5. "Precisa de você agora" (alertas com ação na linha).
- * Tudo calculado aqui a partir dos pedidos já carregados — nada novo no banco.
+ * 1. Quatro cartões: Entregar · Pedir no fornecedor · Vindo do fornecedor ·
+ *    A receber (bolinha colorida = tem coisa atrasada). Tocar filtra a tabela.
+ * 2. Uma tabela de pedidos em andamento, já na ordem de urgência:
+ *    cliente + perfumes · entrega · valor/pagamento · FASE · abrir.
+ *    Busca por nome (cliente perguntou? digita e vê a fase).
+ * Tudo calculado dos pedidos já carregados.
  */
 import { useMemo, useState, type ReactNode } from "react";
 import {
   ArrowRight,
-  CalendarDays,
+  ArrowUpRight,
   CircleDollarSign,
   HandCoins,
+  MessageCircle,
   PackageCheck,
-  Receipt,
-  ShoppingBag,
+  Search,
   ShoppingCart,
   Sparkles,
   Truck,
-  Wallet,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import { paymentInfo } from "@/components/orium/admin/OrderPayment";
-import { AnimatedMetric } from "@/components/orium/AnimatedMetric";
-import { fmtTime, todayBR } from "@/lib/delivery";
-import { brl } from "@/lib/format";
+import { deliveryState, fmtTime, todayBR } from "@/lib/delivery";
+import { brl, whatsappLink } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { ExpandButton, ItemsExpand, OrderPhotos, TierBadge, WhenPill, itemsText } from "./ident";
+import { AnimatedNumber, Collapse, PillTrack } from "@/components/orium/admin/motion";
 import type { PurchaseItem } from "@/lib/orders-control.functions";
-import { PhotoStack, initials, orderTotal, originOf } from "./model";
-import { addDays, dayLabel, dueInfo } from "./controls";
-import { TodayView } from "./TodayView";
+import { orderTotal } from "./model";
+import { dayLabel, daysBetween, dueInfo } from "./controls";
+import { PHASE } from "./phase";
+import { TodayFocus, buildRows, useToday, type Filter, type Row, type TrackActions } from "./OrderTrack";
 
 /* ─────────────── o caminho do pedido ─────────────── */
 
@@ -41,8 +41,8 @@ export type Journey = "pagamento" | "comprar" | "chegando" | "entregar" | "entre
 
 export const JOURNEY: Array<{ key: Journey; title: string; hint: string; icon: LucideIcon; tone: string }> = [
   { key: "pagamento", title: "Esperando pagamento", hint: "ainda não pagaram nada", icon: CircleDollarSign, tone: "#8C8C8C" },
-  { key: "comprar", title: "Comprar no fornecedor", hint: "pagos, falta comprar", icon: ShoppingCart, tone: "#FFD599" },
-  { key: "chegando", title: "Chegando", hint: "já comprados", icon: Truck, tone: "#F5C26B" },
+  { key: "comprar", title: "Falta pedir no fornecedor", hint: "ainda não pedi", icon: ShoppingCart, tone: "#FFD599" },
+  { key: "chegando", title: "Vindo do fornecedor", hint: "já pedi, está vindo", icon: Truck, tone: "#F5C26B" },
   { key: "entregar", title: "Pronto para entregar", hint: "separar e entregar", icon: PackageCheck, tone: "#FFFFFF" },
   { key: "entregue", title: "Entregues", hint: "neste mês", icon: Sparkles, tone: "#7FCF9F" },
 ];
@@ -71,7 +71,7 @@ export function buyByOrder(items: PurchaseItem[] | undefined) {
   return m;
 }
 
-const monthOf = (iso: string) => String(iso).slice(0, 7);
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 export function OrdersDashboard({
   orders,
@@ -80,10 +80,9 @@ export function OrdersDashboard({
   purchases,
   onOpen,
   onDeliver,
-  onReceived,
+  onArrived,
   onGoPurchases,
-  onJourney,
-  onBoard,
+  busyId,
 }: {
   orders: any[];
   linesOf: (o: any) => any[];
@@ -91,540 +90,320 @@ export function OrdersDashboard({
   purchases: PurchaseItem[] | undefined;
   onOpen: (o: any, el?: HTMLElement | null) => void;
   onDeliver: (o: any, at?: { x: number; y: number }) => void;
-  onReceived: (o: any, at?: { x: number; y: number }) => void;
+  onArrived: TrackActions["onArrived"];
+  busyId?: string | null;
+  onReceived?: (o: any, at?: { x: number; y: number }) => void;
   onGoPurchases: () => void;
-  onJourney: (j: Journey) => void;
-  onBoard: () => void;
+  onJourney?: (j: Journey) => void;
+  onBoard?: () => void;
 }) {
   const t = todayBR();
-  const thisMonth = t.slice(0, 7);
-  const lastMonth = addDays(`${thisMonth}-01`, -1).slice(0, 7);
-  const live = useMemo(() => orders.filter((o) => !o.deleted_at && o.status !== "cancelado"), [orders]);
-  const buy = useMemo(() => buyByOrder(purchases), [purchases]);
+  const [filter, setFilter] = useState<Filter>("todos");
+  const [q, setQ] = useState("");
 
-  const steps = useMemo(() => {
-    const by: Record<Journey, any[]> = { pagamento: [], comprar: [], chegando: [], entregar: [], entregue: [] };
-    live.forEach((o) => {
-      const j = journeyOf(o, buy);
-      if (!j) return;
-      if (j === "entregue" && monthOf(o.updated_at ?? o.created_at) !== thisMonth) return;
-      by[j].push(o);
-    });
-    return by;
-  }, [live, buy, thisMonth]);
+  const liveDay = useToday();
+  const rows = useMemo(() => buildRows(orders, purchases), [orders, purchases, liveDay]);
+  const actions: TrackActions = { onOpen, onDeliver, onGoPurchases, onArrived };
 
-  const month = live.filter((o) => monthOf(o.created_at) === thisMonth);
-  const prev = live.filter((o) => monthOf(o.created_at) === lastMonth);
-  const revenue = month.reduce((s, o) => s + orderTotal(o), 0);
-  const prevRevenue = prev.reduce((s, o) => s + orderTotal(o), 0);
-  const ticket = month.length ? revenue / month.length : 0;
-  const openOrders = live.filter((o) => o.status !== "entregue");
-  const openValue = openOrders.reduce((s, o) => s + orderTotal(o), 0);
-  const due = live.reduce((s, o) => s + paymentInfo(o).due, 0);
-  const received = month.reduce((s, o) => s + paymentInfo(o).paid, 0);
+  const count = (f: Filter) => rows.filter((r) => r.tags.has(f)).length;
+  const late = rows.filter((r) => r.when.tone === "red").length;
+  const today = rows.filter((r) => r.when.tone === "gold").length;
+  const toBuyUnits = rows.reduce((s, r) => s + r.phase.supply.filter((x) => x.status === "comprar").reduce((n, x) => n + x.quantity, 0), 0);
+  const comingUnits = rows.reduce((s, r) => s + r.phase.supply.filter((x) => x.status === "chegando").reduce((n, x) => n + x.quantity, 0), 0);
+  const owe = rows.filter((r) => r.tags.has("pagamento"));
+  const oweValue = owe.reduce((s, r) => s + r.pay.due, 0);
+  const oweLate = owe.filter((r) => r.o.status === "entregue" || dueInfo(r.o).state === "late").length;
 
-  // pedidos por dia (14 dias)
-  const daily = useMemo(() => {
-    const days = Array.from({ length: 14 }, (_, i) => addDays(t, i - 13));
-    return days.map((d) => {
-      const list = live.filter((o) => String(o.created_at).slice(0, 10) === d);
-      return { d, n: list.length, v: list.reduce((s, o) => s + orderTotal(o), 0) };
-    });
-  }, [live, t]);
+  const cards: Array<{ f: Filter; icon: LucideIcon; label: string; short?: string; value: string; compact?: string; foot: ReactNode; dot?: string }> = [
+    {
+      f: "entregar",
+      icon: Truck,
+      label: "Entregar",
+      value: String(count("entregar")),
+      n: count("entregar"),
+      foot: late ? <b className="font-semibold text-[#FF9A8A]">{late} {late === 1 ? "atrasada" : "atrasadas"}</b> : today ? `${today} para hoje` : "nada urgente",
+      dot: late ? "#FF8A75" : today ? "#FFD599" : undefined,
+    },
+    {
+      f: "fornecedor",
+      icon: ShoppingCart,
+      label: "Pedir no fornecedor",
+      short: "Fornecedor",
+      value: String(count("fornecedor")),
+      n: count("fornecedor"),
+      foot: toBuyUnits ? `${plural(toBuyUnits, "perfume", "perfumes")} para pedir` : "tudo já pedido",
+      dot: count("fornecedor") ? "#FFD599" : undefined,
+    },
+    {
+      f: "caminho",
+      icon: PackageCheck,
+      label: "Vindo do fornecedor",
+      short: "A caminho",
+      value: String(count("caminho")),
+      n: count("caminho"),
+      foot: comingUnits ? `${plural(comingUnits, "perfume", "perfumes")} a caminho` : "nada a caminho",
+    },
+    {
+      f: "pagamento",
+      icon: HandCoins,
+      label: "A receber",
+      value: brl(oweValue),
+      n: oweValue,
+      money: true,
+      compact: `R$ ${Math.round(oweValue).toLocaleString("pt-BR")}`,
+      foot: owe.length ? oweLate ? <b className="font-semibold text-[#FF9A8A]">{oweLate} {oweLate === 1 ? "atrasado" : "atrasados"}</b> : plural(owe.length, "cliente", "clientes") : "ninguém devendo",
+      dot: oweLate ? "#FF8A75" : undefined,
+    },
+  ];
 
-  return (
-    <div className="space-y-4">
-      {/* 1 · números */}
-      <section className="grid grid-cols-2 gap-3 lg:gap-4 xl:grid-cols-4" aria-label="Resumo">
-        <Kpi
-          hero
-          i={0}
-          className="col-span-2 xl:col-span-1"
-          icon={ShoppingBag}
-          label="Pedidos em aberto"
-          value={<AnimatedMetric value={openOrders.length} />}
-          foot={<span className="text-[13px] font-semibold text-[#15130F]/65">{brl(openValue)} em andamento</span>}
-          onClick={onBoard}
-        />
-        <Kpi
-          i={1}
-          icon={Receipt}
-          label="Vendido no mês"
-          value={brl(revenue)}
-          foot={<Trend now={revenue} before={prevRevenue} />}
-          chart={<MiniBars values={daily.map((x) => x.v)} />}
-        />
-        <Kpi i={2} icon={Wallet} label="Ticket médio" value={brl(ticket)} foot={<span className="text-[13px] text-[#8C8C8C]">{month.length} pedidos no mês</span>} />
-        <Kpi
-          i={3}
-          className="col-span-2 xl:col-span-1"
-          icon={HandCoins}
-          label="Falta receber"
-          value={brl(due)}
-          foot={<span className="text-[13px] text-[#8C8C8C]">{brl(received)} já entrou no mês</span>}
-          chart={<Split a={received} b={due} />}
-        />
-      </section>
+  const norm = (v: string) => v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const needle = norm(q.trim());
+  const digits = q.replace(/\D/g, "");
+  const shown = rows.filter((r) => {
+    if (needle) {
+      const hay = norm(`${r.o.customer_name ?? ""} ${linesOf(r.o).map((l) => l.product_name_snapshot).join(" ")} ${r.o.order_number ?? ""}`);
+      const phone = String(r.o.customer_phone ?? "").replace(/\D/g, "");
+      return hay.includes(needle) || (digits.length >= 4 && phone.includes(digits));
+    }
+    return r.tags.has(filter);
+  });
 
-      {/* 2 · onde estão os pedidos */}
-      <section className="dash-card adm-rise p-4 lg:p-6" style={{ ["--i" as string]: 4 }} aria-label="Onde estão os pedidos">
-        <div className="mb-4 flex flex-wrap items-end justify-between gap-2 px-1">
-          <div>
-            <h2 className="text-[19px] font-bold tracking-[-0.015em]">Onde estão os pedidos</h2>
-            <p className="text-[13.5px] text-[#8C8C8C]">Cada pedido passa por essas etapas. Toque numa para ver quais são.</p>
-          </div>
-          <button type="button" onClick={onBoard} className="press inline-flex h-10 items-center gap-1.5 rounded-full bg-[#262626] px-4 text-[13.5px] font-bold hover:bg-[#2E2E2E]">
-            Ver no quadro <ArrowRight className="size-4" />
-          </button>
-        </div>
-        <ol className="grid gap-2 sm:grid-cols-5 sm:gap-0">
-          {JOURNEY.map((j, i) => {
-            const list = steps[j.key];
-            const value = list.reduce((s, o) => s + orderTotal(o), 0);
-            const hot = list.length > 0 && j.key !== "entregue";
-            return (
-              <li key={j.key} className="relative min-w-0">
-                {i < JOURNEY.length - 1 ? (
-                  <span aria-hidden className="absolute top-[34px] left-[calc(50%+34px)] hidden h-[2px] w-[calc(100%-68px)] overflow-hidden rounded-full bg-[#262626] sm:block">
-                    <span className="dash-barx block h-full bg-gradient-to-r from-[#FFD599]/70 to-[#FFD599]/10" style={{ ["--i" as string]: i + 3 }} />
-                  </span>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => onJourney(j.key)}
-                  className="press group flex w-full items-center gap-3 rounded-[20px] p-2.5 text-left transition-colors hover:bg-white/[0.03] sm:flex-col sm:gap-2 sm:px-1.5 sm:py-1 sm:text-center"
-                >
-                  <span
-                    className={cn("relative grid size-[68px] shrink-0 place-items-center rounded-full transition-transform duration-500 group-hover:scale-105", hot ? "bg-[#262626]" : "bg-[#1F1F1F]")}
-                    style={{ boxShadow: hot ? `inset 0 0 0 2px ${j.tone}` : undefined }}
-                  >
-                    <j.icon className="size-6" style={{ color: hot ? j.tone : "#6F6F6F" }} strokeWidth={2} />
-                    {list.length ? (
-                      <span
-                        key={list.length}
-                        className="ord-bump absolute -top-1 -right-1 grid h-7 min-w-7 place-items-center rounded-full px-1.5 text-[13px] font-bold text-[#15130F] tabular-nums"
-                        style={{ background: j.tone === "#8C8C8C" ? "#D4D4D4" : j.tone }}
-                      >
-                        {list.length}
-                      </span>
-                    ) : null}
-                  </span>
-                  <span className="min-w-0 flex-1 sm:flex-none">
-                    <span className="block text-[14.5px] leading-tight font-bold">{j.title}</span>
-                    <span className="block text-[12.5px] text-[#8C8C8C]">{list.length ? brl(value) : j.hint}</span>
-                  </span>
-                  {list.length ? (
-                    <span className="flex shrink-0 -space-x-1.5 sm:mt-1 sm:justify-center">
-                      {list.slice(0, 3).map((o) => (
-                        <span key={o.id} className="grid size-8 place-items-center rounded-full bg-[#2E2E2E] text-[11px] font-bold tracking-[-0.02em] ring-2 ring-[#1A1A1A]">
-                          {initials(o.customer_name)}
-                        </span>
-                      ))}
-                    </span>
-                  ) : null}
-                </button>
-              </li>
-            );
-          })}
-        </ol>
-      </section>
-
-      {/* 3 · agenda + origem */}
-      <div className="grid gap-3 lg:gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-        <Agenda orders={live} purchases={purchases} onOpen={onOpen} onGoPurchases={onGoPurchases} linesOf={linesOf} imageOf={imageOf} />
-        <div className="grid gap-3 lg:gap-4">
-          <Origins orders={month} />
-          <DailyCard daily={daily} />
-        </div>
-      </div>
-
-      {/* 4 · precisa de você agora */}
-      <section className="adm-rise" style={{ ["--i" as string]: 9 }}>
-        <h2 className="mb-3 flex items-center gap-2.5 px-1 text-[19px] font-bold tracking-[-0.015em]">
-          <span className="relative grid size-9 place-items-center rounded-full bg-[#2A1A18] text-[#FF9A8A]">
-            <HandCoins className="size-[18px]" />
-          </span>
-          Precisa de você agora
-        </h2>
-        <TodayView
-          compact
-          orders={orders}
-          linesOf={linesOf}
-          imageOf={imageOf}
-          purchases={purchases}
-          onOpen={onOpen}
-          onDeliver={onDeliver}
-          onReceived={onReceived}
-          onGoPurchases={onGoPurchases}
-        />
-      </section>
-
-      {/* 5 · melhores clientes do mês */}
-      <TopCustomers orders={month} onOpen={onOpen} />
-    </div>
-  );
-}
-
-/* ─────────────── peças ─────────────── */
-
-function Kpi({
-  label,
-  value,
-  foot,
-  icon: Icon,
-  chart,
-  hero,
-  i,
-  className,
-  onClick,
-}: {
-  label: string;
-  value: ReactNode;
-  foot?: ReactNode;
-  icon: LucideIcon;
-  chart?: ReactNode;
-  hero?: boolean;
-  i: number;
-  className?: string;
-  onClick?: () => void;
-}) {
-  const Tag = onClick ? "button" : "div";
-  return (
-    <Tag
-      {...(onClick ? { type: "button" as const, onClick } : {})}
-      className={cn("adm-rise flex min-h-[150px] flex-col p-5 text-left lg:min-h-[168px] lg:p-6", hero ? "dash-hero" : "dash-card", onClick && "press", className)}
-      style={{ ["--i" as string]: i }}
-    >
-      <span className="flex items-start justify-between gap-3">
-        <span className={cn("text-[15px]", hero ? "font-semibold text-[#15130F]/75" : "text-[#A9A9A9]")}>{label}</span>
-        <span className="dash-ico">
-          <Icon className="size-[18px]" strokeWidth={2.2} />
-        </span>
-      </span>
-      {chart ? <span className="mt-3 ml-auto block w-[60%] max-w-[180px] max-sm:hidden">{chart}</span> : null}
-      <span className="mt-auto block pt-3">
-        <span className={cn("block leading-none font-bold tracking-[-0.045em] whitespace-nowrap tabular-nums", hero ? "text-[clamp(2.2rem,4vw,3rem)]" : "text-[clamp(1.5rem,2.4vw,2.1rem)]")}>
-          {value}
-        </span>
-        {foot ? <span className="mt-2 block">{foot}</span> : null}
-      </span>
-    </Tag>
-  );
-}
-
-function Trend({ now, before }: { now: number; before: number }) {
-  if (before <= 0) return <span className="text-[13px] text-[#8C8C8C]">primeiro mês com vendas</span>;
-  const v = ((now - before) / before) * 100;
-  const up = v >= 0;
-  return (
-    <span className="inline-flex items-center gap-2 text-[13px]">
-      <span className={cn("rounded-full px-2 py-0.5 font-bold tabular-nums", up ? "bg-[#17251C] text-[#7FCF9F]" : "bg-[#2A1A18] text-[#FF9A8A]")}>
-        {up ? "↑" : "↓"} {Math.abs(v).toFixed(0)}%
-      </span>
-      <span className="text-[#8C8C8C]">vs. mês passado</span>
-    </span>
-  );
-}
-
-function MiniBars({ values }: { values: number[] }) {
-  const v = values.slice(-10);
-  const max = Math.max(...v, 1);
-  return (
-    <span className="flex h-12 items-end gap-[5px]" aria-hidden>
-      {v.map((x, i) => (
-        <span
-          key={i}
-          className={cn("dash-bar block flex-1 rounded-[4px]", i === v.length - 1 ? "bg-[#FFD599]" : "bg-[#2E2E2E]")}
-          style={{ height: `${Math.max(10, (x / max) * 100)}%`, ["--i" as string]: i }}
-        />
-      ))}
-    </span>
-  );
-}
-
-function Split({ a, b }: { a: number; b: number }) {
-  const tot = a + b;
-  return (
-    <span className="block pb-1" aria-hidden>
-      <span className="flex h-3 overflow-hidden rounded-full bg-[#2E2E2E]">
-        <span className="block h-full rounded-full bg-white transition-[width] duration-700" style={{ width: `${tot ? (a / tot) * 100 : 100}%` }} />
-      </span>
-    </span>
-  );
-}
-
-/** Agenda: hoje + 6 dias, com atrasados num chip à parte. */
-function Agenda({
-  orders,
-  purchases,
-  onOpen,
-  onGoPurchases,
-  linesOf,
-  imageOf,
-}: {
-  orders: any[];
-  purchases: PurchaseItem[] | undefined;
-  onOpen: (o: any, el?: HTMLElement | null) => void;
-  onGoPurchases: () => void;
-  linesOf: (o: any) => any[];
-  imageOf: (l: any) => string | null | undefined;
-}) {
-  const t = todayBR();
-  const days = Array.from({ length: 7 }, (_, i) => addDays(t, i));
-  type Ev = { kind: "entrega" | "pagar" | "comprar"; date: string; time?: string | null; title: string; sub: string; o?: any; late?: boolean };
-  const events = useMemo(() => {
-    const out: Ev[] = [];
-    orders.forEach((o) => {
-      if (o.status !== "entregue" && o.expected_delivery_date) {
-        const d = String(o.expected_delivery_date).slice(0, 10);
-        out.push({ kind: "entrega", date: d < t ? t : d, late: d < t, time: o.expected_delivery_time, title: o.customer_name || "Cliente", sub: `${o.fulfillment_type === "PICKUP" ? "Retira" : "Entrega"} · ${brl(orderTotal(o))}`, o });
-      }
-      const di = dueInfo(o);
-      if (di.state !== "none" && di.date) {
-        out.push({ kind: "pagar", date: di.date < t ? t : di.date, late: di.state === "late", title: o.customer_name || "Cliente", sub: `Paga ${brl(paymentInfo(o).due)}`, o });
-      }
-    });
-    const bySup = new Map<string, { date: string; value: number; n: number }>();
-    (purchases ?? [])
-      .filter((p) => p.status === "a comprar" && p.plannedDate)
-      .forEach((p) => {
-        const d = p.plannedDate! < t ? t : p.plannedDate!;
-        const k = `${p.supplier}|${d}`;
-        const cur = bySup.get(k) ?? { date: d, value: 0, n: 0 };
-        cur.value += p.unitCost * p.quantity;
-        cur.n += p.quantity;
-        bySup.set(k, cur);
-      });
-    bySup.forEach((v, k) => out.push({ kind: "comprar", date: v.date, title: k.split("|")[0]!, sub: `Comprar ${v.n} ${v.n === 1 ? "frasco" : "frascos"} · ${brl(v.value)}` }));
-    return out.sort((a, b) => (a.late === b.late ? (a.time ?? "99").localeCompare(b.time ?? "99") : a.late ? -1 : 1));
-  }, [orders, purchases, t]);
-  const [sel, setSel] = useState(t);
-  const today = events.filter((e) => e.date === sel);
-  const count = (d: string) => events.filter((e) => e.date === d);
-
-  const KIND = {
-    entrega: { icon: Truck, color: "#FFD599", label: "Entrega" },
-    pagar: { icon: HandCoins, color: "#7FCF9F", label: "Pagamento" },
-    comprar: { icon: ShoppingCart, color: "#F5C26B", label: "Compra" },
-  } as const;
+  const TABS: Array<{ f: Filter; label: string }> = [
+    { f: "todos", label: "Todos" },
+    { f: "entregar", label: "Entregar" },
+    { f: "fornecedor", label: "Fornecedor" },
+    { f: "caminho", label: "A caminho" },
+    { f: "pagamento", label: "A receber" },
+  ];
 
   return (
-    <section className="dash-card adm-rise flex min-w-0 flex-col p-4 lg:p-6" style={{ ["--i" as string]: 6 }}>
-      <div className="flex items-center justify-between gap-3 px-1">
-        <h2 className="flex items-center gap-2 text-[19px] font-bold tracking-[-0.015em]">
-          <CalendarDays className="size-5 text-[#FFD599]" /> Agenda da semana
-        </h2>
-        <span className="flex items-center gap-3 text-[12px] font-semibold text-[#8C8C8C]">
-          {Object.values(KIND).map((k) => (
-            <span key={k.label} className="hidden items-center gap-1.5 sm:inline-flex">
-              <span className="size-2 rounded-full" style={{ background: k.color }} /> {k.label}
-            </span>
-          ))}
-        </span>
-      </div>
-      <div className="mt-4 grid grid-cols-7 gap-1.5">
-        {days.map((d, i) => {
-          const ev = count(d);
-          const on = d === sel;
-          const late = ev.some((e) => e.late);
+    <div className="space-y-3 lg:space-y-4">
+      {/* 0 · urgente hoje */}
+      <TodayFocus rows={rows} linesOf={linesOf} imageOf={imageOf} actions={actions} busyId={busyId} />
+
+      {/* 1 · cartões */}
+      <section className="grid grid-cols-2 gap-2.5 lg:grid-cols-4 lg:gap-4" aria-label="Resumo">
+        {cards.map((c, i) => {
+          const on = filter === c.f && !needle;
           return (
             <button
-              key={d}
+              key={c.f}
               type="button"
               aria-pressed={on}
-              onClick={() => setSel(d)}
+              onClick={() => {
+                setQ("");
+                setFilter(on ? "todos" : c.f);
+              }}
               className={cn(
-                "press flex min-w-0 flex-col items-center gap-1 rounded-[18px] py-2.5 transition-colors duration-200",
-                on ? "bg-white text-[#15130F]" : "bg-[#1F1F1F] hover:bg-[#262626]",
+                "press adm-rise flex min-h-[128px] min-w-0 flex-col rounded-[24px] p-4 text-left transition-colors duration-300 lg:min-h-[150px] lg:p-5",
+                on ? "bg-white text-[#15130F]" : "bg-[#1A1A1A] text-white hover:bg-[#1F1F1F]",
               )}
+              style={{ ["--i" as string]: i }}
             >
-              <span className={cn("text-[11.5px] font-semibold", on ? "text-[#15130F]/60" : "text-[#8C8C8C]")}>{i === 0 ? "Hoje" : dayLabel(d).split(" ")[0]}</span>
-              <span className="text-[19px] leading-none font-bold tabular-nums">{Number(d.slice(8, 10))}</span>
-              <span className="flex h-2 items-center gap-[3px]">
-                {(["entrega", "pagar", "comprar"] as const).map((k) =>
-                  ev.some((e) => e.kind === k) ? (
-                    <span key={k} className={cn("size-[6px] rounded-full", late && k !== "comprar" && "animate-pulse")} style={{ background: late && i === 0 && ev.some((e) => e.kind === k && e.late) ? "#FF9A8A" : KIND[k].color }} />
-                  ) : null,
-                )}
+              <span className="flex items-center gap-2">
+                <c.icon className={cn("size-4 shrink-0", on ? "text-[#15130F]/60" : "text-[#8C8C8C]")} strokeWidth={2.2} />
+                <span className={cn("min-w-0 flex-1 truncate text-[13.5px] font-medium", on ? "text-[#15130F]/75" : "text-[#C9C9C9]")}>
+                  <span className={cn(c.short && "max-sm:hidden")}>{c.label}</span>
+                  {c.short ? <span className="sm:hidden">{c.short}</span> : null}
+                </span>
+                {c.dot ? <span className="size-2 shrink-0 rounded-full" style={{ background: c.dot }} /> : null}
+              </span>
+              <span className="mt-auto flex min-w-0 flex-wrap items-end justify-between gap-x-3 gap-y-1 pt-4">
+                <span className="truncate text-[clamp(1.6rem,3.4vw,2.6rem)] leading-none font-semibold tracking-[-0.045em] tabular-nums">
+                  {/* o número conta até o valor novo quando muda */}
+                  <span className={cn(c.compact && "max-sm:hidden")}>
+                    {typeof (c as any).n === "number" ? <AnimatedNumber value={(c as any).n} format={(c as any).money ? brl : undefined} /> : c.value}
+                  </span>
+                  {c.compact ? (
+                    <span className="sm:hidden">
+                      <AnimatedNumber value={(c as any).n ?? 0} format={(v) => `R$ ${Math.round(v).toLocaleString("pt-BR")}`} />
+                    </span>
+                  ) : null}
+                </span>
+                <span className={cn("truncate pb-0.5 text-[12px]", on ? "text-[#15130F]/55" : "text-[#8C8C8C]")}>{c.foot}</span>
               </span>
             </button>
           );
         })}
-      </div>
+      </section>
 
-      <ul key={sel} className="mt-4 flex-1 space-y-2">
-        {today.length === 0 ? (
-          <li className="grid min-h-[140px] place-items-center rounded-[20px] border-[1.5px] border-dashed border-white/[0.08] text-center text-[14px] text-[#6F6F6F]">
-            Nada marcado {sel === t ? "para hoje" : `para ${dayLabel(sel).toLowerCase()}`}.
-          </li>
-        ) : (
-          today.map((e, i) => {
-            const k = KIND[e.kind];
-            const lines = e.o ? linesOf(e.o) : [];
-            return (
-              <li key={`${e.kind}-${e.title}-${i}`} className="ord-in" style={{ ["--i" as string]: i }}>
+      {/* 2 · tabela */}
+      <section className="dash-card adm-rise min-w-0 p-2.5 lg:p-4" style={{ ["--i" as string]: 4 }} aria-label="Pedidos em andamento">
+        <div className="flex flex-wrap items-center gap-2 px-1 pb-3 lg:px-1.5">
+          <label className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-full bg-[#202020] px-4 focus-within:ring-2 focus-within:ring-[#FFD599]/40 sm:max-w-[300px]">
+            <Search className="size-4 shrink-0 text-[#8C8C8C]" />
+            <input
+              data-slot="input-group-control"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Cliente perguntou? Busque o nome"
+              aria-label="Buscar cliente, perfume ou telefone"
+              className="min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-[#6F6F6F]"
+            />
+            {q ? (
+              <button type="button" onClick={() => setQ("")} aria-label="Limpar busca" className="press grid size-6 place-items-center rounded-full bg-[#2E2E2E]">
+                <X className="size-3.5" />
+              </button>
+            ) : null}
+          </label>
+          <PillTrack activeKey={needle ? null : filter} label="Filtrar" className="-mx-1 flex max-w-full gap-1 overflow-x-auto px-1 max-sm:order-last max-sm:w-full">
+            {TABS.map((tb) => {
+              const on = !needle && filter === tb.f;
+              const n = count(tb.f);
+              return (
                 <button
+                  key={tb.f}
                   type="button"
-                  onClick={(ev) => (e.o ? onOpen(e.o, ev.currentTarget) : onGoPurchases())}
-                  className="ord-card flex w-full min-w-0 items-center gap-3 p-3 text-left"
+                  aria-pressed={on}
+                  onClick={() => {
+                    setQ("");
+                    setFilter(tb.f);
+                  }}
+                  className={cn(
+                    "press inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-semibold transition-colors",
+                    on ? "text-[#15130F]" : "text-[#A9A9A9] hover:bg-white/[0.05] hover:text-white",
+                  )}
                 >
-                  <span className="w-12 shrink-0 text-center text-[13px] font-bold tabular-nums" style={{ color: e.late ? "#FF9A8A" : undefined }}>
-                    {e.late ? "atraso" : fmtTime(e.time) || "—"}
-                  </span>
-                  <span className="grid size-10 shrink-0 place-items-center rounded-full" style={{ background: `${k.color}22`, color: e.late ? "#FF9A8A" : k.color }}>
-                    <k.icon className="size-[18px]" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[15px] font-bold">{e.title}</span>
-                    <span className="block truncate text-[12.5px] text-[#8C8C8C]">{e.sub}</span>
-                  </span>
-                  {lines.length ? (
-                    <span className="max-sm:hidden">
-                      <PhotoStack images={lines.map(imageOf)} more={Math.max(0, lines.length - 3)} size={30} />
-                    </span>
-                  ) : null}
+                  {tb.label}
+                  {n ? <span className={cn("text-[12px] tabular-nums", on ? "text-[#15130F]/50" : "text-[#6F6F6F]")}>{n}</span> : null}
                 </button>
-              </li>
-            );
-          })
-        )}
-      </ul>
-    </section>
-  );
-}
-
-/** De onde vieram os pedidos do mês (App, WhatsApp, Balcão) e como saem (retira/entrega). */
-function Origins({ orders }: { orders: any[] }) {
-  const origins = ["App", "WhatsApp", "Balcão"].map((k) => ({ k, n: orders.filter((o) => originOf(o) === k).length }));
-  const total = Math.max(1, orders.length);
-  const colors = ["#FFD599", "#7FCF9F", "#FFFFFF"];
-  const C = 2 * Math.PI * 44;
-  let acc = 0;
-  const pickup = orders.filter((o) => (o.fulfillment_type ?? "PICKUP") === "PICKUP").length;
-  return (
-    <section className="dash-card adm-rise p-4 lg:p-6" style={{ ["--i" as string]: 7 }}>
-      <h2 className="px-1 text-[17px] font-bold tracking-[-0.01em]">De onde vêm os pedidos</h2>
-      <div className="mt-3 flex items-center gap-5">
-        <span className="relative grid size-[112px] shrink-0 place-items-center">
-          <svg viewBox="0 0 100 100" className="absolute inset-0 -rotate-90" aria-hidden>
-            <circle cx="50" cy="50" r="44" fill="none" stroke="#262626" strokeWidth="9" />
-            {origins.map((o, i) => {
-              const len = (o.n / total) * C;
-              const el = o.n ? (
-                <circle key={o.k} cx="50" cy="50" r="44" fill="none" stroke={colors[i]} strokeWidth="9" className="dash-ring" strokeDasharray={`${Math.max(0, len - 3)} ${C}`} strokeDashoffset={-acc} />
-              ) : null;
-              acc += len;
-              return el;
+              );
             })}
-          </svg>
-          <span className="text-center">
-            <span className="block text-[24px] leading-none font-bold tabular-nums">{orders.length}</span>
-            <span className="text-[11px] text-[#8C8C8C]">no mês</span>
-          </span>
-        </span>
-        <ul className="min-w-0 flex-1 space-y-2">
-          {origins.map((o, i) => (
-            <li key={o.k} className="flex items-center gap-2 text-[14px]">
-              <span className="size-2.5 shrink-0 rounded-full" style={{ background: colors[i] }} />
-              <span className="flex-1 font-semibold">{o.k}</span>
-              <span className="font-bold tabular-nums">{o.n}</span>
-              <span className="w-10 text-right text-[12px] text-[#8C8C8C] tabular-nums">{Math.round((o.n / total) * 100)}%</span>
-            </li>
+          </PillTrack>
+          {filter === "fornecedor" && !needle && count("fornecedor") ? (
+            <button type="button" onClick={onGoPurchases} className="press ml-auto inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-white px-4 text-[13px] font-bold text-[#15130F] hover:bg-[#FFD599] max-sm:w-full max-sm:justify-center">
+              Fazer pedidos no fornecedor <ArrowRight className="size-4" strokeWidth={2.6} />
+            </button>
+          ) : null}
+        </div>
+
+        {/* cabeçalho (computador) */}
+        {shown.length ? (
+          <div className="hidden grid-cols-[minmax(0,2.3fr)_minmax(0,1.05fr)_minmax(0,1.15fr)_minmax(0,1.5fr)_40px] items-center gap-4 px-4 pb-2 text-[12px] font-medium text-[#6F6F6F] lg:grid">
+            <span>Cliente</span>
+            <span>Entrega</span>
+            <span>Valor</span>
+            <span>Fase</span>
+            <span />
+          </div>
+        ) : null}
+
+        <ul className="space-y-1.5">
+          {shown.map((r, i) => (
+            <OrderRow key={r.o.id} r={r} i={i} lines={linesOf(r.o)} imageOf={imageOf} onOpen={onOpen} />
           ))}
         </ul>
-      </div>
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <div className="rounded-[16px] bg-[#232323] px-3.5 py-2.5">
-          <p className="text-[12px] text-[#8C8C8C]">Retiram na loja</p>
-          <p className="text-[18px] font-bold tabular-nums">{pickup}</p>
-        </div>
-        <div className="rounded-[16px] bg-[#232323] px-3.5 py-2.5">
-          <p className="text-[12px] text-[#8C8C8C]">Entrega / envio</p>
-          <p className="text-[18px] font-bold tabular-nums">{orders.length - pickup}</p>
-        </div>
-      </div>
-    </section>
+        {!shown.length ? (
+          <p className="px-4 py-12 text-center text-[14px] text-[#8C8C8C]">
+            {needle ? `Nenhum pedido em andamento com “${q.trim()}”.` : filter === "todos" ? "Nenhum pedido em andamento. Tudo em dia." : "Nada aqui agora."}
+          </p>
+        ) : null}
+      </section>
+    </div>
   );
 }
 
-function DailyCard({ daily }: { daily: Array<{ d: string; n: number; v: number }> }) {
-  const max = Math.max(...daily.map((x) => x.n), 1);
-  const [hover, setHover] = useState<number | null>(null);
-  const shown = hover != null ? daily[hover]! : daily[daily.length - 1]!;
+const WHEN_TONE = { red: "text-[#FF9A8A] font-semibold", gold: "text-[#FFD599] font-semibold", plain: "text-white", muted: "text-[#8C8C8C]" };
+
+function OrderRow({ r, i, lines, imageOf, onOpen }: { r: Row; i: number; lines: any[]; imageOf: (l: any) => string | null | undefined; onOpen: (o: any, el?: HTMLElement | null) => void }) {
+  const o = r.o;
+  const [open, setOpen] = useState(false);
+  const meta = PHASE[r.phase.key];
+  const total = orderTotal(o);
+  const paidRatio = total > 0 ? Math.min(1, r.pay.paid / total) : 0;
+  const wa = r.pay.due > 0.009 ? whatsappLink(o.customer_phone) : null;
+  const first = (o.customer_name ?? "").trim().split(/\s+/)[0];
+  const msg = `Oi${first ? `, ${first}` : ""}! Tudo bem? Passando para lembrar do valor de ${brl(r.pay.due)} do seu pedido na Orium. Me avisa quando puder fazer o Pix? 😊`;
+
+  const phasePill = (
+    <span className="inline-flex h-8 max-w-full min-w-0 items-center gap-2 rounded-full bg-[#262626] px-3 text-[12.5px] font-semibold">
+      <span className="size-2 shrink-0 rounded-full" style={{ background: meta.dot }} />
+      <span className="truncate">{meta.title}</span>
+    </span>
+  );
+  const payCell = (
+    <span className="block min-w-0">
+      <span className="block text-[14.5px] font-semibold tabular-nums">{brl(total)}</span>
+      <span className="mt-1 flex items-center gap-2">
+        <span className="h-1 w-12 shrink-0 overflow-hidden rounded-full bg-[#2E2E2E]">
+          <span className={cn("block h-full rounded-full", paidRatio >= 1 ? "bg-[#7FCF9F]" : "bg-[#FFD599]")} style={{ width: `${paidRatio * 100}%` }} />
+        </span>
+        <span className={cn("truncate text-[12px]", r.pay.due <= 0.009 ? "text-[#7FCF9F]" : r.pay.paid > 0 ? "text-[#FFD599]" : "text-[#FF9A8A]")}>
+          {r.pay.due <= 0.009 ? "Pago" : r.pay.paid > 0 ? `falta ${brl(r.pay.due)}` : "não pagou"}
+        </span>
+      </span>
+    </span>
+  );
+
   return (
-    <section className="dash-card adm-rise p-4 lg:p-6" style={{ ["--i" as string]: 8 }}>
-      <div className="flex items-baseline justify-between gap-2 px-1">
-        <h2 className="text-[17px] font-bold tracking-[-0.01em]">Pedidos por dia</h2>
-        <span className="text-[12.5px] text-[#8C8C8C] tabular-nums">
-          {dayLabel(shown.d)}: <b className="text-white">{shown.n}</b> · {brl(shown.v)}
+    <li className="ord-in" style={{ ["--i" as string]: Math.min(i, 12) }}>
+      <div
+        role="button"
+        tabIndex={0}
+        data-order-id={o.id}
+        onClick={(e) => onOpen(o, e.currentTarget)}
+        onKeyDown={(e) => e.key === "Enter" && onOpen(o, e.currentTarget)}
+        className="group grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2.5 rounded-[20px] bg-[#202020] p-3 transition-colors hover:bg-[#252525] lg:grid-cols-[minmax(0,2.3fr)_minmax(0,1.05fr)_minmax(0,1.15fr)_minmax(0,1.5fr)_40px] lg:gap-4 lg:px-4"
+      >
+        {/* cliente + perfumes */}
+        <span className="flex min-w-0 items-center gap-3">
+          <OrderPhotos lines={lines} imageOf={imageOf} size={48} radius={14} />
+          <span className="min-w-0">
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-[15px] font-semibold">{o.customer_name || "Cliente"}</span>
+              <TierBadge o={o} />
+            </span>
+            <span className="mt-0.5 flex min-w-0 items-center gap-2">
+              <span className="min-w-0 truncate text-[12.5px] text-[#8C8C8C]">{itemsText(lines)}</span>
+              {lines.length ? <ExpandButton open={open} count={lines.length} onToggle={() => setOpen((v) => !v)} /> : null}
+            </span>
+          </span>
+        </span>
+
+        {/* abrir (celular: canto) */}
+        <span className="flex items-center gap-1.5 lg:hidden">
+          {wa ? (
+            <a
+              href={`${wa}${wa.includes("?") ? "&" : "?"}text=${encodeURIComponent(msg)}`}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              aria-label={`Cobrar ${first || "cliente"} no WhatsApp`}
+              className="press grid size-10 place-items-center rounded-full bg-[#2A2A2A]"
+            >
+              <MessageCircle className="size-4" />
+            </a>
+          ) : null}
+          <span className="grid size-10 place-items-center rounded-full bg-[#2A2A2A]">
+            <ArrowUpRight className="size-[18px]" />
+          </span>
+        </span>
+
+        {/* entrega */}
+        <span className="min-w-0 max-lg:hidden">
+          <WhenPill when={r.when} big />
+        </span>
+        {/* valor */}
+        <span className="max-lg:hidden">{payCell}</span>
+        {/* fase */}
+        <span className="min-w-0 max-lg:hidden">{phasePill}</span>
+        {/* abrir (computador) */}
+        <span className="flex justify-end max-lg:hidden">
+          <span className="grid size-10 place-items-center rounded-full bg-[#2A2A2A] transition-colors group-hover:bg-white group-hover:text-[#15130F]">
+            <ArrowUpRight className="size-[18px]" />
+          </span>
+        </span>
+
+        {/* celular: fase + entrega + valor numa linha */}
+        <span className="col-span-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 lg:hidden">
+          {phasePill}
+          <WhenPill when={r.when} />
+          <span className="ml-auto text-right">{payCell}</span>
         </span>
       </div>
-      <div className="mt-4 flex h-[110px] items-end gap-1.5" onMouseLeave={() => setHover(null)}>
-        {daily.map((x, i) => (
-          <button
-            key={x.d}
-            type="button"
-            onMouseEnter={() => setHover(i)}
-            onFocus={() => setHover(i)}
-            onClick={() => setHover(i)}
-            aria-label={`${dayLabel(x.d)}: ${x.n} pedidos`}
-            className="flex h-full flex-1 flex-col justify-end"
-          >
-            <span
-              className={cn(
-                "dash-bar block w-full rounded-[6px] transition-colors duration-200",
-                i === daily.length - 1 ? "bg-[#FFD599]" : hover === i ? "bg-white" : x.n ? "bg-[#3A3A3A]" : "bg-[#262626]",
-              )}
-              style={{ height: `${Math.max(6, (x.n / max) * 100)}%`, ["--i" as string]: i }}
-            />
-          </button>
-        ))}
-      </div>
-      <div className="mt-2 flex justify-between px-0.5 text-[11px] text-[#6F6F6F]">
-        <span>{dayLabel(daily[0]!.d)}</span>
-        <span>Hoje</span>
-      </div>
-    </section>
+      <Collapse open={open}>
+        <ItemsExpand lines={lines} imageOf={imageOf} o={o} />
+      </Collapse>
+    </li>
   );
 }
-
-function TopCustomers({ orders, onOpen }: { orders: any[]; onOpen: (o: any, el?: HTMLElement | null) => void }) {
-  const list = useMemo(() => {
-    const m = new Map<string, { name: string; total: number; n: number; last: any }>();
-    orders.forEach((o) => {
-      const k = o.crm_customer_id ?? o.customer_phone ?? o.customer_name ?? o.id;
-      const cur = m.get(k) ?? { name: o.customer_name || "Cliente", total: 0, n: 0, last: o };
-      cur.total += orderTotal(o);
-      cur.n += 1;
-      if (new Date(o.created_at) > new Date(cur.last.created_at)) cur.last = o;
-      m.set(k, cur);
-    });
-    return [...m.values()].sort((a, b) => b.total - a.total).slice(0, 5);
-  }, [orders]);
-  if (!list.length) return null;
-  const max = list[0]!.total || 1;
-  return (
-    <section className="dash-card adm-rise p-4 lg:p-6" style={{ ["--i" as string]: 10 }}>
-      <h2 className="px-1 text-[17px] font-bold tracking-[-0.01em]">Melhores clientes do mês</h2>
-      <ol className="mt-3 grid gap-2 lg:grid-cols-5">
-        {list.map((c, i) => (
-          <li key={c.name + i}>
-            <button type="button" onClick={(e) => onOpen(c.last, e.currentTarget)} className="ord-card flex w-full items-center gap-3 p-3 text-left lg:flex-col lg:items-start">
-              <span className={cn("grid size-11 shrink-0 place-items-center rounded-full text-[14px] font-bold", i === 0 ? "bg-[#FFD599] text-[#15130F]" : "bg-[#2E2E2E]")}>{initials(c.name)}</span>
-              <span className="min-w-0 flex-1 lg:w-full">
-                <span className="block truncate text-[14.5px] font-bold">{c.name}</span>
-                <span className="block text-[12.5px] text-[#8C8C8C] tabular-nums">
-                  {c.n} {c.n === 1 ? "pedido" : "pedidos"} · {brl(c.total)}
-                </span>
-                <span className="mt-2 block h-[5px] overflow-hidden rounded-full bg-[#2E2E2E]">
-                  <span className="dash-barx block h-full rounded-full bg-[#FFD599]" style={{ width: `${(c.total / max) * 100}%`, ["--i" as string]: i }} />
-                </span>
-              </span>
-            </button>
-          </li>
-        ))}
-      </ol>
-    </section>
-  );
-}
-

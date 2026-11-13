@@ -89,7 +89,10 @@ export const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
   },
   {
     label: "Sistema",
-    items: [{ to: "/admin/configuracoes", label: "Configurações", icon: Settings }],
+    items: [
+      { to: "/admin/widgets", label: "Widgets", icon: LayoutGrid },
+      { to: "/admin/configuracoes", label: "Configurações", icon: Settings },
+    ],
   },
 ];
 

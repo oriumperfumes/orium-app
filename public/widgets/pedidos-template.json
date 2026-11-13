@@ -1,0 +1,51 @@
+{
+  "type": "AdaptiveCard",
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "ColumnSet",
+      "columns": [
+        { "type": "Column", "width": "stretch", "items": [{ "type": "TextBlock", "text": "${label}", "size": "Small", "weight": "Bolder", "color": "${color}" }] },
+        { "type": "Column", "width": "auto", "items": [{ "type": "TextBlock", "text": "ORIUM", "size": "Small", "weight": "Bolder", "isSubtle": true }] }
+      ]
+    },
+    { "type": "TextBlock", "text": "${title}", "size": "ExtraLarge", "weight": "Bolder", "wrap": true, "spacing": "Small" },
+    { "type": "TextBlock", "text": "${sub}", "isSubtle": true, "wrap": true, "spacing": "None" },
+    {
+      "type": "Container",
+      "$when": "${$host.widgetSize != \"small\"}",
+      "spacing": "Medium",
+      "items": [
+        {
+          "type": "ColumnSet",
+          "$data": "${next}",
+          "spacing": "Small",
+          "columns": [
+            { "type": "Column", "width": "70px", "verticalContentAlignment": "Center", "items": [{ "type": "TextBlock", "text": "${when}", "size": "Small", "weight": "Bolder", "color": "${color}", "wrap": false }] },
+            {
+              "type": "Column",
+              "width": "stretch",
+              "items": [
+                { "type": "TextBlock", "text": "${name}", "weight": "Bolder", "wrap": false },
+                { "type": "TextBlock", "text": "${phase}", "size": "Small", "isSubtle": true, "spacing": "None", "wrap": false }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "ColumnSet",
+      "$when": "${$host.widgetSize == \"large\"}",
+      "spacing": "Medium",
+      "separator": true,
+      "columns": [
+        { "type": "Column", "width": "stretch", "items": [{ "type": "TextBlock", "text": "A receber", "size": "Small", "isSubtle": true }, { "type": "TextBlock", "text": "${receivable}", "weight": "Bolder", "color": "Warning", "spacing": "None" }] },
+        { "type": "Column", "width": "stretch", "items": [{ "type": "TextBlock", "text": "Pedir no fornecedor", "size": "Small", "isSubtle": true }, { "type": "TextBlock", "text": "${toBuy}", "weight": "Bolder", "spacing": "None" }] },
+        { "type": "Column", "width": "stretch", "items": [{ "type": "TextBlock", "text": "Em andamento", "size": "Small", "isSubtle": true }, { "type": "TextBlock", "text": "${open}", "weight": "Bolder", "spacing": "None" }] }
+      ]
+    }
+  ],
+  "actions": [{ "type": "Action.OpenUrl", "title": "Abrir pedidos", "url": "https://oriumperfumes.com/admin/pedidos" }]
+}

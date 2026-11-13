@@ -1035,7 +1035,7 @@ async function run(ctx: CopilotCtx, tool: string, params: any, actionId: string)
     case "restock_add": {
       const { openRestockList } = await import("@/lib/orders-restock.server");
       const listId = await openRestockList(db, ctx.userId);
-      const { data: current } = await db.from("restock_items").select("id, product_id, supplier_id, quantity").eq("restock_list_id", listId);
+      const { data: current } = await db.from("restock_items").select("id, product_id, supplier_id, quantity").eq("restock_list_id", listId).eq("status", "a comprar");
       let added = 0;
       let updated = 0;
       const failed: any[] = [];

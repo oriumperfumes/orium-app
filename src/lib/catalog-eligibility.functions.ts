@@ -32,6 +32,7 @@ async function loadAll(db: any) {
     const { data } = await db
       .from("products")
       .select("id, canonical_name, brand_id, product_type, active, catalog_eligible, catalog_eligibility_reason")
+      .order("id")
       .range(from, from + 999);
     products.push(...(data ?? []));
     if (!data || data.length < 1000) break;

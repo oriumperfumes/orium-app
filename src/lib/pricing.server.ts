@@ -94,7 +94,7 @@ export async function calculateProductPricing(db: Db, productId: string): Promis
     db
       .from("supplier_products")
       .select(
-        "id, supplier_id, supplier_product_name, price, in_stock, url, volume_ml, concentration, active, suppliers(name)",
+        "id, supplier_id, supplier_product_name, price, in_stock, url, volume_ml, concentration, active, suppliers(name, use_for_pricing)",
       )
       .eq("product_id", productId)
       .eq("active", true),
@@ -114,7 +114,17 @@ export async function calculateProductPricing(db: Db, productId: string): Promis
     concentration: o.concentration,
   }));
 
-  const priced = offers.filter((o) => o.supplierPrice != null);
+  // Fornecedor "só consulta" (ex.: Rasha, preço de atacado) não entra no preço do
+  // site. Só vale quando o perfume não tem nenhum outro fornecedor (produto
+  // interno, usado em pedidos): aí ele vira o custo e o fornecedor da compra.
+  const consultOnly = new Set(
+    (offersRaw ?? [])
+      .filter((o) => (o as { suppliers?: { use_for_pricing?: boolean } | null }).suppliers?.use_for_pricing === false)
+      .map((o) => o.id),
+  );
+  const pricingOffers = offers.filter((o) => !consultOnly.has(o.supplierProductId));
+  const basis = pricingOffers.some((o) => o.supplierPrice != null) ? pricingOffers : offers;
+  const priced = basis.filter((o) => o.supplierPrice != null);
   const inStock = priced.filter((o) => o.inStock);
   const pool = inStock.length ? inStock : priced;
   // Preço médio (mediana) dos fornecedores: 200/210/220 → 210; com dois, o ponto do meio.

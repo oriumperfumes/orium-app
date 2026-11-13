@@ -763,6 +763,182 @@ const smartManiaAdapter: SupplierAdapter = {
 };
 
 
+/* ------------------------------------------------------------------ */
+/* Loja Integrada — qualquer loja (ex.: Rasha Fragrâncias)             */
+/* Listagem "/todos-os-produtos?pagina=N", um bloco .listagem-item por */
+/* produto. Usada como fornecedor de CONSULTA: o preço lido é só       */
+/* referência interna (pode ser atacado) e nunca vira preço do site.   */
+/* ------------------------------------------------------------------ */
+
+const LI_PAGES_PER_BATCH = 4;
+const LI_MAX_PAGES = 80;
+// robots.txt da Loja Integrada pede 10 s entre páginas.
+const LI_PAGE_DELAY_MS = 10_000;
+
+const htmlDecode = (v: string) =>
+  v
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&#039;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;/g, " ");
+
+/** A CDN da Loja Integrada usa o tamanho no caminho (/300x300/): pedimos o maior. */
+function liImageCandidates(src: string | null | undefined): string[] {
+  if (!src) return [];
+  const url = src.startsWith("//") ? `https:${src}` : src;
+  const big = url.replace(/\/\d{2,4}x\d{2,4}\//, "/1000x1000/");
+  return uniq([big, url]);
+}
+
+function parseLojaIntegradaList(html: string, base: string): RawOffer[] {
+  const out: RawOffer[] = [];
+  const blocks = html.split(/<div[^>]+class="[^"]*\blistagem-item\b/).slice(1);
+  for (const raw of blocks) {
+    const block = raw.slice(0, 6000);
+    const anchor = block.match(/<a\b[^>]*\bproduto-sobrepor\b[^>]*>/)?.[0] ?? block.match(/<a\b[^>]*\bnome-produto\b[^>]*>/)?.[0] ?? "";
+    let url = anchor.match(/href="([^"]+)"/)?.[1] ?? null;
+    if (url && url.startsWith("/")) url = `${base}${url}`;
+    const name = cleanText(
+      htmlDecode(
+        anchor.match(/title="([^"]+)"/)?.[1] ??
+          block.match(/class="[^"]*\bnome-produto\b[^"]*"[^>]*>([\s\S]*?)<\/a>/)?.[1]?.replace(/<[^>]+>/g, " ") ??
+          block.match(/<img[^>]+alt="([^"]+)"/)?.[1] ??
+          "",
+      ),
+    );
+    if (!name || !url) continue;
+    const img = block.match(/data-imagem-caminho="([^"]+)"/)?.[1] ?? block.match(/<img[^>]+src="((?:https?:)?\/\/cdn\.awsli\.com\.br[^"]+)"/)?.[1] ?? null;
+    const sell = block.match(/data-sell-price="([\d.]+)"/)?.[1];
+    const promo = block.match(/class="[^"]*\bpreco-promocional\b[^"]*"[^>]*>\s*R\$\s*([\d.]+,\d{2})/)?.[1];
+    const any = block.match(/R\$\s*([\d.]+,\d{2})/)?.[1];
+    const price = sell ? Number(sell) : brlNumber(promo ?? any ?? null);
+    const id =
+      block.match(/data-produto-id="(\d+)"/)?.[1] ??
+      block.match(/trustvox-product-code="(\d+)"/)?.[1] ??
+      img?.match(/\/produto\/(\d+)\//)?.[1] ??
+      url.replace(/[?#].*$/, "").split("/").filter(Boolean).pop() ??
+      name;
+    const unavailable = /\bindisponivel\b|bandeira-indisponivel|Indispon[ií]vel|Esgotado/i.test(block);
+    out.push({
+      externalId: String(id),
+      name,
+      price: price && price > 0 ? price : null,
+      rawPrice: price && price > 0 ? price : null,
+      costSource: "referencia-consulta",
+      inStock: !unavailable,
+      stock: null,
+      url,
+      images: liImageCandidates(img),
+      sku: block.match(/class="[^"]*\bproduto-sku\b[^"]*"[^>]*>([^<]+)</)?.[1]?.trim() ?? null,
+      brand: null,
+      categories: [],
+      sourceUpdatedAt: null,
+      availabilityStatus: unavailable ? "UNAVAILABLE" : "AVAILABLE",
+    });
+  }
+  // Tema sem .listagem-item: tenta os dados estruturados (JSON-LD) da página.
+  if (!out.length) {
+    for (const p of parseLdProducts(html)) {
+      if (!p.name) continue;
+      const price = num(p.offers?.price);
+      out.push({
+        externalId: String(p.sku ?? p.offers?.url ?? p.name),
+        name: cleanText(p.name),
+        price,
+        rawPrice: price,
+        costSource: "referencia-consulta",
+        inStock: inStockFrom(p.offers?.availability),
+        stock: null,
+        url: p.offers?.url ?? null,
+        images: liImageCandidates(typeof p.image === "string" ? p.image : null),
+        sku: p.sku ?? null,
+        brand: p.brand?.name ?? null,
+        categories: p.category ? [p.category] : [],
+        sourceUpdatedAt: null,
+      });
+    }
+  }
+  return out;
+}
+
+export function makeLojaIntegradaAdapter(opts: { key: string; label: string; base: string }): SupplierAdapter {
+  const base = opts.base.replace(/\/+$/, "");
+  const listUrl = (page: number) => `${base}/todos-os-produtos${page > 1 ? `?pagina=${page}` : ""}`;
+  return {
+    key: opts.key,
+    label: opts.label,
+    async fetchBatch(cursor, budgetMs) {
+      const started = Date.now();
+      const items: RawOffer[] = [];
+      let page = Math.max(1, cursor || 1);
+      let pages = 0;
+      let done = false;
+      const seen = new Set<string>();
+      while (Date.now() - started < budgetMs && page <= LI_MAX_PAGES && pages < LI_PAGES_PER_BATCH) {
+        let html: string;
+        try {
+          html = await getHtml(listUrl(page));
+        } catch (e) {
+          // A loja bloqueia leitura automática das páginas seguintes (HTTP 403).
+          // Fica com o que já veio (a 1ª página = lançamentos) e encerra sem erro.
+          if (items.length) {
+            done = true;
+            break;
+          }
+          throw e;
+        }
+        const found = parseLojaIntegradaList(html, base).filter((o) => !seen.has(o.externalId));
+        pages++;
+        if (!found.length) {
+          done = true;
+          break;
+        }
+        found.forEach((o) => seen.add(o.externalId));
+        items.push(...found);
+        // sem link para a próxima página: acabou
+        if (!new RegExp(`pagina=${page + 1}\\b`).test(html)) {
+          done = true;
+          break;
+        }
+        page++;
+        await wait(LI_PAGE_DELAY_MS);
+      }
+      return { items, nextCursor: done || page > LI_MAX_PAGES ? null : page, pages, total: null };
+    },
+    async healthCheck() {
+      const t0 = Date.now();
+      try {
+        const html = await getHtml(listUrl(1), 2);
+        const offers = parseLojaIntegradaList(html, base);
+        return {
+          ok: offers.length > 0,
+          sourceAccessible: true,
+          catalogDetected: offers.length > 0,
+          productsDetected: offers.length,
+          pricesDetected: offers.filter((o) => o.price != null).length,
+          code: offers.length ? null : "NO_PRODUCTS",
+          message: offers.length ? `${offers.length} produtos na primeira página.` : "A página abriu, mas nenhum produto foi reconhecido.",
+          durationMs: Date.now() - t0,
+        };
+      } catch (e) {
+        return {
+          ok: false,
+          sourceAccessible: false,
+          catalogDetected: false,
+          productsDetected: 0,
+          pricesDetected: 0,
+          code: "UNREACHABLE",
+          message: e instanceof Error ? e.message : "Loja indisponível.",
+          durationMs: Date.now() - t0,
+        };
+      }
+    },
+  };
+}
+
+
 const ADAPTERS: SupplierAdapter[] = [mrxAdapter, smartManiaAdapter, KLCosmeticosAdapter];
 
 export function getAdapter(supplier: { slug?: string | null; adapter?: string | null; website?: string | null; name?: string | null; adapter_config?: unknown }) {
@@ -770,6 +946,10 @@ export function getAdapter(supplier: { slug?: string | null; adapter?: string | 
   if (supplier.adapter === "kyte-connector" && supplier.website) {
     const cfg = (supplier.adapter_config ?? {}) as { aid?: string | null };
     return makeKyteConnector({ key: supplier.slug ?? "kyte", label: supplier.name ?? "Kyte", base: supplier.website.replace(/\/(pt-BR)?\/?$/, ""), aid: cfg.aid ?? null });
+  }
+  // Lojas Loja Integrada (ex.: Rasha) — conector genérico pela listagem pública.
+  if (supplier.adapter === "loja-integrada" && supplier.website) {
+    return makeLojaIntegradaAdapter({ key: supplier.slug ?? "loja-integrada", label: supplier.name ?? "Loja Integrada", base: supplier.website });
   }
   const keys = [supplier.adapter, supplier.slug].filter(Boolean).map((k) => String(k).toLowerCase());
   const direct = ADAPTERS.find((a) => keys.includes(a.key));
