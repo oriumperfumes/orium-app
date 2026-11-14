@@ -4,6 +4,7 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { markResetRequested } from "@/lib/password-recovery";
 import { Check, ChevronLeft, Eye, EyeOff, Loader2 } from "lucide-react";
 import { OriumLogo } from "@/components/orium/OriumLogo";
 import { cn } from "@/lib/utils";
@@ -94,7 +95,10 @@ function AuthPage() {
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.origin });
     setBusy(false);
     if (error) toast.error("Não conseguimos enviar agora. Tente de novo.");
-    else setSent("reset");
+    else {
+      markResetRequested();
+      setSent("reset");
+    }
   };
 
   const google = async () => {

@@ -19,6 +19,7 @@ import { KitProvider } from "@/lib/kit";
 import { KitSheetMount } from "@/components/orium/kit-mount";
 import { BottomNav } from "@/components/orium/BottomNav";
 import { AccountScreenMount } from "@/components/orium/account-shared";
+import { RecoveryLinkHandler } from "@/components/orium/RecoveryLinkHandler";
 
 import { AppSplash } from "@/components/orium/AppSplash";
 import { registerAppServiceWorker } from "@/lib/pwa";
@@ -230,6 +231,7 @@ function RootComponent() {
               <LeadProvider>
                 <KitProvider>
                   <AreaMarker />
+                  <RecoveryLinkHandler />
                   <AppSplash />
                   <Outlet />
                   <BottomNav />
