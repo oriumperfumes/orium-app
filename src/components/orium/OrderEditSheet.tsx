@@ -300,7 +300,7 @@ function Editor({
   };
 
   const review = async () => {
-    if (!lines.length) return toast.warning("O pedido precisa ter ao menos um item.");
+    if (!lines.length) { toast.warning("O pedido precisa ter ao menos um item."); return; }
     setBusy(true);
     try {
       setSummary((await preview({ data: payload(true) })) as EditSummary);

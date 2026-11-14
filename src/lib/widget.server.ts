@@ -334,7 +334,7 @@ export async function buildAgenda(db: any, adminUrl: string): Promise<AgendaEven
   ((buys ?? []) as any[]).forEach((b) => {
     const supplier = b.suppliers?.name ?? "Fornecedor";
     const k = `${b.planned_purchase_date}|${supplier}`;
-    const cur = byDay.get(k) ?? { supplier, items: [], units: 0 };
+    const cur = byDay.get(k) ?? { supplier, items: [] as string[], units: 0 };
     cur.items.push(b.products?.canonical_name ?? "Perfume");
     cur.units += Number(b.quantity ?? 1);
     byDay.set(k, cur);

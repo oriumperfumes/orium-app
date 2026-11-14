@@ -91,7 +91,7 @@ export const purchaseBoard = createServerFn({ method: "GET" })
       : { data: [] as any[] };
 
     const pMap = new Map((products ?? []).map((p: any) => [p.id, p]));
-    const sMap = new Map((suppliers ?? []).map((s: any) => [s.id, s.name as string]));
+    const sMap = new Map<string, string>((suppliers ?? []).map((s: any) => [s.id as string, s.name as string] as [string, string]));
     const supInfo = new Map((suppliers ?? []).map((s: any) => [s.id, s]));
     const oMap = new Map((orders ?? []).map((o: any) => [o.id, o]));
     void supplierIds;
@@ -102,8 +102,8 @@ export const purchaseBoard = createServerFn({ method: "GET" })
       const best = (offers ?? [])
         .filter((o: any) => o.product_id === r.product_id && o.supplier_id !== r.supplier_id)
         .map((o: any) => ({ supplier: sMap.get(o.supplier_id) ?? "Outro fornecedor", cost: Number(o.normalized_cost ?? o.price ?? 0) }))
-        .filter((o) => o.cost > 0)
-        .sort((a, b) => a.cost - b.cost)[0];
+        .filter((o: any) => o.cost > 0)
+        .sort((a: any, b: any) => a.cost - b.cost)[0];
       return {
         id: r.id,
         productId: r.product_id,
@@ -250,7 +250,7 @@ export const markReceived = createServerFn({ method: "POST" })
     if (got.length) {
       const { data: sois } = await db.from("supplier_order_items").select("id, supplier_order_id, quantity").in("restock_item_id", got).is("result", null);
       for (const it of sois ?? []) await db.from("supplier_order_items").update({ result: "ok", received_qty: it.quantity }).eq("id", it.id);
-      await refreshOrderStatus(db, [...new Set((sois ?? []).map((x: any) => x.supplier_order_id))]);
+      await refreshOrderStatus(db, [...new Set<string>((sois ?? []).map((x: any) => x.supplier_order_id as string))]);
     }
     return { ok: true as const, updated: got.length };
   });

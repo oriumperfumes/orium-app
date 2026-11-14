@@ -379,9 +379,10 @@ export async function addOrderItemsToRestock(
       .from("restock_items")
       .select("id, status")
       .eq("restock_list_id", listId)
-      .eq("product_id", line.product_id);
+      .eq("product_id", line.product_id)
+      .eq("status", "a comprar");
     query = supplierId ? query.eq("supplier_id", supplierId) : query.is("supplier_id", null);
-    const { data: target } = await query.maybeSingle();
+    const { data: target } = await query.order("created_at", { ascending: true }).limit(1).maybeSingle();
 
     let restockItemId = target?.id as string | undefined;
     if (!restockItemId) {

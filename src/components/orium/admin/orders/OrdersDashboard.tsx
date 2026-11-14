@@ -114,7 +114,7 @@ export function OrdersDashboard({
   const oweValue = owe.reduce((s, r) => s + r.pay.due, 0);
   const oweLate = owe.filter((r) => r.o.status === "entregue" || dueInfo(r.o).state === "late").length;
 
-  const cards: Array<{ f: Filter; icon: LucideIcon; label: string; short?: string; value: string; compact?: string; foot: ReactNode; dot?: string }> = [
+  const cards: Array<{ f: Filter; icon: LucideIcon; label: string; short?: string; value: string; compact?: string; foot: ReactNode; dot?: string; n?: number; money?: boolean }> = [
     {
       f: "entregar",
       icon: Truck,
