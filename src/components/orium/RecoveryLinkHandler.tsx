@@ -2,28 +2,30 @@ import { useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import {
+  RESET_PATH,
+  claimsFromToken,
   clearRecovery,
   readRecovery,
-  resetRequestedRecently,
-  userIdFromToken,
   writeRecovery,
 } from "@/lib/password-recovery";
 
 /**
  * O Supabase devolve o resultado do link do e-mail no fragmento (#...) do endereço de retorno.
- * O cliente apaga o fragmento ao iniciar; por isso ele é lido aqui, no carregamento do módulo,
- * e tratado uma única vez.
+ * O cliente apaga o fragmento ao iniciar; por isso o endereço é lido aqui, no carregamento do
+ * módulo, e tratado uma única vez.
  */
+const initialPath = typeof window === "undefined" ? "" : window.location.pathname;
 const initialHash = typeof window === "undefined" ? "" : window.location.hash;
 let hashHandled = false;
 
 /**
- * Leva o link de "Esqueci minha senha" direto ao formulário de nova senha.
+ * Leva o link de "Esqueci minha senha" ao formulário de nova senha.
  *
- * - Link válido: o formulário fica ligado ao usuário da sessão recebida.
- * - Link vencido ou já usado: só entra aqui com `otp_expired` E um pedido de recuperação recente
- *   neste navegador. Erros e cancelamentos do login Google não passam por este caminho.
- * - Sair da conta ou trocar de usuário apaga o estado da recuperação.
+ * - Link válido: a recuperação fica ligada à sessão aberta pelo link (usuário e `session_id`).
+ * - Link vencido ou já usado: só é tratado quando o erro chega em `/redefinir-senha`, o destino
+ *   explícito do e-mail. Erros e cancelamentos do login Google voltam para a origem e não passam
+ *   por aqui, em qualquer navegador.
+ * - Sair da conta ou abrir outra sessão apaga o estado da recuperação.
  */
 export function RecoveryLinkHandler() {
   const navigate = useNavigate();
@@ -33,23 +35,26 @@ export function RecoveryLinkHandler() {
       hashHandled = true;
       const params = new URLSearchParams(initialHash.replace(/^#/, ""));
 
-      if (params.get("error_code") === "otp_expired" && resetRequestedRecently()) {
+      if (initialPath === RESET_PATH && (params.get("error_code") || params.get("error"))) {
         clearRecovery();
-        window.history.replaceState(null, "", window.location.pathname + window.location.search);
-        void navigate({ to: "/redefinir-senha", search: { erro: "link" }, replace: true });
+        window.history.replaceState(null, "", `${RESET_PATH}?erro=link`);
+        void navigate({ to: RESET_PATH, search: { erro: "link" }, replace: true });
       } else if (params.get("type") === "recovery") {
-        const uid = userIdFromToken(params.get("access_token"));
-        if (uid) {
-          writeRecovery(uid);
-          void navigate({ to: "/redefinir-senha", replace: true });
+        const claims = claimsFromToken(params.get("access_token"));
+        if (claims) {
+          writeRecovery(claims.uid, claims.sid);
+          void navigate({ to: RESET_PATH, replace: true });
         }
       }
     }
 
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "PASSWORD_RECOVERY" && session) {
-        writeRecovery(session.user.id);
-        void navigate({ to: "/redefinir-senha", replace: true });
+      if (event === "PASSWORD_RECOVERY") {
+        const claims = claimsFromToken(session?.access_token);
+        if (claims) {
+          writeRecovery(claims.uid, claims.sid);
+          void navigate({ to: RESET_PATH, replace: true });
+        }
         return;
       }
       if (event === "SIGNED_OUT") {
@@ -57,7 +62,9 @@ export function RecoveryLinkHandler() {
         return;
       }
       const mark = readRecovery();
-      if (mark && session && mark.uid !== session.user.id) clearRecovery();
+      if (!mark || !session) return;
+      const claims = claimsFromToken(session.access_token);
+      if (!claims || claims.uid !== mark.uid || claims.sid !== mark.sid) clearRecovery();
     });
     return () => sub.subscription.unsubscribe();
   }, [navigate]);

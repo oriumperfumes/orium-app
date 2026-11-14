@@ -8,8 +8,9 @@ import { useAuth } from "@/lib/auth";
 import { OriumLogo } from "@/components/orium/OriumLogo";
 import {
   clearRecovery,
-  markResetRequested,
+  isRecoverySession,
   readRecovery,
+  resetRedirectUrl,
   type RecoveryMark,
 } from "@/lib/password-recovery";
 import { cn } from "@/lib/utils";
@@ -38,19 +39,20 @@ function ResetPasswordPage() {
     setReady(true);
   }, [session]);
 
-  const bound = !!mark && !!session && session.user.id === mark.uid;
-  const otherUser = !!mark && !!session && session.user.id !== mark.uid;
+  // O formulário só vale para a sessão exata aberta pelo link (usuário e sessão).
+  const bound = !!session && isRecoverySession(mark, session.access_token);
+  const otherSession = !!mark && !!session && !bound;
 
   useEffect(() => {
     if (!ready || loading || erro) return;
-    if (otherUser) {
-      // sessão de outra conta: o estado da recuperação não vale mais
+    if (otherSession) {
+      // outra sessão (outra conta ou login comum da mesma conta): a recuperação não vale mais
       clearRecovery();
       void navigate({ to: "/", replace: true });
     } else if (!mark) {
       void navigate({ to: "/auth", replace: true });
     }
-  }, [ready, loading, erro, otherUser, mark, navigate]);
+  }, [ready, loading, erro, otherSession, mark, navigate]);
 
   const linkProblem = erro === "link" || (ready && !loading && !!mark && !session);
   const showForm = !erro && ready && !loading && bound;
@@ -79,8 +81,8 @@ function NewPasswordForm() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
-    // a recuperação só vale para o usuário da sessão aberta pelo link
-    if (readRecovery()?.uid !== session?.user.id) {
+    // a recuperação só vale para a sessão exata aberta pelo link
+    if (!isRecoverySession(readRecovery(), session?.access_token)) {
       clearRecovery();
       void navigate({ to: "/", replace: true });
       return;
@@ -182,13 +184,12 @@ function ExpiredLink() {
     if (!validEmail || busy) return;
     setBusy(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: window.location.origin,
+      redirectTo: resetRedirectUrl(),
     });
     setBusy(false);
     if (error) {
       toast.error("Não conseguimos enviar agora. Tente de novo em alguns minutos.");
     } else {
-      markResetRequested();
       setSent(true);
     }
   };
