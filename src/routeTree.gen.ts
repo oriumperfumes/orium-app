@@ -13,7 +13,9 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as FavoritosRouteImport } from './routes/favoritos'
+import { Route as PrivacidadeRouteImport } from './routes/privacidade'
 import { Route as RedefinirSenhaRouteImport } from './routes/redefinir-senha'
+import { Route as TermosRouteImport } from './routes/termos'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as ApiCopilotRouteImport } from './routes/api/copilot'
 import { Route as ApiCopilotVoiceRouteImport } from './routes/api/copilot-voice'
@@ -71,9 +73,19 @@ const FavoritosRoute = FavoritosRouteImport.update({
   path: '/favoritos',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PrivacidadeRoute = PrivacidadeRouteImport.update({
+  id: '/privacidade',
+  path: '/privacidade',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RedefinirSenhaRoute = RedefinirSenhaRouteImport.update({
   id: '/redefinir-senha',
   path: '/redefinir-senha',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermosRoute = TermosRouteImport.update({
+  id: '/termos',
+  path: '/termos',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
@@ -292,7 +304,9 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/favoritos': typeof FavoritosRoute
+  '/privacidade': typeof PrivacidadeRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
+  '/termos': typeof TermosRoute
   '/admin': typeof AuthenticatedAdminRouteWithChildren
   '/api/copilot': typeof ApiCopilotRoute
   '/api/copilot-voice': typeof ApiCopilotVoiceRoute
@@ -335,7 +349,9 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/favoritos': typeof FavoritosRoute
+  '/privacidade': typeof PrivacidadeRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
+  '/termos': typeof TermosRoute
   '/api/copilot': typeof ApiCopilotRoute
   '/api/copilot-voice': typeof ApiCopilotVoiceRoute
   '/negociacao/$id': typeof NegociacaoIdRoute
@@ -379,7 +395,9 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/favoritos': typeof FavoritosRoute
+  '/privacidade': typeof PrivacidadeRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
+  '/termos': typeof TermosRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRouteWithChildren
   '/api/copilot': typeof ApiCopilotRoute
   '/api/copilot-voice': typeof ApiCopilotVoiceRoute
@@ -424,7 +442,9 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/favoritos'
+    | '/privacidade'
     | '/redefinir-senha'
+    | '/termos'
     | '/admin'
     | '/api/copilot'
     | '/api/copilot-voice'
@@ -467,7 +487,9 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/favoritos'
+    | '/privacidade'
     | '/redefinir-senha'
+    | '/termos'
     | '/api/copilot'
     | '/api/copilot-voice'
     | '/negociacao/$id'
@@ -510,7 +532,9 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/favoritos'
+    | '/privacidade'
     | '/redefinir-senha'
+    | '/termos'
     | '/_authenticated/admin'
     | '/api/copilot'
     | '/api/copilot-voice'
@@ -555,7 +579,9 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   FavoritosRoute: typeof FavoritosRoute
+  PrivacidadeRoute: typeof PrivacidadeRoute
   RedefinirSenhaRoute: typeof RedefinirSenhaRoute
+  TermosRoute: typeof TermosRoute
   ApiCopilotRoute: typeof ApiCopilotRoute
   ApiCopilotVoiceRoute: typeof ApiCopilotVoiceRoute
   NegociacaoIdRoute: typeof NegociacaoIdRoute
@@ -601,11 +627,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FavoritosRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/privacidade': {
+      id: '/privacidade'
+      path: '/privacidade'
+      fullPath: '/privacidade'
+      preLoaderRoute: typeof PrivacidadeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/redefinir-senha': {
       id: '/redefinir-senha'
       path: '/redefinir-senha'
       fullPath: '/redefinir-senha'
       preLoaderRoute: typeof RedefinirSenhaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/termos': {
+      id: '/termos'
+      path: '/termos'
+      fullPath: '/termos'
+      preLoaderRoute: typeof TermosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/admin': {
@@ -955,7 +995,9 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   FavoritosRoute: FavoritosRoute,
+  PrivacidadeRoute: PrivacidadeRoute,
   RedefinirSenhaRoute: RedefinirSenhaRoute,
+  TermosRoute: TermosRoute,
   ApiCopilotRoute: ApiCopilotRoute,
   ApiCopilotVoiceRoute: ApiCopilotVoiceRoute,
   NegociacaoIdRoute: NegociacaoIdRoute,
