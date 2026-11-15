@@ -83,10 +83,50 @@ async function runOne(s: Row, decision: SyncDecision) {
         failed = true;
         result.code = "CATALOG_INCOMPLETE";
       }
+      if (r.writeErrors) {
+        failed = true;
+        result.code = "WRITE_ERRORS";
+        result.writeErrors = r.writeErrors;
+      }
     }
   } catch (e) {
     failed = true;
-    result.error = e instanceof Error ? e.message : "falha";
+    const message = e instanceof Error ? e.message : "falha";
+    result.error = message;
+    // Exceção no meio da rodada: encerra o ciclo como erro (o motor não chegou a fazê-lo) em vez de deixar o fornecedor
+    // "sincronizando" e a mesma falha se repetindo a cada minuto.
+    try {
+      const nowIso = new Date().toISOString();
+      if (s.current_sync_run_id) {
+        await supabaseAdmin
+          .from("sync_runs")
+          .update({ status: "erro", stage: "IMPORT", error_code: "ROUND_EXCEPTION", error_message: message.slice(0, 500), finished_at: nowIso })
+          .eq("id", s.current_sync_run_id)
+          .is("finished_at", null);
+      }
+      await supabaseAdmin
+        .from("sync_runs")
+        .update({ status: "erro", stage: "IMPORT", error_code: "ROUND_EXCEPTION", error_message: message.slice(0, 500), finished_at: nowIso })
+        .eq("supplier_id", s.id)
+        .is("finished_at", null);
+      await supabaseAdmin
+        .from("suppliers")
+        .update({
+          sync_status: "erro",
+          sync_message: message.slice(0, 300),
+          sync_error_code: "ROUND_EXCEPTION",
+          sync_stage: "IMPORT",
+          sync_locked_at: null,
+          sync_cursor: null,
+          sync_run_started_at: null,
+          current_sync_run_id: null,
+          last_sync_at: nowIso,
+          consecutive_sync_failures: Number(s.consecutive_sync_failures ?? 0) + 1,
+        })
+        .eq("id", s.id);
+    } catch {
+      /* o próximo ciclo trata (ciclo > 3 h vira INTERRUPTED) */
+    }
   }
   result.ms = Date.now() - t;
   return { result, failed };
@@ -130,6 +170,8 @@ Deno.serve(async (req) => {
       failed = true;
       break;
     }
+    // Rodada que não fez nada (outra já em andamento, sem leitor): não repete a mesma escolha em laço.
+    if (outcome.result.status === "bloqueado" || outcome.result.status === "sem-integracao") break;
     if (Date.now() - started > START_NEW_ROUND_BEFORE_MS) break;
   }
 

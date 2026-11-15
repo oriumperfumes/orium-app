@@ -53,6 +53,8 @@ export type SyncResult = {
   message: string | null;
   /** A rodada parou antes do fim do lote para respeitar o limite de chamadas; o cursor já aponta para retomar. */
   budgetStopped?: boolean;
+  /** Ofertas que o banco recusou no ciclo (só preenchido no fim do ciclo). */
+  writeErrors?: number;
 };
 
 const hashOf = (o: RawOffer) =>
@@ -163,15 +165,24 @@ export async function runSupplierSync(supplierId: string, cursor = 0): Promise<S
     return { ...base, status: "bloqueado", nextCursor: null, throttled: false, message: `Sincronização automática pausada até ${new Date(supplier.circuit_open_until).toLocaleString("pt-BR")}. Use Testar conexão para verificar a fonte.` };
   }
 
-  const locked = supplier.sync_locked_at ? Date.now() - Date.parse(supplier.sync_locked_at) < LOCK_MS : false;
-  if (locked && cursor === 0) {
-    return {
-      ...base,
-      status: "bloqueado",
-      nextCursor: null,
-      throttled: false,
-      message: "Já existe uma sincronização em andamento.",
-    };
+  if (cursor === 0) {
+    // Reivindicação atômica: duas chamadas simultâneas (job de 3 h + continuação) não abrem o mesmo ciclo.
+    const staleBefore = new Date(Date.now() - LOCK_MS).toISOString();
+    const { data: claimed } = await db
+      .from("suppliers")
+      .update({ sync_locked_at: startedAt.toISOString() })
+      .eq("id", supplierId)
+      .or(`sync_locked_at.is.null,sync_locked_at.lt.${staleBefore}`)
+      .select("id");
+    if (!claimed?.length) {
+      return {
+        ...base,
+        status: "bloqueado",
+        nextCursor: null,
+        throttled: false,
+        message: "Já existe uma sincronização em andamento.",
+      };
+    }
   }
 
   const adapter = getAdapter(supplier);
@@ -321,13 +332,21 @@ export async function runSupplierSync(supplierId: string, cursor = 0): Promise<S
   if (categoryRows.size) await db.from("supplier_categories").upsert([...categoryRows.values()], { onConflict: "supplier_id,name" });
 
   // Ofertas já conhecidas deste fornecedor
-  const { data: existingRows } = await db
-    .from("supplier_products")
-    .select(
-      "id, supplier_sku, url, supplier_product_name, price, price_anomaly, data_hash, product_id, in_stock, image_url, image_urls, catalog_eligibility_reason, catalog_excluded_manually",
-    )
-    .eq("supplier_id", supplierId);
-  const existing = existingRows ?? [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const existing: Array<any> = [];
+  for (let from = 0; ; from += 1000) {
+    const { data: pageRows, error: pageError } = await db
+      .from("supplier_products")
+      .select(
+        "id, supplier_sku, url, supplier_product_name, price, price_anomaly, data_hash, product_id, in_stock, image_url, image_urls, catalog_eligibility_reason, catalog_excluded_manually",
+      )
+      .eq("supplier_id", supplierId)
+      .order("id", { ascending: true })
+      .range(from, from + 999);
+    if (pageError) throw new Error(`Falha ao ler as ofertas do fornecedor: ${pageError.message}`);
+    existing.push(...(pageRows ?? []));
+    if ((pageRows ?? []).length < 1000) break;
+  }
   const bySku = new Map(existing.filter((r) => r.supplier_sku).map((r) => [r.supplier_sku as string, r]));
   const byUrl = new Map(existing.filter((r) => r.url).map((r) => [r.url as string, r]));
   const byName = new Map(existing.map((r) => [normalizeName(r.supplier_product_name), r]));
@@ -412,6 +431,8 @@ export async function runSupplierSync(supplierId: string, cursor = 0): Promise<S
    * acumula, e `flushOfferWrites` grava tudo em poucas chamadas.
    */
   type OfferRow = Record<string, unknown> & { id: string };
+  let writeFailures = 0; // ofertas que o banco recusou (ex.: SKU já usado por outra oferta duplicada)
+  let writeErrorSample: string | null = null;
   const pendingOffers = new Map<string, OfferRow>(); // ofertas existentes, linha completa (upsert por id)
   const unchangedGroups = new Map<string, { ids: string[]; fields: Record<string, unknown> }>(); // ofertas sem mudança
   const historyRows: Array<{ supplier_product_id: string; price: number; in_stock: boolean; source: string }> = [];
@@ -441,8 +462,19 @@ export async function runSupplierSync(supplierId: string, cursor = 0): Promise<S
     pendingOffers.clear();
     for (const rows of bySignature.values()) {
       for (let i = 0; i < rows.length; i += ITEM_BATCH_CHUNK) {
-        const { error } = await db.from("supplier_products").upsert(rows.slice(i, i + ITEM_BATCH_CHUNK) as never, { onConflict: "id" });
-        if (error) throw new Error(`Falha ao gravar ofertas: ${error.message}`);
+        const chunk = rows.slice(i, i + ITEM_BATCH_CHUNK);
+        const { error } = await db.from("supplier_products").upsert(chunk as never, { onConflict: "id" });
+        if (error) {
+          // Uma linha ruim não derruba as outras: grava uma a uma e conta as que o banco recusou (viram falha parcial no fim do ciclo).
+          for (const row of chunk) {
+            const { id, ...fields } = row;
+            const { error: rowError } = await db.from("supplier_products").update(fields as never).eq("id", id);
+            if (rowError) {
+              writeFailures++;
+              writeErrorSample ??= rowError.message;
+            }
+          }
+        }
       }
     }
     for (let i = 0; i < historyRows.length; i += 200) await db.from("supplier_price_history").insert(historyRows.slice(i, i + 200));
@@ -476,7 +508,7 @@ export async function runSupplierSync(supplierId: string, cursor = 0): Promise<S
       const unchangedAvailability = item.availabilityStatus ?? (item.inStock ? "AVAILABLE" : "UNAVAILABLE");
       const unchangedInStock = unchangedAvailability === "UNKNOWN" ? prev.in_stock : item.inStock;
       const groupKey = `${unchangedInStock}|${unchangedAvailability}|${item.stock ?? ""}`;
-      const group = unchangedGroups.get(groupKey) ?? {
+      const group: { ids: string[]; fields: Record<string, unknown> } = unchangedGroups.get(groupKey) ?? {
         ids: [],
         fields: {
           last_synced_at: now,
@@ -836,7 +868,10 @@ export async function runSupplierSync(supplierId: string, cursor = 0): Promise<S
   }
 
   await flushChanges();
-  const status = complete && !catalogIncomplete ? "ok" : "parcial";
+  // Erros de gravação do ciclo (acumulados entre rodadas): o ciclo não conta como bem-sucedido.
+  const cycleWriteErrors = (cursor === 0 ? 0 : Number(((supplier.ingestion_stats as Record<string, number> | null) ?? {})["errors"] ?? 0)) + writeFailures;
+  const hasWriteErrors = complete && cycleWriteErrors > 0;
+  const status = complete && !catalogIncomplete && !hasWriteErrors ? "ok" : "parcial";
   const processed = created + updated + unchanged;
 
   const previousDetails = (supplier.ingestion_stats as Record<string, number> | null) ?? {};
@@ -849,7 +884,7 @@ export async function runSupplierSync(supplierId: string, cursor = 0): Promise<S
     created: Number(cycle["created"] ?? 0) + created,
     updated: Number(cycle["updated"] ?? 0) + updated,
     ignored: Number(cycle["ignored"] ?? 0) + blocked,
-    errors: Number(cycle["errors"] ?? 0),
+    errors: cycleWriteErrors,
     pages: Number(cycle["pages"] ?? 0) + batch.pages,
   };
   // Elegibilidade do catálogo (fora do catálogo por marca NÃO é falha).
@@ -907,12 +942,14 @@ export async function runSupplierSync(supplierId: string, cursor = 0): Promise<S
     .from("suppliers")
     .update({
       last_sync_at: endedAt,
-      ...(complete && !catalogIncomplete ? { last_successful_sync_at: endedAt } : {}),
-      ...(complete && !catalogIncomplete && catalogSize ? { last_catalog_size: catalogSize } : {}),
-      sync_status: catalogIncomplete ? "atencao" : status,
+      ...(complete && !catalogIncomplete && !hasWriteErrors ? { last_successful_sync_at: endedAt } : {}),
+      ...(complete && !catalogIncomplete && !hasWriteErrors && catalogSize ? { last_catalog_size: catalogSize } : {}),
+      sync_status: catalogIncomplete || hasWriteErrors ? "atencao" : status,
       sync_message: catalogIncomplete
         ? "A loja devolveu bem menos itens do que o normal. Nada foi retirado do catálogo."
-        : complete
+        : hasWriteErrors
+          ? `${cycleWriteErrors} ofertas não puderam ser gravadas${writeErrorSample ? ` (${writeErrorSample})` : ""}. As demais foram gravadas.`
+          : complete
           ? `${processed} itens conferidos · ${created} novos · ${updated} atualizados${blocked ? ` · ${blocked} bloqueados` : ""}${withoutImage ? ` · ${withoutImage} sem foto` : ""}${anomalies ? ` · ${anomalies} preços em revisão` : ""}`
           : `Sincronizando… ${processed} itens conferidos até agora.`,
       // Rodada encerrada: last_sync_at == sync_locked_at (a rota usa isso para saber que não há rodada em andamento).
@@ -921,7 +958,7 @@ export async function runSupplierSync(supplierId: string, cursor = 0): Promise<S
       sync_run_started_at: complete ? null : runStartedAt,
       current_sync_run_id: complete ? null : runId,
       sync_stage: complete ? "IMPORT" : "MATCH",
-      sync_error_code: catalogIncomplete ? "CATALOG_INCOMPLETE" : null,
+      sync_error_code: catalogIncomplete ? "CATALOG_INCOMPLETE" : hasWriteErrors ? "WRITE_ERRORS" : null,
       consecutive_sync_failures: complete ? 0 : supplier.consecutive_sync_failures,
       circuit_open_until: complete ? null : supplier.circuit_open_until,
       ingestion_stats: { ...totals, total: batch.total, at: now, source: "auto", baseline: !supplier.last_successful_sync_at } as never,
@@ -953,9 +990,12 @@ export async function runSupplierSync(supplierId: string, cursor = 0): Promise<S
     nextCursor,
     throttled: Boolean(batch.throttled),
     catalogIncomplete,
+    writeErrors: hasWriteErrors ? cycleWriteErrors : 0,
     message: catalogIncomplete
       ? "A loja devolveu bem menos itens do que o normal. Nada foi retirado do catálogo."
-      : null,
+      : hasWriteErrors
+        ? `${cycleWriteErrors} ofertas não puderam ser gravadas${writeErrorSample ? ` (${writeErrorSample})` : ""}.`
+        : null,
   };
 }
 
