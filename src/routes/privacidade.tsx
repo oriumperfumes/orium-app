@@ -34,16 +34,18 @@ function PrivacyPage() {
             quando há entrega, endereço e CEP; itens, valores e forma de pagamento escolhida.
           </li>
           <li>
-            <strong>Conta (opcional):</strong> e-mail e senha, ou nome, e-mail e foto de perfil que o Google informa
-            quando você entra com Google. Não recebemos a sua senha do Google.
+            <strong>Conta (opcional):</strong> e-mail e credencial de acesso administrada pelo serviço de
+            autenticação. Se usar o Google, recebemos seu identificador, e-mail e dados básicos de perfil
+            disponibilizados por ele, como nome e foto, para identificar sua conta e permitir o acesso.
           </li>
           <li>
-            <strong>Uso do site:</strong> favoritos, sacola, buscas, páginas vistas e um identificador do seu aparelho,
-            para o site funcionar, lembrar a sua sacola e entender quais perfumes interessam.
+            <strong>Uso do site:</strong> favoritos, sacola, buscas, páginas vistas, origem da visita, um
+            identificador do navegador e informações técnicas como tipo de aparelho, navegador e idioma. A atividade
+            pode ser associada à sua conta ou ao seu pedido quando você se identifica.
           </li>
           <li>
-            <strong>Atendimento:</strong> mensagens que você nos envia por WhatsApp ou por outro canal que a Orium
-            venha a conectar.
+            <strong>Atendimento:</strong> mensagens e informações do pedido que você compartilha com a Orium pelo
+            WhatsApp ou por e-mail.
           </li>
         </ul>
         <p>
@@ -57,7 +59,7 @@ function PrivacyPage() {
           <li>Registrar, confirmar, preparar e entregar o seu pedido, e cobrar e conferir o pagamento (execução do contrato).</li>
           <li>Calcular frete e prazos.</li>
           <li>Manter o seu login e a segurança da conta, e evitar fraudes (legítimo interesse e prevenção a fraudes).</li>
-          <li>Atender dúvidas e pós-venda, inclusive com ferramentas de inteligência artificial como apoio, com a equipe no controle.</li>
+          <li>Atender dúvidas, acompanhar pedidos e prestar suporte pós-venda.</li>
           <li>Melhorar a loja e o catálogo com estatísticas de uso (legítimo interesse).</li>
           <li>Avisar sobre disponibilidade de produto, quando você pede, e cumprir obrigações legais e fiscais.</li>
         </ul>
@@ -67,12 +69,10 @@ function PrivacyPage() {
         <h2>Com quem compartilhamos</h2>
         <p>Só com quem precisa para a loja funcionar, sempre no limite do necessário:</p>
         <ul>
-          <li>Supabase (banco de dados e login), com servidores no Brasil.</li>
-          <li>Cloudflare (hospedagem e segurança do site).</li>
-          <li>Google (login com Google).</li>
-          <li>SuperFrete e transportadoras/Correios (CEP, medidas e dados de entrega para cotar e enviar).</li>
-          <li>WhatsApp/Meta (conversa com a Orium, iniciada por você).</li>
-          <li>Provedor de IA contratado pela Orium, para apoiar o atendimento.</li>
+          <li>Supabase, para banco de dados e autenticação, e Cloudflare, para hospedagem e segurança do site.</li>
+          <li>Google, quando você usa o login com Google, e para envio de e-mails de cadastro e recuperação.</li>
+          <li>Serviços de entrega, quando você solicita envio, para cotar o frete e realizar a entrega.</li>
+          <li>WhatsApp (Meta), quando o checkout abre uma mensagem com os dados do pedido ou quando você usa o canal para falar com a Orium.</li>
         </ul>
         <p>Não vendemos os seus dados.</p>
       </section>
@@ -80,9 +80,10 @@ function PrivacyPage() {
       <section>
         <h2>Por quanto tempo guardamos</h2>
         <p>
-          Guardamos os dados do pedido pelo tempo necessário para o atendimento, a garantia e as obrigações fiscais e
-          legais. Dados de conta ficam enquanto a conta existir. Depois, são apagados ou anonimizados, salvo quando a
-          lei exigir guarda. [CONFIRMAR: prazo, por exemplo 5 anos para pedidos; REVISAR JURÍDICO].
+          O prazo de guarda depende da finalidade de cada dado. Mantemos os dados da conta para prestar o serviço
+          enquanto a conta estiver ativa. Os registros de pedidos são mantidos pelo tempo necessário para atender
+          solicitações sobre a compra e cumprir obrigações legais e fiscais. Você pode pedir a exclusão da conta
+          pelos canais abaixo. Alguns registros podem ser conservados nas hipóteses previstas em lei.
         </p>
       </section>
 
