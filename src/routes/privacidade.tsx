@@ -49,7 +49,7 @@ function PrivacyPage() {
           </li>
         </ul>
         <p>
-          Não coletamos dados de cartão no site: o pagamento (Pix ou cartão) é combinado com a Orium depois do pedido.
+          O site registra o pedido. A Orium fornece as orientações para pagamento por Pix pelo WhatsApp.
         </p>
       </section>
 
@@ -57,7 +57,7 @@ function PrivacyPage() {
         <h2>Para que usamos</h2>
         <ul>
           <li>Registrar, confirmar, preparar e entregar o seu pedido, e cobrar e conferir o pagamento (execução do contrato).</li>
-          <li>Calcular frete e prazos.</li>
+          <li>Combinar o valor da entrega e o prazo com você.</li>
           <li>Manter o seu login e a segurança da conta, e evitar fraudes (legítimo interesse e prevenção a fraudes).</li>
           <li>Atender dúvidas, acompanhar pedidos e prestar suporte pós-venda.</li>
           <li>Melhorar a loja e o catálogo com estatísticas de uso (legítimo interesse).</li>
