@@ -114,6 +114,66 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export const MAX_CONCURRENCY = 2;
 
+/* ------------- limite de tempo e bloqueio do lote inteiro (modo "estrito") -------------
+ * Cada leitura limita a si mesma (20 s), mas tentativas, esperas e leitor alternativo somados
+ * passavam de 5 min numa única página. No modo estrito (agendamento na Edge Function) o lote
+ * inteiro tem um prazo: leituras e esperas são cortadas pelo tempo restante, 403/429 encerram o
+ * lote na hora e falhas seguidas também. Nada disso marca perfume como inexistente.
+ */
+export type BatchStop = { reason: "deadline" | "blocked" | "consecutive-failures"; httpStatus: number | null; detail: string };
+
+/** Menos que isso restando: não começa outra leitura. */
+export const MIN_FETCH_MS = 6_000;
+const MAX_CONSECUTIVE_FAILURES = 3;
+
+let batchDeadline: number | null = null;
+let batchStop: BatchStop | null = null;
+let consecutiveFailures = 0;
+
+const strictBatch = () => batchDeadline !== null;
+export const remainingMs = () => (batchDeadline === null ? Number.POSITIVE_INFINITY : batchDeadline - Date.now());
+export const currentBatchStop = () => batchStop;
+
+export function stopBatch(stop: BatchStop) {
+  if (!batchStop) batchStop = stop;
+}
+
+/** Começa um lote com prazo (ms absolutos). Zera o ritmo adaptativo, que sobrevive entre chamadas na mesma instância. */
+export function beginBatch(deadlineAt: number) {
+  batchDeadline = deadlineAt;
+  batchStop = null;
+  consecutiveFailures = 0;
+  limit = MAX_CONCURRENCY;
+  gapMs = 2500;
+  cooldownUntil = 0;
+  streak = 0;
+}
+
+export function endBatch(): BatchStop | null {
+  const stop = batchStop;
+  batchDeadline = null;
+  batchStop = null;
+  return stop;
+}
+
+/** Verifica prazo e bloqueio antes de qualquer leitura externa. */
+function batchGate(): BatchStop | null {
+  if (batchStop) return batchStop;
+  if (remainingMs() < MIN_FETCH_MS) {
+    stopBatch({ reason: "deadline", httpStatus: null, detail: "tempo do lote esgotado antes de nova leitura" });
+  }
+  return batchStop;
+}
+
+function noteFetchFailure() {
+  consecutiveFailures++;
+  if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+    stopBatch({ reason: "consecutive-failures", httpStatus: null, detail: `${consecutiveFailures} leituras seguidas sem resposta útil` });
+  }
+}
+
+const boundedSleep = (ms: number) => (strictBatch() ? Math.min(ms, Math.max(0, remainingMs() - MIN_FETCH_MS)) : ms);
+
 /**
  * Ritmo adaptativo: começa rápido e desacelera sozinho quando a fonte reclama
  * (429/403/timeout), voltando a acelerar depois de uma sequência de sucessos.
@@ -128,7 +188,7 @@ function slowDown() {
   streak = 0;
   limit = 1;
   gapMs = Math.min(12_000, Math.round(gapMs * 1.5));
-  cooldownUntil = Date.now() + 60_000;
+  if (!strictBatch()) cooldownUntil = Date.now() + 60_000;
 }
 
 function speedUp() {
@@ -147,7 +207,7 @@ async function acquire() {
   while (active >= limit) await new Promise<void>((r) => waiting.push(r));
   active++;
   const wait = Math.max(gapMs - (Date.now() - lastStart), cooldownUntil - Date.now());
-  if (wait > 0) await sleep(wait);
+  if (wait > 0) await sleep(boundedSleep(wait));
   lastStart = Date.now();
 }
 
@@ -201,12 +261,22 @@ export async function fetchPage(url: string, opts: { minLength?: number; force?:
     return { html: hit.html, httpStatus: hit.html ? 200 : 404, fromCache: true, failed: false };
   }
 
+  if (strictBatch()) {
+    const stop = batchGate();
+    if (stop) return { html: null, httpStatus: stop.httpStatus, fromCache: false, failed: true };
+  }
+
   await acquire();
   try {
+    if (strictBatch()) {
+      const stop = batchGate();
+      if (stop) return { html: null, httpStatus: stop.httpStatus, fromCache: false, failed: true };
+    }
     let httpStatus: number | null = null;
     let blocked = false;
     let blockedStatus: number | null = null;
     for (let attempt = 0; attempt < 3; attempt++) {
+      if (strictBatch() && attempt > 0 && (batchStop || remainingMs() < MIN_FETCH_MS)) break;
       try {
         const res = await fetch(url, {
           headers: {
@@ -215,16 +285,18 @@ export async function fetchPage(url: string, opts: { minLength?: number; force?:
             Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
           },
           redirect: "follow",
-          signal: AbortSignal.timeout(20_000),
+          signal: AbortSignal.timeout(strictBatch() ? Math.max(1_000, Math.min(20_000, remainingMs() - 1_500)) : 20_000),
         });
         httpStatus = res.status;
         if (res.status === 404) {
+          consecutiveFailures = 0;
           htmlCache.set(url, { at: Date.now(), html: null });
           speedUp();
           return { html: null, httpStatus, fromCache: false, failed: false, via: "direto" };
         }
         const text = await res.text();
         if (res.status === 200) {
+          consecutiveFailures = 0;
           speedUp();
           if (text.length >= minLength) {
             htmlCache.set(url, { at: Date.now(), html: text });
@@ -235,6 +307,12 @@ export async function fetchPage(url: string, opts: { minLength?: number; force?:
           return { html: null, httpStatus, fromCache: false, failed: false, via: "direto" };
         }
         if (res.status === 403 || res.status === 429) {
+          if (strictBatch()) {
+            // Lote com prazo: a fonte recusou — encerra o lote, sem esperar nem insistir; os dados existentes ficam como estão.
+            const retryAfter = res.headers.get("retry-after");
+            stopBatch({ reason: "blocked", httpStatus: res.status, detail: `Fragrantica respondeu ${res.status}${retryAfter ? ` (retry-after ${retryAfter})` : ""} em ${url}` });
+            return { html: null, httpStatus: res.status, fromCache: false, failed: true, via: "direto" };
+          }
           // limite de acesso da fonte: espera e tenta de novo antes do caminho alternativo
           slowDown();
           blocked = true;
@@ -245,10 +323,13 @@ export async function fetchPage(url: string, opts: { minLength?: number; force?:
           break;
         }
         if (res.status >= 500) slowDown();
-      } catch {
+      } catch (e) {
         slowDown();
+        // Lote com prazo: quem não respondeu em 20 s não responde 2 s depois — falha temporária, sem nova tentativa.
+        const name = (e as { name?: string } | null)?.name;
+        if (strictBatch() && (name === "TimeoutError" || name === "AbortError")) break;
       }
-      await sleep(1000 + attempt * 1500 + Math.random() * 700);
+      await sleep(boundedSleep(1000 + attempt * 1500 + Math.random() * 700));
     }
 
     if (blocked) {
@@ -263,8 +344,9 @@ export async function fetchPage(url: string, opts: { minLength?: number; force?:
         return { html: null, httpStatus: 404, fromCache: false, failed: false, via: "leitor-de-texto" };
       }
     }
-    // não conseguimos ler: falha técnica, nunca "não encontrado"
+    // não conseguimos ler: falha técnica (timeout incluído), nunca "não encontrado"
 
+    if (strictBatch()) noteFetchFailure();
     slowDown();
     return { html: null, httpStatus: blockedStatus ?? httpStatus, fromCache: false, failed: true };
   } finally {
@@ -400,12 +482,15 @@ export async function brandCandidates(
   let requests = 0;
   let failed = false;
   const variants = (await brandVariants(db, brand)).slice(0, 4);
-  for (const variant of variants) {
+  outer: for (const variant of variants) {
     for (const slug of brandSlugs(variant).slice(0, 3)) {
       for (const path of [`${BASE}/desenhista/${slug}.html`, `${BASE}/designers/${slug}.html`]) {
         const res = await fetchPage(path, { minLength: 15_000, force: opts.force ?? false });
         if (!res.fromCache) requests++;
-        if (res.failed) failed = true;
+        if (res.failed) {
+          failed = true;
+          if (strictBatch() && (batchStop || remainingMs() < MIN_FETCH_MS)) break outer;
+        }
         if (!res.html) continue;
         const candidates = parseBrandPage(res.html);
         if (candidates.length) {

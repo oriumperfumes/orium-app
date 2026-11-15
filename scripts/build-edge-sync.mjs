@@ -1,5 +1,5 @@
-// Gera supabase/functions/sync-suppliers/index.ts (um arquivo só) a partir do motor do app.
-// Uso: node scripts/build-edge-sync.mjs
+// Gera supabase/functions/<nome>/index.ts (um arquivo só) a partir do motor do app.
+// Uso: node scripts/build-edge-sync.mjs [sync-suppliers|enrich-fragrances|all]  (padrão: all)
 import { build } from "esbuild";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
@@ -7,9 +7,14 @@ import { dirname, resolve } from "node:path";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const clientShim = resolve(root, "supabase/edge-src/client.edge.ts");
 
+const FUNCTIONS = ["sync-suppliers", "enrich-fragrances"];
+const wanted = process.argv[2] && process.argv[2] !== "all" ? [process.argv[2]] : FUNCTIONS;
+if (wanted.some((n) => !FUNCTIONS.includes(n))) throw new Error("função desconhecida: " + wanted.join(","));
+
+for (const name of wanted) {
 const result = await build({
-  entryPoints: [resolve(root, "supabase/edge-src/sync-suppliers.ts")],
-  outfile: resolve(root, "supabase/functions/sync-suppliers/index.ts"),
+  entryPoints: [resolve(root, `supabase/edge-src/${name}.ts`)],
+  outfile: resolve(root, `supabase/functions/${name}/index.ts`),
   bundle: true,
   format: "esm",
   platform: "node",
@@ -21,7 +26,7 @@ const result = await build({
   metafile: true,
   banner: {
     js: [
-      "// GERADO por scripts/build-edge-sync.mjs — não edite. Fonte: supabase/edge-src/sync-suppliers.ts + src/lib/suppliers/*.",
+      `// GERADO por scripts/build-edge-sync.mjs — não edite. Fonte: supabase/edge-src/${name}.ts + src/lib/*.`,
       'import { createRequire as __createRequire } from "node:module";',
       "const require = __createRequire(import.meta.url);",
     ].join("\n"),
@@ -42,4 +47,5 @@ const result = await build({
   ],
 });
 const inputs = Object.keys(result.metafile.inputs).filter((p) => !p.startsWith("node_modules"));
-console.log("arquivos do projeto no pacote:", inputs.length);
+console.log(name + ": arquivos do projeto no pacote:", inputs.length);
+}
