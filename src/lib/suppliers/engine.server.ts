@@ -270,7 +270,7 @@ export async function runSupplierSync(supplierId: string, cursor = 0): Promise<S
 
   let batch;
   try {
-    batch = await adapter.fetchBatch(cursor, BUDGET_MS);
+    batch = await adapter.fetchBatch(cursor, BUDGET_MS, { knownPaymentDiscount: supplier.payment_discount_percent });
   } catch (e) {
     const known = e instanceof KlAdapterError ? e : null;
     return fail(`${known?.code ?? "NETWORK_ERROR"}: ${e instanceof Error ? e.message : "erro desconhecido"} Os preços e a disponibilidade válidos anteriores foram mantidos.`, known?.code ?? "NETWORK_ERROR", "FETCH", known?.responseMeta ?? null);
