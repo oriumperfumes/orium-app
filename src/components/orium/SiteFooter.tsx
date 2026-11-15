@@ -18,6 +18,14 @@ export function SiteFooter() {
       {/* celular e tablet */}
       <p className="shell pt-2 pb-[calc(6.5rem+env(safe-area-inset-bottom))] text-center text-[12px] leading-relaxed lg:hidden">
         Orium Perfumes · Perfumes árabes em decants e frascos · WhatsApp {PHONE_LABEL}
+        <br />
+        <Link to={"/privacidade" as never} className="underline-offset-2 hover:underline">
+          Privacidade
+        </Link>
+        {" · "}
+        <Link to={"/termos" as never} className="underline-offset-2 hover:underline">
+          Termos
+        </Link>
       </p>
 
       {/* computador */}
@@ -68,7 +76,15 @@ export function SiteFooter() {
         </div>
         <div className="shell flex items-center justify-between border-t border-white/[0.06] py-6 text-[13px]">
           <span>© {year} Orium Perfumes</span>
-          <span>Pedidos finalizados pelo WhatsApp</span>
+          <span className="flex items-center gap-5">
+            <Link to={"/privacidade" as never} className="hover:text-white">
+              Privacidade
+            </Link>
+            <Link to={"/termos" as never} className="hover:text-white">
+              Termos
+            </Link>
+            <span>Pedidos finalizados pelo WhatsApp</span>
+          </span>
         </div>
       </div>
     </footer>
