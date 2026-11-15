@@ -82,7 +82,7 @@ function PrivacyPage() {
         <p>
           Guardamos os dados do pedido pelo tempo necessário para o atendimento, a garantia e as obrigações fiscais e
           legais. Dados de conta ficam enquanto a conta existir. Depois, são apagados ou anonimizados, salvo quando a
-          lei exigir guarda.
+          lei exigir guarda. [CONFIRMAR: prazo, por exemplo 5 anos para pedidos; REVISAR JURÍDICO].
         </p>
       </section>
 

@@ -44,8 +44,10 @@ function TermsPage() {
         <h2>Pedido e pagamento</h2>
         <ul>
           <li>O pedido feito no site fica registrado e é confirmado com você pelo WhatsApp {LEGAL.whatsapp}.</li>
-          <li>O pedido só é fechado depois dessa confirmação e do pagamento combinado (Pix ou cartão).</li>
-          <li>Os preços e descontos (como o do Pix) são os mostrados no momento do pedido. Podemos corrigir erros evidentes de preço antes de confirmar.</li>
+          <li>O pedido só é fechado depois dessa confirmação e do pagamento combinado (Pix ou cartão). [CONFIRMAR: pagamento antes do envio/retirada? prazo para pagar antes de o pedido ser cancelado?]</li>
+          <li>Os preços e descontos são os mostrados no momento do pedido. O desconto de 5% é no Pix; no cartão vale o preço do cartão mostrado no pedido. [CONFIRMAR: parcelamento e taxas, se houver]</li>
+          <li>Compras de atacado (a partir de 6 peças) têm preço próprio, mostrado na sacola.</li>
+          <li>Podemos corrigir erros evidentes de preço antes de confirmar.</li>
           <li>Disponibilidade depende de estoque; se algo faltar, avisamos e combinamos a melhor solução com você.</li>
         </ul>
       </section>
@@ -53,9 +55,11 @@ function TermsPage() {
       <section>
         <h2>Entrega</h2>
         <p>
-          Você pode retirar na loja, receber por entrega local (valor combinado) ou por envio pelos Correios/
-          transportadora, com frete e prazo calculados para o seu CEP. Prazos de envio contam depois da postagem; itens
-          sob encomenda saem depois que o produto chega à Orium. Confira os dados de entrega ao pedir.
+          Você pode retirar na loja em Itaguaí/RJ (sem custo), receber por entrega local (Itaguaí, Seropédica,
+          Mangaratiba e Rio de Janeiro, por Uber Entregas ou 99 Entrega, com valor combinado pelo WhatsApp) ou por envio
+          pelos Correios, com frete e prazo calculados para o seu CEP. Itens sob encomenda têm previsão de cerca de 4
+          dias para retirada ou entrega local; no envio pelos Correios, o prazo da transportadora conta depois da
+          postagem, e a postagem depende da chegada do produto à Orium. Confira os dados de entrega ao pedir.
         </p>
       </section>
 
@@ -63,7 +67,10 @@ function TermsPage() {
         <h2>Trocas, devolução e arrependimento</h2>
         <p>
           Nas compras feitas à distância, você pode desistir em até 7 dias corridos do recebimento (Código de Defesa do
-          Consumidor, art. 49). [REVISAR: regras para decants e frascos já abertos, e quem paga o frete de devolução].
+          Consumidor, art. 49). [REVISAR JURÍDICO + DECIDIR: a loja ainda não tem política escrita para decants e
+          frascos já abertos/usados, produtos sob encomenda e quem paga o frete de devolução. Texto sugerido para
+          decisão: "decants são separados sob pedido e lacrados; após aberto ou usado, só trocamos em caso de defeito
+          ou erro nosso"].
           Produto com defeito ou diferente do pedido: fale conosco pelo WhatsApp {LEGAL.whatsapp} com fotos para
           resolvermos.
         </p>
@@ -89,7 +96,10 @@ function TermsPage() {
         <h2>Responsabilidade</h2>
         <p>
           Fazemos o possível para manter o site disponível e correto, mas ele pode ficar indisponível por manutenção ou
-          por fatores fora do nosso controle. [REVISAR: limites de responsabilidade, conforme a lei].
+          por fatores fora do nosso controle (por exemplo, falhas de provedores, da transportadora ou dos Correios).
+          [REVISAR JURÍDICO: limite de responsabilidade por atrasos de transporte, indisponibilidade do site e
+          alergias/reações ao perfume. A lei do consumidor não deixa limitar responsabilidade por defeito ou por falha
+          nossa; confirmar a redação com advogado].
         </p>
       </section>
 
