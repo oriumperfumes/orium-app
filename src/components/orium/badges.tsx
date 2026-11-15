@@ -47,7 +47,7 @@ export function DeliveryEstimate({
   return (
     <p className={cn("flex items-start gap-2 text-[12.5px] leading-relaxed text-muted-foreground", className)}>
       <Clock3 aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-gold" />
-      <span><strong className="font-semibold text-foreground">Sob encomenda.</strong> Para retirada na loja ou entrega local, previsão de cerca de 4 dias. Para envio pelos Correios/SEDEX, confira o prazo da transportadora no checkout; a postagem depende da chegada do produto à Orium.</span>
+      <span><strong className="font-semibold text-foreground">Sob encomenda.</strong> Para retirada na loja, previsão de cerca de 4 dias. Na entrega, o valor e o prazo são confirmados pelo WhatsApp antes do pagamento.</span>
     </p>
   );
 }
