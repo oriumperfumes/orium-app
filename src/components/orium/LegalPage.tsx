@@ -5,10 +5,10 @@ import type { ReactNode } from "react";
 
 /**
  * RASCUNHO JURIDICO. Enquanto for `true`, as paginas de Privacidade e Termos mostram um aviso de rascunho e
- * mantem `noindex`. Antes de publicar: preencher os campos [PREENCHER] em `src/lib/legal-info.ts`, revisar os
- * textos com quem responde pela Orium (e, se possivel, um advogado) e so entao mudar para `false`.
+ * mantem `noindex`. `false` = textos revisados e aprovados por quem responde pela Orium: sem aviso e indexaveis.
+ * Dados da empresa em `src/lib/legal-info.ts`.
  */
-export const LEGAL_DRAFT = true;
+export const LEGAL_DRAFT = false;
 
 export function LegalPage({ title, updated, children }: { title: string; updated: string; children: ReactNode }) {
   return (

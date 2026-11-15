@@ -9,7 +9,7 @@ export const Route = createFileRoute("/privacidade")({
       { name: "description", content: "Como a Orium Perfumes trata os seus dados pessoais, conforme a LGPD." },
       ...(LEGAL_DRAFT ? [{ name: "robots", content: "noindex" }] : []),
     ],
-    links: [{ rel: "canonical", href: "/privacidade" }],
+    links: [{ rel: "canonical", href: `${LEGAL.site}/privacidade` }],
   }),
   component: PrivacyPage,
 });
@@ -30,7 +30,7 @@ function PrivacyPage() {
         <h2>Quais dados usamos</h2>
         <ul>
           <li>
-            <strong>Pedido e contato:</strong> nome, WhatsApp, forma de receber (retirada, entrega local ou envio) e,
+            <strong>Pedido e contato:</strong> nome, WhatsApp, forma de receber (retirada na loja ou entrega) e,
             quando há entrega, endereço e CEP; itens, valores e forma de pagamento escolhida.
           </li>
           <li>
@@ -71,7 +71,7 @@ function PrivacyPage() {
         <ul>
           <li>Supabase, para banco de dados e autenticação, e Cloudflare, para hospedagem e segurança do site.</li>
           <li>Google, quando você usa o login com Google, e para envio de e-mails de cadastro e recuperação.</li>
-          <li>Serviços de entrega, quando você solicita envio, para cotar o frete e realizar a entrega.</li>
+          <li>Serviços de entrega (como aplicativos de entrega), quando você escolhe receber em casa, somente com o necessário para realizar a entrega.</li>
           <li>WhatsApp (Meta), quando o checkout abre uma mensagem com os dados do pedido ou quando você usa o canal para falar com a Orium.</li>
         </ul>
         <p>Não vendemos os seus dados.</p>

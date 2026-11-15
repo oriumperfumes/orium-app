@@ -16,4 +16,4 @@ export const LEGAL = {
   site: "https://oriumperfumes.com",
 } as const;
 
-export const LEGAL_UPDATED = "14/11/2026";
+export const LEGAL_UPDATED = "15/11/2026";

@@ -10,7 +10,7 @@ export const Route = createFileRoute("/termos")({
       { name: "description", content: "Regras de uso do site e de compra na Orium Perfumes." },
       ...(LEGAL_DRAFT ? [{ name: "robots", content: "noindex" }] : []),
     ],
-    links: [{ rel: "canonical", href: "/termos" }],
+    links: [{ rel: "canonical", href: `${LEGAL.site}/termos` }],
   }),
   component: TermsPage,
 });
@@ -53,9 +53,9 @@ function TermsPage() {
       <section>
         <h2>Entrega</h2>
         <p>
-          A retirada na loja em Itaguaí/RJ é gratuita. Para receber por entrega, informe o endereço à Orium pelo
-          WhatsApp {LEGAL.whatsapp}. A loja confirma se atende o endereço e informa o valor da entrega e o prazo
-          antes de você confirmar a compra. Para itens sob encomenda, a Orium também confirma o prazo de disponibilidade.
+          A retirada na loja em Itaguaí/RJ é gratuita. Para receber por entrega, informe o endereço ao fazer o pedido
+          no site ou pelo WhatsApp {LEGAL.whatsapp}. O pedido fica registrado, e a Orium confirma pelo WhatsApp se
+          atende o endereço e informa o valor da entrega e o prazo antes do pagamento. Para itens sob encomenda, a Orium também confirma o prazo de disponibilidade.
         </p>
       </section>
 
