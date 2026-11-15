@@ -100,6 +100,7 @@ export type OrderResult = {
 
 
 import { getPaymentPricing, normalizePaymentSettings, type PaymentMethod } from "@/lib/payment-rule";
+import { assertPublicCheckoutOptions, LOCAL_DELIVERY_NOTE } from "@/lib/checkout-rules";
 
 const digits = (v?: string | null) => (v ?? "").replace(/\D/g, "");
 
@@ -142,7 +143,12 @@ export const placeCatalogOrder = createServerFn({ method: "POST" })
       });
     if (items.length === 0) throw new Error("Carrinho vazio.");
 
-    const fulfillment: FulfillmentType = data.fulfillment ?? "PICKUP";
+    // Loja pública no lançamento: só Pix, retirada e entrega combinada pelo WhatsApp.
+    // A validação é do servidor: uma tela antiga em cache não consegue abrir outro caminho.
+    const { fulfillment, paymentMethod } = assertPublicCheckoutOptions({
+      fulfillment: data.fulfillment,
+      paymentMethod: data.paymentMethod,
+    });
     const name = (data.customerName ?? "").trim();
     const phone = digits(data.customerPhone);
 
@@ -154,9 +160,6 @@ export const placeCatalogOrder = createServerFn({ method: "POST" })
         if (!a || digits(a.cep).length !== 8 || !a.street || !a.number || !a.district || !a.city || !a.state) {
           throw new Error("Complete o endereço de entrega.");
         }
-      }
-      if (fulfillment === "SHIPPING" && (!data.shipping || !(Number(data.shipping.price) > 0))) {
-        throw new Error("Escolha uma opção de envio.");
       }
     }
 
@@ -304,13 +307,13 @@ export const placeCatalogOrder = createServerFn({ method: "POST" })
     const promotionDiscount = Number(lines.reduce((s, l) => s + l.promotionDiscount, 0).toFixed(2));
     const couponDiscount = Number(lines.reduce((s, l) => s + l.couponDiscount, 0).toFixed(2));
     const couponOk = priced.coupon.status === "OK";
-    const shippingPrice = fulfillment === "SHIPPING" ? Number(data.shipping?.price ?? 0) : 0;
+    // Valor de entrega nunca vem do navegador: na entrega local ele é combinado depois, pelo WhatsApp.
+    const shippingPrice = 0;
     const grandTotal = Number((total + shippingPrice).toFixed(2));
 
     // pagamento: o total dos produtos é o preço no Pix; o cartão é derivado
     // pela regra central e o frete nunca recebe a diferença.
     const paymentSettings = normalizePaymentSettings(settings as never);
-    const paymentMethod: PaymentMethod = data.paymentMethod === "CARD" ? "CARD" : "PIX";
     const payment = getPaymentPricing(total, paymentSettings);
     const pixTotal = Number((payment.pixPrice + shippingPrice).toFixed(2));
     const cardTotal = Number((payment.cardPrice + shippingPrice).toFixed(2));
@@ -401,10 +404,11 @@ export const placeCatalogOrder = createServerFn({ method: "POST" })
         shipping_district: address?.district ?? null,
         shipping_city: address?.city ?? null,
         shipping_state: address?.state ?? null,
-        shipping_service: fulfillment === "SHIPPING" ? (data.shipping?.service ?? null) : null,
+        shipping_service: null,
         shipping_price: shippingPrice,
-        shipping_days: fulfillment === "SHIPPING" ? (data.shipping?.days ?? null) : null,
-        shipping_quote: fulfillment === "SHIPPING" ? ((data.shipping?.quote ?? data.shipping) as never) : null,
+        shipping_days: null,
+        shipping_quote: null,
+        delivery_notes: fulfillment === "LOCAL" ? LOCAL_DELIVERY_NOTE : null,
         grand_total: grandTotal,
         items_subtotal: subtotal,
         promotion_discount: promotionDiscount,

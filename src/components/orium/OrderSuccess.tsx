@@ -16,6 +16,8 @@ export type OrderDone = {
   url: string;
   total: number;
   receive: string;
+  /** entrega combinada: o valor e o prazo ainda serão confirmados pelo WhatsApp */
+  deliveryPending?: boolean;
   payment: string;
   /** primeiro nome do cliente, para falar com ele */
   firstName: string;
@@ -192,7 +194,12 @@ export function OrderSuccess({
   const steps: { label: string; state: "done" | "now" | "next" }[] = [
     { label: "Pedido registrado", state: "done" },
     { label: "Você envia a mensagem no WhatsApp", state: "now" },
-    { label: "A Orium confirma e te passa o pagamento", state: "next" },
+    {
+      label: done.deliveryPending
+        ? "A Orium confirma o valor e o prazo da entrega e te passa o pagamento"
+        : "A Orium confirma e te passa o pagamento",
+      state: "next",
+    },
     { label: "Com o pagamento (metade ou o total), seus perfumes são separados", state: "next" },
     { label: done.receive, state: "next" },
   ];
@@ -286,6 +293,11 @@ export function OrderSuccess({
               </span>
               <span className="text-[26px] font-bold tracking-[-0.02em] text-white tabular-nums">{brl(done.total)}</span>
             </div>
+            {done.deliveryPending ? (
+              <p className="mt-3 text-[13.5px] leading-relaxed text-[#FFD599]">
+                Este valor é só dos produtos. O valor e o prazo da entrega serão confirmados pelo WhatsApp antes do pagamento.
+              </p>
+            ) : null}
           </div>
         </section>
 

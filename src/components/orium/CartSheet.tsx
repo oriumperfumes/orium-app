@@ -29,7 +29,7 @@ import { usePublicCoupons } from "@/lib/use-promotions";
 import { CELEBRATION, ConfettiBurst, CountUp, useCelebrateOnce } from "@/lib/celebration";
 import { getPaymentPricing, paymentLabel, pixOffLabel, usePaymentSettings, type PaymentMethod } from "@/lib/payment";
 
-import { fetchAddressByCep, quoteCartShipping } from "@/lib/shipping.functions";
+import { fetchAddressByCep } from "@/lib/shipping.functions";
 import { ProductImage } from "./ProductCard";
 import { cn } from "@/lib/utils";
 import { useVisualViewport } from "@/hooks/use-visual-viewport";
@@ -43,8 +43,6 @@ import { StepBar } from "@/components/orium/StepProgress";
 import { useReadyToDeliverSnapshot } from "@/lib/ready-to-deliver";
 
 const WHATSAPP = "5521977174508";
-
-type ShippingOption = { service: string; carrier: string; price: number; days: number | null; providerServiceId: string };
 
 /** Sacola em tela cheia (Figma): itens → finalizar pedido → pedido enviado. */
 export function CartDrawer() {
@@ -120,7 +118,6 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
   const { session } = useAuth();
   const place = useServerFn(placeCatalogOrder);
   const lookupCep = useServerFn(fetchAddressByCep);
-  const quote = useServerFn(quoteCartShipping);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const { lead, updateLead } = useLead();
@@ -146,10 +143,6 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
   const [fulfillment, setFulfillment] = useState<FulfillmentType | null>(null);
   const [address, setAddress] = useState(emptyAddress);
   const [cepBusy, setCepBusy] = useState(false);
-  const [options, setOptions] = useState<ShippingOption[]>([]);
-  const [selected, setSelected] = useState<ShippingOption | null>(null);
-  const [quoteBusy, setQuoteBusy] = useState(false);
-  const [quoteError, setQuoteError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const orderKey = useRef(crypto.randomUUID());
   /** Etapas da sacola: itens → finalizar → pedido enviado. */
@@ -181,27 +174,18 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
 
 
   const cepDigits = address.cep.replace(/\D/g, "");
-  // Cotação válida somente para o CEP e os itens utilizados no cálculo.
-  const shippingCartKey = cart.items
-    .map((item) => item.productId + ":" + item.variant + ":" + (item.decantMl ?? "") + ":" + item.quantity)
-    .join("|");
-  useEffect(() => {
-    setSelected(null);
-    setOptions([]);
-    setQuoteError(null);
-  }, [cepDigits, shippingCartKey]);
-  const hasMissingCarrierEstimate = options.some(
-    (option) => option.days == null || !Number.isFinite(option.days) || option.days <= 0,
-  );
-  const shippingPrice = fulfillment === "SHIPPING" ? (selected?.price ?? 0) : 0;
+  // Entrega: valor e prazo são combinados pelo WhatsApp antes do pagamento,
+  // então nunca entram no total do pedido feito pelo site.
+  const shippingPrice = 0;
 
   // Pagamento: o total dos produtos é o preço no Pix; o cartão é derivado pela
   // regra central. O frete nunca recebe a diferença.
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("PIX");
+  // No lançamento o pagamento é só Pix (regra única em checkout-rules).
+  const paymentMethod: PaymentMethod = "PIX";
   const paymentSettings = usePaymentSettings();
   const payment = getPaymentPricing(cart.total, paymentSettings);
   const pixOff = pixOffLabel(paymentSettings);
-  const productsTotal = paymentMethod === "CARD" ? payment.cardPrice : payment.pixPrice;
+  const productsTotal = payment.pixPrice;
   const grandTotal = productsTotal + shippingPrice;
 
   const addressComplete =
@@ -213,10 +197,8 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
     if (name.trim().length < 3 || !isValidPhoneBR(phone)) return false;
     if (!fulfillment) return false;
     if (fulfillment === "PICKUP") return true;
-    if (!addressComplete) return false;
-    if (fulfillment === "SHIPPING") return Boolean(selected);
-    return true;
-  }, [cart.items.length, name, phone, fulfillment, addressComplete, selected]);
+    return addressComplete;
+  }, [cart.items.length, name, phone, fulfillment, addressComplete]);
 
   // CEP preenche o endereço automaticamente
   useEffect(() => {
@@ -239,40 +221,6 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cepDigits, fulfillment]);
 
-  const runQuote = async () => {
-    setQuoteBusy(true);
-    setQuoteError(null);
-    setOptions([]);
-    setSelected(null);
-    try {
-      const res = await quote({
-        data: {
-          cep: cepDigits,
-          items: cart.items.map((i) => ({ productId: i.productId, quantity: i.quantity, decantMl: i.decantMl })),
-        },
-      });
-      if (res.ok) {
-        setOptions(res.options);
-        if (!res.options.length) {
-          setQuoteError("O SuperFrete não retornou opções de envio para este CEP. Consulte a Orium pelo WhatsApp.");
-        }
-      } else setQuoteError(res.message);
-    } catch {
-      setQuoteError("Não conseguimos calcular o frete agora. Fale com a Orium pelo WhatsApp para cotarmos para você.");
-    } finally {
-      setQuoteBusy(false);
-    }
-  };
-
-  const fallbackQuoteLink = () => {
-    const msg =
-      `Olá! Estou montando um pedido na Orium Perfumes e não consegui calcular o frete pelo site.\n\n` +
-      `CEP: ${address.cep || "—"}\nCidade: ${address.city || "—"}\n` +
-      `Minha sacola tem: ${cart.totalQuantity} ${cart.totalQuantity === 1 ? "item" : "itens"}\n` +
-      `Valor dos produtos: ${brl(cart.total)}\n\nPodem consultar o frete para mim?`;
-    return `https://wa.me/${WHATSAPP}?text=${encodeURIComponent(msg)}`;
-  };
-
   const submit = async () => {
     if (!canSubmit || sending) return;
     setSending(true);
@@ -292,16 +240,6 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
           deviceId: deviceId(),
           fulfillment: fulfillment ?? "PICKUP",
           address: fulfillment === "PICKUP" ? null : address,
-          shipping:
-            fulfillment === "SHIPPING" && selected
-              ? {
-                  service: selected.service,
-                  carrier: selected.carrier,
-                  price: selected.price,
-                  days: selected.days,
-                  quote: selected,
-                }
-              : null,
           paymentMethod,
           idempotencyKey: orderKey.current,
         },
@@ -331,24 +269,22 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
       const recebimento =
         fulfillment === "PICKUP"
           ? `Vou retirar aí na loja, em Itaguaí.${hasSpecialOrder ? "\nVi que tem item sob encomenda, então fico no aguardo do prazo certinho (uns 4 dias)." : ""}`
-          : fulfillment === "LOCAL"
-            ? `Quero receber por entrega local:\n${addr}\nPodemos combinar o valor do frete?${hasSpecialOrder ? "\nVi que tem item sob encomenda (uns 4 dias), fico no aguardo da confirmação." : ""}`
-            : `Quero receber pelo envio (${selected?.service ?? "transportadora"}), frete de ${brl(res.shippingPrice)}${selected?.days ? `, prazo de ${selected.days} dias úteis depois da postagem` : ""}:\n${addr}${hasSpecialOrder ? "\nVi que tem item sob encomenda, então o envio sai depois que o perfume chegar, certo?" : ""}`;
+          : `Quero receber por entrega:\n${addr}\nPode me confirmar o valor e o prazo da entrega antes do pagamento?${hasSpecialOrder ? "\nVi que tem item sob encomenda (uns 4 dias), fico no aguardo da confirmação." : ""}`;
 
       const descontos =
         (res.promotionDiscount > 0 ? `Promoção aplicada: -${brl(res.promotionDiscount)}\n` : "") +
         (res.couponDiscount > 0 ? `Cupom ${res.couponCode}: -${brl(res.couponDiscount)}\n` : "");
-      const pagamento =
-        res.paymentMethod === "PIX"
-          ? `Vou pagar no Pix${res.paymentDiscountPercent > 0 ? ` (com os ${res.paymentDiscountPercent}% de desconto)` : ""}.`
-          : `Vou pagar no ${paymentLabel(res.paymentMethod)}.${res.paymentDiscountPercent > 0 ? ` Vi que no Pix sai ${brl(res.pixTotal)}.` : ""}`;
+      const pagamento = `Vou pagar no Pix${res.paymentDiscountPercent > 0 ? ` (com os ${res.paymentDiscountPercent}% de desconto)` : ""}.`;
+      const entregaPendente = fulfillment === "LOCAL";
 
       const msg =
         `Oi, Orium! Aqui é ${first || "um cliente"} 😊\n` +
         `Acabei de montar minha sacola no site e quero fechar:\n\n` +
         `${linhas}\n\n` +
         descontos +
-        `Total: ${brl(res.finalTotal)}\n\n` +
+        (entregaPendente
+          ? `Total dos produtos: ${brl(res.finalTotal)} (a entrega fica de fora: valor e prazo a confirmar)\n\n`
+          : `Total: ${brl(res.finalTotal)}\n\n`) +
         `${recebimento}\n\n` +
         `${pagamento}\n\n` +
         `Meus dados: ${name.trim()} · ${phone}\n\n` +
@@ -359,8 +295,8 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
         number: res.orderNumber ?? null,
         url: waUrl,
         total: res.finalTotal,
-        receive:
-          fulfillment === "PICKUP" ? "Retirada na loja" : fulfillment === "LOCAL" ? "Entrega local" : `Envio · ${selected?.service ?? "transportadora"}`,
+        receive: fulfillment === "PICKUP" ? "Retirada na loja" : "Entrega (valor e prazo a confirmar)",
+        deliveryPending: entregaPendente,
         payment: paymentLabel(res.paymentMethod),
         firstName: name.trim().split(/\s+/)[0] ?? "",
         // economia real: preço cheio dos itens − o que ele pagou pelos itens (sem frete)
@@ -374,9 +310,6 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
       cart.clear();
       setFulfillment(null);
       setAddress(emptyAddress);
-      setOptions([]);
-      setSelected(null);
-      setPaymentMethod("PIX");
       orderKey.current = crypto.randomUUID();
 
       // registro em segundo plano: o WhatsApp abre na hora, sem esperar nada
@@ -462,7 +395,6 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
     !isValidPhoneBR(phone) ? "o WhatsApp com DDD" : null,
     !fulfillment ? "como quer receber" : null,
     fulfillment && fulfillment !== "PICKUP" && !addressComplete ? "o endereço" : null,
-    fulfillment === "SHIPPING" && addressComplete && !selected ? "uma opção de frete" : null,
   ].filter(Boolean) as string[];
   const missingText = missingList.length
     ? `Para continuar, preencha ${
@@ -654,21 +586,20 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
           <ReceiveOption
             active={fulfillment === "LOCAL"}
             onClick={() => setFulfillment("LOCAL")}
-            title="Entrega local"
-            subtitle="Itaguaí e região, por Uber Entregas ou 99 Entrega · valor combinado no WhatsApp"
-            extra={hasSpecialOrder ? "Entregue em até 4 dias" : "Entrega combinada no WhatsApp"}
-          />
-          <ReceiveOption
-            active={fulfillment === "SHIPPING"}
-            onClick={() => setFulfillment("SHIPPING")}
-            title="Enviar pelos Correios"
-            subtitle="Para qualquer lugar do Brasil · frete calculado pelo CEP"
-            extra="Prazo do frete escolhido, após a postagem"
+            title="Entrega"
+            subtitle="Valor e prazo combinados pelo WhatsApp, antes do pagamento"
+            extra="Frete a confirmar · você só paga depois"
           />
         </div>
 
         {fulfillment && fulfillment !== "PICKUP" ? (
           <div className="cart-step-in">
+            <div className="mt-4 rounded-[20px] bg-[#1A1A1A] p-4" role="note">
+              <p className="text-[14px] leading-relaxed text-[#E6E6E6]">
+                Seu pedido é registrado agora, mas o <strong>valor e o prazo da entrega</strong> serão confirmados com você pelo
+                WhatsApp <strong>antes do pagamento</strong>. Nada é cobrado pelo site.
+              </p>
+            </div>
             <p className="mt-8 mb-2.5 text-[15px] font-semibold text-[#CFCFCF]">Endereço de entrega</p>
             <div className="overflow-hidden rounded-[20px] bg-[#1A1A1A]">
               <GroupField label="CEP" aside={cepBusy ? <Loader2 className="size-4 animate-spin text-[#A9A9A9]" /> : null}>
@@ -712,74 +643,18 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
           </div>
         ) : null}
 
-        {fulfillment === "SHIPPING" ? (
-          <div className="mt-4 space-y-3">
-            <button
-              type="button"
-              disabled={!addressComplete || quoteBusy}
-              onClick={runQuote}
-              className="press flex h-[54px] w-full items-center justify-center gap-2 rounded-full bg-white text-[16px] font-bold text-[#15130F] transition-opacity disabled:opacity-35"
-            >
-              {quoteBusy ? <Loader2 className="size-[18px] animate-spin" /> : null}
-              {options.length ? "Recalcular frete" : "Calcular frete"}
-            </button>
-            {options.map((o) => {
-              const on = selected?.providerServiceId === o.providerServiceId;
-              const noDays = o.days == null || !Number.isFinite(o.days) || o.days <= 0;
-              return (
-                <ReceiveOption
-                  key={o.providerServiceId + o.service}
-                  active={on}
-                  onClick={() => !noDays && setSelected(o)}
-                  title={`${o.service} · ${brl(o.price)}`}
-                  subtitle={noDays ? "Prazo não informado" : `${o.days} dias úteis após a postagem`}
-                  disabled={noDays}
-                />
-              );
-            })}
-            {quoteError || hasMissingCarrierEstimate ? (
-              <div className="rounded-[20px] bg-[#1A1A1A] p-4">
-                <p className="text-[14px] leading-relaxed text-[#BABABA]">
-                  {quoteError ?? "Algumas opções não informaram prazo. Fale com a Orium antes de escolher."}
-                </p>
-                <a
-                  href={fallbackQuoteLink()}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="press mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[#262626] text-[14px] font-bold text-white"
-                >
-                  <MessageCircle className="size-4" strokeWidth={2.2} /> Consultar frete no WhatsApp
-                </a>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        {/* pagamento */}
-        {payment.active ? (
-          <>
-            <p className="mt-8 mb-2.5 text-[15px] font-semibold text-[#CFCFCF]">Como quer pagar?</p>
-            <div className="grid grid-cols-2 gap-3" role="radiogroup" aria-label="Como quer pagar">
-              <ReceiveOption
-                active={paymentMethod === "PIX"}
-                onClick={() => setPaymentMethod("PIX")}
-                title="Pix"
-                subtitle={brl(payment.pixPrice + shippingPrice)}
-                extra={pixOff ?? "à vista"}
-                gold
-                compact
-              />
-              <ReceiveOption
-                active={paymentMethod === "CARD"}
-                onClick={() => setPaymentMethod("CARD")}
-                title="Cartão"
-                subtitle={brl(payment.cardPrice + shippingPrice)}
-                extra="crédito ou débito"
-                compact
-              />
-            </div>
-          </>
-        ) : null}
+        {/* pagamento: só Pix no lançamento */}
+        <p className="mt-8 mb-2.5 text-[15px] font-semibold text-[#CFCFCF]">Pagamento</p>
+        <div role="radiogroup" aria-label="Pagamento">
+          <ReceiveOption
+            active
+            onClick={() => undefined}
+            title="Pix"
+            subtitle={brl(payment.pixPrice)}
+            extra={pixOff ?? "à vista"}
+            gold
+          />
+        </div>
 
         {/* resumo */}
         <div className="mt-8 rounded-[24px] bg-[#1A1A1A] p-5">
@@ -806,21 +681,23 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
                 ? "escolha acima"
                 : fulfillment === "PICKUP"
                   ? "Grátis"
-                  : fulfillment === "LOCAL"
-                    ? "a combinar"
-                    : selected
-                      ? brl(selected.price)
-                      : "calcule acima"
+                  : "a confirmar no WhatsApp"
             }
             strong
           />
           <div className="mt-3 flex items-baseline justify-between border-t border-white/10 pt-4">
-            <span className="text-[17px] font-bold text-white">Total</span>
+            <span className="text-[17px] font-bold text-white">{fulfillment === "LOCAL" ? "Total dos produtos" : "Total"}</span>
             <span key={grandTotal} className="value-in text-[30px] leading-none font-bold tracking-[-0.03em] text-white tabular-nums">
               {brl(grandTotal)}
             </span>
           </div>
         </div>
+
+        {fulfillment === "LOCAL" ? (
+          <p className="mt-3 text-[13px] leading-relaxed text-[#BABABA]">
+            A entrega não está neste total. A Orium confirma o valor e o prazo pelo WhatsApp antes de você pagar.
+          </p>
+        ) : null}
 
         <button
           type="button"
