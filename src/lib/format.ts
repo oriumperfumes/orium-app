@@ -80,7 +80,24 @@ const NOISE = [
   "the",
 ];
 
-export const normalizeName = (raw: string) =>
+/**
+ * Cache limitado para funções puras de texto. A sincronização compara cada oferta com
+ * todos os produtos (o mesmo nome centenas de vezes): sem cache, é o que consome a CPU
+ * da requisição no Worker Free. O resultado é idêntico; só deixa de ser recalculado.
+ */
+function memoString<R>(fn: (s: string) => R, max = 20000): (s: string) => R {
+  const cache = new Map<string, R>();
+  return (s) => {
+    const hit = cache.get(s);
+    if (hit !== undefined) return hit;
+    const value = fn(s);
+    if (cache.size >= max) cache.clear();
+    cache.set(s, value);
+    return value;
+  };
+}
+
+export const normalizeName = memoString((raw: string) =>
   raw
     .toLowerCase()
     .normalize("NFD")
@@ -89,31 +106,34 @@ export const normalizeName = (raw: string) =>
     .split(/\s+/)
     .filter((w) => w && !NOISE.includes(w))
     .join(" ")
-    .trim();
+    .trim(),
+);
 
-export const extractVolume = (raw: string) => {
+export const extractVolume = memoString((raw: string): number | null => {
   const m = raw.toLowerCase().match(/(\d{2,3})\s*ml/);
   return m?.[1] ? Number(m[1]) : null;
-};
+});
 
-export const extractConcentration = (raw: string) => {
+export const extractConcentration = memoString((raw: string): string | null => {
   const s = raw.toLowerCase();
   if (/\bextrait\b/.test(s)) return "Extrait";
   if (/\bparfum\b/.test(s) && !/eau de parfum/.test(s)) return "Parfum";
   if (/\bedp\b|eau de parfum/.test(s)) return "EDP";
   if (/\bedt\b|eau de toilette/.test(s)) return "EDT";
   return null;
-};
+});
+
+// Conjuntos de bigramas só de leitura (compartilhados pelo cache).
+const bigramsOf = memoString((s: string) => {
+  const out = new Set<string>();
+  for (let i = 0; i < s.length - 1; i++) out.add(s.slice(i, i + 2));
+  return out;
+});
 
 /** Similaridade textual simples (Dice bigram) — 0 a 1. */
 export const similarity = (a: string, b: string) => {
-  const bigrams = (s: string) => {
-    const out = new Set<string>();
-    for (let i = 0; i < s.length - 1; i++) out.add(s.slice(i, i + 2));
-    return out;
-  };
-  const A = bigrams(a);
-  const B = bigrams(b);
+  const A = bigramsOf(a);
+  const B = bigramsOf(b);
   if (!A.size || !B.size) return a === b ? 1 : 0;
   let hits = 0;
   A.forEach((g) => B.has(g) && hits++);

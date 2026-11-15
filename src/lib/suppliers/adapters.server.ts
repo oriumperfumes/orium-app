@@ -57,6 +57,8 @@ export type AdapterHealth = {
 export type AdapterBatch = {
   items: RawOffer[];
   nextCursor: number | null;
+  /** "index": o cursor é a posição do item (retomada exata); ausente = página (repete o lote). */
+  cursorKind?: "index";
   pages: number;
   total: number | null;
   /** A loja pediu para esperar (limite de requisições). Tentar de novo em instantes. */
@@ -154,7 +156,8 @@ const uniq = (list: (string | null | undefined)[]) =>
 
 const MRX_BASE = "https://mrxperfumaria.com.br";
 const MRX_MAX_PAGES = 60;
-const MRX_PAGES_PER_BATCH = 4;
+// 2 páginas por rodada: cada página é uma chamada externa (e pode repetir) dentro do limite do plano Free.
+const MRX_PAGES_PER_BATCH = 2;
 const MRX_PAGE_DELAY_MS = 2500;
 
 type LdProduct = {
@@ -655,6 +658,7 @@ export function makeKyteAdapter(opts: { key: string; label: string; base: string
       return {
         items,
         nextCursor: next >= all.length ? null : next,
+        cursorKind: "index",
         pages: 1,
         total: all.length,
         throttled: false,
@@ -770,7 +774,7 @@ const smartManiaAdapter: SupplierAdapter = {
 /* referência interna (pode ser atacado) e nunca vira preço do site.   */
 /* ------------------------------------------------------------------ */
 
-const LI_PAGES_PER_BATCH = 4;
+const LI_PAGES_PER_BATCH = 2;
 const LI_MAX_PAGES = 80;
 // robots.txt da Loja Integrada pede 10 s entre páginas.
 const LI_PAGE_DELAY_MS = 10_000;
