@@ -22,8 +22,8 @@ function TermsPage() {
         <h2>Sobre estes termos</h2>
         <p>
           Estes termos valem para o uso do site {LEGAL.site} e para compras na Orium Perfumes, operada por{" "}
-          {LEGAL.responsavel} ({LEGAL.documento}), {LEGAL.endereco}. Ao usar o site ou fazer um pedido, você concorda
-          com eles. Veja também a{" "}
+          {LEGAL.responsavel} (CNPJ {LEGAL.documento}), {LEGAL.endereco}. Consulte estas condições antes de
+          confirmar o pedido. Veja também a{" "}
           <Link to={"/privacidade" as never} className="underline hover:text-white">
             Política de Privacidade
           </Link>
@@ -43,36 +43,34 @@ function TermsPage() {
       <section>
         <h2>Pedido e pagamento</h2>
         <ul>
-          <li>O pedido feito no site fica registrado e é confirmado com você pelo WhatsApp {LEGAL.whatsapp}.</li>
-          <li>O pedido só é fechado depois dessa confirmação e do pagamento combinado (Pix ou cartão). [CONFIRMAR: pagamento antes do envio/retirada? prazo para pagar antes de o pedido ser cancelado?]</li>
-          <li>Os preços e descontos são os mostrados no momento do pedido. O desconto de 5% é no Pix; no cartão vale o preço do cartão mostrado no pedido. [CONFIRMAR: parcelamento e taxas, se houver]</li>
-          <li>Compras de atacado (a partir de 6 peças) têm preço próprio, mostrado na sacola.</li>
-          <li>Podemos corrigir erros evidentes de preço antes de confirmar.</li>
-          <li>Disponibilidade depende de estoque; se algo faltar, avisamos e combinamos a melhor solução com você.</li>
+          <li>O site registra o pedido e a forma de pagamento selecionada. A Orium orienta o pagamento pelo WhatsApp {LEGAL.whatsapp}. O site não cobra automaticamente.</li>
+          <li>O preço e o desconto de cada forma de pagamento aparecem na sacola. Compras de atacado têm preço próprio quando atingem a quantidade indicada na sacola.</li>
+          <li>Antes de confirmar a compra pelo atendimento, a Orium informa o valor total, o frete quando aplicável, o prazo de pagamento e as condições da opção escolhida.</li>
+          <li>Se um item estiver indisponível ou houver divergência no pedido, fale com a Orium pelo WhatsApp para resolver a situação.</li>
         </ul>
       </section>
 
       <section>
         <h2>Entrega</h2>
         <p>
-          Você pode retirar na loja em Itaguaí/RJ (sem custo), receber por entrega local (Itaguaí, Seropédica,
-          Mangaratiba e Rio de Janeiro, por Uber Entregas ou 99 Entrega, com valor combinado pelo WhatsApp) ou por envio
-          pelos Correios, com frete e prazo calculados para o seu CEP. Itens sob encomenda têm previsão de cerca de 4
-          dias para retirada ou entrega local; no envio pelos Correios, o prazo da transportadora conta depois da
-          postagem, e a postagem depende da chegada do produto à Orium. Confira os dados de entrega ao pedir.
+          A retirada na loja em Itaguaí/RJ é gratuita. As opções de entrega e envio dependem do endereço.
+          Quando a cotação estiver disponível na sacola, confira o valor e o prazo para o seu CEP. Para entrega local
+          ou quando a cotação precisar ser feita pelo atendimento, a Orium informa o valor e o prazo pelo WhatsApp
+          antes da confirmação da compra. Para itens sob encomenda, confirme também o prazo de disponibilidade.
         </p>
       </section>
 
       <section>
         <h2>Trocas, devolução e arrependimento</h2>
         <p>
-          Nas compras feitas à distância, você pode desistir em até 7 dias corridos do recebimento (Código de Defesa do
-          Consumidor, art. 49). [REVISAR JURÍDICO + DECIDIR: a loja ainda não tem política escrita para decants e
-          frascos já abertos/usados, produtos sob encomenda e quem paga o frete de devolução. Texto sugerido para
-          decisão: "decants são separados sob pedido e lacrados; após aberto ou usado, só trocamos em caso de defeito
-          ou erro nosso"].
-          Produto com defeito ou diferente do pedido: fale conosco pelo WhatsApp {LEGAL.whatsapp} com fotos para
-          resolvermos.
+          Nas compras feitas à distância, você pode desistir em até 7 dias corridos contados do recebimento do
+          produto, conforme o art. 49 do Código de Defesa do Consumidor. Informe o número do pedido pelo WhatsApp{" "}
+          {LEGAL.whatsapp} ou pelo e-mail {LEGAL.contatoDados}. A Orium confirma o recebimento da solicitação,
+          orienta a devolução sem custo e restitui os valores pagos, inclusive o frete.
+        </p>
+        <p>
+          Se o produto chegar com defeito, avaria ou diferente do pedido, use os mesmos canais para solicitar
+          atendimento. Se puder, envie fotos para ajudar a identificar o problema.
         </p>
       </section>
 
@@ -95,11 +93,8 @@ function TermsPage() {
       <section>
         <h2>Responsabilidade</h2>
         <p>
-          Fazemos o possível para manter o site disponível e correto, mas ele pode ficar indisponível por manutenção ou
-          por fatores fora do nosso controle (por exemplo, falhas de provedores, da transportadora ou dos Correios).
-          [REVISAR JURÍDICO: limite de responsabilidade por atrasos de transporte, indisponibilidade do site e
-          alergias/reações ao perfume. A lei do consumidor não deixa limitar responsabilidade por defeito ou por falha
-          nossa; confirmar a redação com advogado].
+          Se houver atraso, falha no site ou problema com o produto, fale com a Orium pelos canais de atendimento.
+          Os direitos previstos na legislação de defesa do consumidor continuam aplicáveis.
         </p>
       </section>
 
