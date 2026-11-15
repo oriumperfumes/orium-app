@@ -43,8 +43,8 @@ function TermsPage() {
       <section>
         <h2>Pedido e pagamento</h2>
         <ul>
-          <li>O site registra o pedido e a forma de pagamento selecionada. A Orium orienta o pagamento pelo WhatsApp {LEGAL.whatsapp}. O site não cobra automaticamente.</li>
-          <li>O preço e o desconto de cada forma de pagamento aparecem na sacola. Compras de atacado têm preço próprio quando atingem a quantidade indicada na sacola.</li>
+          <li>Os pedidos feitos no site são pagos por Pix. O site registra o pedido, e a Orium orienta o pagamento pelo WhatsApp {LEGAL.whatsapp}.</li>
+          <li>Confira o preço e os descontos aplicados na sacola. Compras de atacado têm preço próprio quando atingem a quantidade indicada na sacola.</li>
           <li>Antes de confirmar a compra pelo atendimento, a Orium informa o valor total, o frete quando aplicável, o prazo de pagamento e as condições da opção escolhida.</li>
           <li>Se um item estiver indisponível ou houver divergência no pedido, fale com a Orium pelo WhatsApp para resolver a situação.</li>
         </ul>
@@ -53,10 +53,9 @@ function TermsPage() {
       <section>
         <h2>Entrega</h2>
         <p>
-          A retirada na loja em Itaguaí/RJ é gratuita. As opções de entrega e envio dependem do endereço.
-          Quando a cotação estiver disponível na sacola, confira o valor e o prazo para o seu CEP. Para entrega local
-          ou quando a cotação precisar ser feita pelo atendimento, a Orium informa o valor e o prazo pelo WhatsApp
-          antes da confirmação da compra. Para itens sob encomenda, confirme também o prazo de disponibilidade.
+          A retirada na loja em Itaguaí/RJ é gratuita. Para receber por entrega, informe o endereço à Orium pelo
+          WhatsApp {LEGAL.whatsapp}. A loja confirma se atende o endereço e informa o valor da entrega e o prazo
+          antes de você confirmar a compra. Para itens sob encomenda, a Orium também confirma o prazo de disponibilidade.
         </p>
       </section>
 
