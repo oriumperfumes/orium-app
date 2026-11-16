@@ -3540,3 +3540,48 @@ body.admin-mode .press:active:not(:disabled) { transform: scale(0.965); transiti
   .pk-knob, .pk-choice, .pk-tile, .pk-tile-img, .pk-row, .pk-reveal, .pk-stat { transition: none; }
   .pk-photo-img, .pk-footer, .pk-in, .pk-check-on { animation: none; }
 }
+
+/* ══ Home › Negociação (NegotiationShowcase) ══════════════════════════
+ * Entra uma vez quando aparece: bloco sobe, foto assenta (zoom lento),
+ * textos em cascata (--nd), barra "quanto ainda tem" enche. */
+.neg-show.is-pre .neg-rise, .neg-show.is-pre .neg-line, .neg-show.is-pre .neg-piece, .neg-show.is-pre .neg-chip { opacity: 0; transform: translate3d(0, 18px, 0); }
+.neg-show.is-in .neg-rise, .neg-show.is-in .neg-line, .neg-show.is-in .neg-piece, .neg-show.is-in .neg-chip {
+  animation: neg-rise 640ms var(--ease-orium) backwards; animation-delay: var(--nd, 0ms);
+}
+@keyframes neg-rise { from { opacity: 0; transform: translate3d(0, 18px, 0); } to { opacity: 1; transform: none; } }
+.neg-show.is-in .neg-photo { animation: neg-photo 1600ms var(--ease-orium) both; }
+@keyframes neg-photo { from { transform: scale(1.08); } to { transform: none; } }
+.neg-feature .neg-photo img, .neg-piece-img img { transition: transform 900ms var(--ease-orium); }
+@media (hover: hover) {
+  .neg-feature a:hover .neg-photo img { transform: scale(1.04); }
+  .neg-piece { transition: transform 320ms var(--ease-orium); }
+  .neg-piece:hover { transform: translateY(-4px); }
+  .neg-piece:hover .neg-piece-img img { transform: scale(1.05); }
+}
+.neg-fill { transition: width 1400ms cubic-bezier(0.22, 1, 0.36, 1) 500ms; }
+.neg-show.is-in .neg-cta { animation: ord-pulse 1.2s var(--ease-orium) 1400ms 2; }
+@media (prefers-reduced-motion: reduce) {
+  .neg-show .neg-rise, .neg-show .neg-line, .neg-show .neg-piece, .neg-show .neg-chip, .neg-show .neg-photo, .neg-show .neg-cta { animation: none !important; opacity: 1; transform: none; }
+  .neg-fill, .neg-piece, .neg-feature .neg-photo img, .neg-piece-img img { transition: none; }
+}
+
+/* ══ Janela "Fazer minha oferta" (NegotiationContactSheet) ════════════
+ * Entrada em cascata (--ni), balão do WhatsApp que "chega", botão verde
+ * que acorda quando o nome é válido, e o "Pronto!" com anel + check. */
+.ncs .ncs-in { animation: ncs-in 520ms var(--ease-orium) backwards; animation-delay: calc(var(--ni, 0) * 70ms + 120ms); }
+@keyframes ncs-in { from { opacity: 0; transform: translate3d(0, 14px, 0); } to { opacity: 1; transform: none; } }
+.ncs-bubble { transform-origin: top right; animation: ncs-bubble 460ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+@keyframes ncs-bubble { from { opacity: 0; transform: scale(0.85) translateY(6px); } to { opacity: 1; transform: none; } }
+.ncs-ready { animation: ncs-wake 520ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+@keyframes ncs-wake { 0% { transform: scale(0.96); } 55% { transform: scale(1.03); } 100% { transform: scale(1); } }
+.ncs-ring { stroke-dasharray: 277; stroke-dashoffset: 277; transform: rotate(-90deg); transform-origin: center; animation: ncs-ring 760ms cubic-bezier(0.65, 0, 0.35, 1) forwards; }
+@keyframes ncs-ring { to { stroke-dashoffset: 0; } }
+.ncs-tick { stroke-dasharray: 60; stroke-dashoffset: 60; animation: ncs-tick 420ms var(--ease-orium) 620ms forwards; }
+@keyframes ncs-tick { to { stroke-dashoffset: 0; } }
+.ncs-done svg { animation: ncs-pop 600ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.ncs-pop { animation: ncs-pop 520ms var(--ease-orium) 380ms backwards; }
+@keyframes ncs-pop { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .ncs .ncs-in, .ncs-bubble, .ncs-ready, .ncs-done svg, .ncs-pop { animation: none; }
+  .ncs-ring, .ncs-tick { animation: none; stroke-dashoffset: 0; }
+}

@@ -26,7 +26,7 @@ import { HomeShortcuts } from "@/components/orium/HomeShortcuts";
 import { QuickCategories, type QuickItem } from "@/components/orium/QuickCategories";
 
 import { BestSellersRow } from "@/components/orium/BestSellersRow";
-import { NegotiationRow } from "@/components/orium/NegotiationRow";
+import { NegotiationShowcase, useHasNegotiation } from "@/components/orium/NegotiationShowcase";
 import { HomeCampaigns } from "@/components/orium/HomeCampaigns";
 import { Button } from "@/components/ui/button";
 import { TYPE_LABEL, GENDER_LABEL, type ProductType, type Gender } from "@/lib/catalog/classify";
@@ -860,6 +860,7 @@ function Catalog() {
   /** Catálogo completo aberto pelo "Ver tudo" (rolagem infinita). */
   const fullCatalog = sp.ver === "catalogo";
   const showHero = activeFilters === 0 && !fullCatalog;
+  const negotiation = useHasNegotiation();
   /** Home: só uma vitrine do catálogo, com "Ver tudo" — nada de rolagem infinita aqui. */
   const homePreview = showHero && !exactMode;
 
@@ -1007,7 +1008,13 @@ function Catalog() {
           "shell pt-2 pb-10 lg:pb-24",
         )}
       >
-        {showHero ? <HomeShortcuts onExplore={scrollToGrid} total={perfumeCount} /> : null}
+        {/* com perfume em Negociação, ela abre a Home e os cartões Decants/Frascos descem */}
+        {showHero && negotiation.has ? <NegotiationShowcase /> : null}
+        {showHero ? (
+          <div className={negotiation.has ? "mt-10 tab:mt-12" : undefined}>
+            <HomeShortcuts onExplore={scrollToGrid} total={perfumeCount} />
+          </div>
+        ) : null}
 
         <div className="mt-5 empty:hidden">
           <HomeCampaigns onExplore={scrollToGrid} />
@@ -1022,9 +1029,6 @@ function Catalog() {
               onPick={(b) => patch({ brand: b })}
               onSeeAll={() => setFiltersOpen(true)}
             />
-            <div className="mt-10">
-              <NegotiationRow />
-            </div>
           </>
         ) : null}
 
