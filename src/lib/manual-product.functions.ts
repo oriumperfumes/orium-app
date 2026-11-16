@@ -51,6 +51,8 @@ export type ManualProductInput = {
   decantPrice2ml?: number | null;
   decantPrice5ml?: number | null;
   decantPrice10ml?: number | null;
+  /** Preço sob consulta: o site mostra "Consultar no WhatsApp" em vez do preço (ex.: perfumes da Rasha). */
+  priceOnRequest?: boolean;
 };
 
 const slugify = (txt: string) =>
@@ -117,6 +119,9 @@ async function saveManual(data: ManualProductInput, ctx: Ctx) {
     value != null && Number(value) > 0 ? Number(value) : null;
 
   const cost = data.cost != null && Number(data.cost) > 0 ? Number(data.cost) : null;
+  const onRequest = data.priceOnRequest === true;
+  // sob consulta: só frasco, sem preço nem decant (o cliente pergunta no WhatsApp)
+  if (onRequest) data = { ...data, saleMode: "FULL", manualPricing: true };
   const sellsBottle = data.saleMode !== "DECANT";
   const manualPricing = data.manualPricing !== false;
 
@@ -127,7 +132,7 @@ async function saveManual(data: ManualProductInput, ctx: Ctx) {
       retail = data.retailPrice != null && Number(data.retailPrice) > 0 ? Number(data.retailPrice) : null;
       wholesale =
         data.wholesalePrice != null && Number(data.wholesalePrice) > 0 ? Number(data.wholesalePrice) : retail;
-      if (retail == null) throw new Error("Informe o preço de venda do frasco.");
+      if (retail == null && !onRequest) throw new Error("Informe o preço de venda do frasco.");
     } else {
       const auto = await autoPrices(db, cost);
       if (auto.retail == null) throw new Error("Informe o custo para usar a precificação automática.");
@@ -178,6 +183,8 @@ async function saveManual(data: ManualProductInput, ctx: Ctx) {
     decant_price_10ml: price(data.decantPrice10ml),
     pinned_at: data.pinned ? new Date().toISOString() : null,
     pinned_new: data.pinned ? data.pinnedNew === true : false,
+    price_on_request: onRequest,
+    ...(onRequest ? { decant_available: false, retail_price: null, wholesale_price: null, base_retail_price: null, base_wholesale_price: null } : {}),
     updated_at: new Date().toISOString(),
   };
 

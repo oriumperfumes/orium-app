@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_card"
+    android:orientation="vertical"
+    android:padding="14dp">
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+        <TextView android:id="@+id/dot" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="●" android:textColor="#FFD599" android:textSize="10sp" />
+        <TextView android:id="@+id/title" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_marginStart="5dp" android:text="Carregando…" android:textColor="#FFFFFF" android:textSize="13sp" android:textStyle="bold" android:maxLines="1" android:ellipsize="end" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="ORIUM" android:textColor="#59FFFFFF" android:textSize="9sp" android:textStyle="bold" android:letterSpacing="0.18" />
+    </LinearLayout>
+    <TextView android:id="@+id/empty" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:gravity="center" android:text="Nenhuma entrega marcada 👌" android:textColor="#80FFFFFF" android:textSize="13sp" android:visibility="gone" />
+
+    <LinearLayout android:id="@+id/row1" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:background="@drawable/bg_row" android:gravity="center_vertical" android:orientation="horizontal" android:paddingStart="9dp" android:paddingEnd="9dp" android:paddingTop="6dp" android:paddingBottom="6dp">
+        <TextView android:id="@+id/when1" android:layout_width="72dp" android:layout_height="wrap_content" android:textColor="#80FFFFFF" android:textSize="11sp" android:textStyle="bold" android:maxLines="1" android:ellipsize="end" />
+        <TextView android:id="@+id/name1" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:textColor="#FFFFFF" android:textSize="13sp" android:textStyle="bold" android:maxLines="1" android:ellipsize="end" />
+        <TextView android:id="@+id/pdot1" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="●" android:textSize="10sp" android:textColor="#FFFFFF" />
+    </LinearLayout>
+    <LinearLayout android:id="@+id/row2" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:background="@drawable/bg_row" android:gravity="center_vertical" android:orientation="horizontal" android:paddingStart="9dp" android:paddingEnd="9dp" android:paddingTop="6dp" android:paddingBottom="6dp">
+        <TextView android:id="@+id/when2" android:layout_width="72dp" android:layout_height="wrap_content" android:textColor="#80FFFFFF" android:textSize="11sp" android:textStyle="bold" android:maxLines="1" android:ellipsize="end" />
+        <TextView android:id="@+id/name2" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:textColor="#FFFFFF" android:textSize="13sp" android:textStyle="bold" android:maxLines="1" android:ellipsize="end" />
+        <TextView android:id="@+id/pdot2" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="●" android:textSize="10sp" android:textColor="#FFFFFF" />
+    </LinearLayout>
+    <LinearLayout android:id="@+id/row3" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:background="@drawable/bg_row" android:gravity="center_vertical" android:orientation="horizontal" android:paddingStart="9dp" android:paddingEnd="9dp" android:paddingTop="6dp" android:paddingBottom="6dp">
+        <TextView android:id="@+id/when3" android:layout_width="72dp" android:layout_height="wrap_content" android:textColor="#80FFFFFF" android:textSize="11sp" android:textStyle="bold" android:maxLines="1" android:ellipsize="end" />
+        <TextView android:id="@+id/name3" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:textColor="#FFFFFF" android:textSize="13sp" android:textStyle="bold" android:maxLines="1" android:ellipsize="end" />
+        <TextView android:id="@+id/pdot3" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="●" android:textSize="10sp" android:textColor="#FFFFFF" />
+    </LinearLayout>
+</LinearLayout>

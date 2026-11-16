@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Layers, Percent, Ticket, Wallet } from "lucide-react";
 import { AdminShell } from "@/components/orium/AdminShell";
 import { SegmentedControl, SegmentedPanel } from "@/components/orium/SegmentedControl";
-import { PricingRulesSummary } from "@/components/orium/admin/PricingRules";
+import { PricesOnRequestCard, PricingRulesSummary } from "@/components/orium/admin/PricingRules";
 import { PricingProductPanel, PricingSearch } from "@/components/orium/admin/PricingProduct";
 import { CouponsPanel, PromotionsPanel } from "@/components/orium/admin/PricingCampaigns";
 import { DecantCombosPanel } from "@/components/orium/admin/PricingCombos";
@@ -53,6 +53,7 @@ function AdminPricing() {
       <SegmentedPanel value={tab}>
         {tab === "precos" ? (
           <div className="min-w-0 space-y-6">
+            <PricesOnRequestCard />
             <PricingSearch onPick={setProductId} />
             {productId ? <PricingProductPanel productId={productId} onClose={() => setProductId(null)} /> : null}
             <PricingRulesSummary />

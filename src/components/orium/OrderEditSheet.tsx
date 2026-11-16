@@ -10,7 +10,7 @@
  * ao servidor como `unitPrice`; as outras seguem a regra da loja (promoção/cupom).
  */
 import { CustomerPicker } from "@/components/orium/admin/CustomerPicker";
-import { PaymentEditor } from "@/components/orium/admin/OrderPayment";
+import { PaymentControl } from "@/components/orium/admin/orders/controls";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -28,6 +28,7 @@ import {
   LineRow,
   Seg,
   Vitrine,
+  WholesaleToggle,
   lineKeyOf,
   useCatalogProducts,
   useFly,
@@ -161,7 +162,11 @@ function Editor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
-  const { lines, add, patch, remove, inCart, wholesale, reference, unit, total, count } = useOrderLines(start);
+  const startWholesale = order.pricing_tier === "atacado";
+  const { lines, add, patch, remove, inCart, wholesale, autoWholesale, forceWholesale, setForceWholesale, reference, unit, total, count } = useOrderLines(
+    start,
+    startWholesale,
+  );
   const { fly, bump, deskTarget, mobTarget } = useFly();
   const lineCost = useLineCost();
   const losses = lines.filter((l) => {
@@ -213,6 +218,7 @@ function Editor({
   const snap = (ls: Line[]) => JSON.stringify(ls.map((l) => [l.key, l.qty, l.price]).sort());
   const dirty =
     snap(lines) !== snap(start) ||
+    wholesale !== startWholesale ||
     (order.customer_name ?? "") !== name ||
     (order.customer_phone ?? "") !== phone ||
     (order.crm_customer_id ?? null) !== custId ||
@@ -252,8 +258,10 @@ function Editor({
       variant: (l.size === "FULL" ? "FULL" : "DECANT") as "FULL" | "DECANT",
       decantMl: l.size === "FULL" ? null : (l.size as number),
       quantity: l.qty,
-      ...(l.price != null ? { unitPrice: l.price } : {}),
+      // atacado combinado na mão: o frasco vai com o preço de atacado da tela
+      ...(l.price != null ? { unitPrice: l.price } : forceWholesale && !autoWholesale && l.size === "FULL" ? { unitPrice: unit(l) } : {}),
     })),
+    wholesale,
   });
 
   const cepBlur = async () => {
@@ -292,7 +300,7 @@ function Editor({
   };
 
   const review = async () => {
-    if (!lines.length) return toast.warning("O pedido precisa ter ao menos um item.");
+    if (!lines.length) { toast.warning("O pedido precisa ter ao menos um item."); return; }
     setBusy(true);
     try {
       setSummary((await preview({ data: payload(true) })) as EditSummary);
@@ -416,8 +424,8 @@ function Editor({
             ) : null}
 
             <div>
-              <div className="mb-2.5 flex items-center justify-between gap-3">
-                <h3 className="flex items-center gap-2 text-[17px] font-bold">
+              <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+                <h3 className="mr-auto flex items-center gap-2 text-[17px] font-bold">
                   <ShoppingBag className="size-[18px] text-[#FFD599]" strokeWidth={2.2} />
                   Itens
                   <span ref={deskTarget} key={bump} className={cn("grid h-6 min-w-6 place-items-center rounded-full bg-[#FFD599] px-1.5 text-[12px] font-bold text-[#15130F] tabular-nums", bump && "ord-bump")}>
@@ -431,7 +439,7 @@ function Editor({
                 >
                   <Plus className="size-4" strokeWidth={2.4} /> Adicionar perfume
                 </button>
-                {wholesale ? <span className="hidden rounded-full bg-[#2A2418] px-2.5 py-1 text-[11.5px] font-bold text-[#FFD599] lg:inline">Preço de atacado</span> : null}
+                <WholesaleToggle auto={autoWholesale} on={forceWholesale} onChange={setForceWholesale} />
               </div>
               {lines.length === 0 ? (
                 <div className="grid min-h-[120px] place-items-center rounded-[22px] border-[1.5px] border-dashed border-[#FF9A8A]/30 px-6 text-center">
@@ -558,9 +566,10 @@ function Editor({
                 ]}
               />
               {order.status !== "cancelado" ? (
-                <div className="mt-3 rounded-[20px] bg-[#1F1F1F] p-3.5">
-                  <PaymentEditor order={order} onChanged={onSaved} />
-                  <p className="mt-2 text-[12px] text-[#6F6F6F]">O que já foi pago não muda se o total mudar; só o restante é recalculado.</p>
+                <div className="mt-3">
+                  {/* itens já salvos: marca quais perfumes o cliente pagou */}
+                  <PaymentControl order={order} onChanged={onSaved} lines={initialLines} />
+                  <p className="mt-2 px-1 text-[12px] text-[#6F6F6F]">O que já foi pago não muda se o total mudar; só o restante é recalculado.</p>
                 </div>
               ) : null}
             </Field>

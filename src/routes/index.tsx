@@ -49,6 +49,7 @@ import { rememberProductPreview, warmProductImage, warmProductRoute } from "@/li
 import { useSearchIntent } from "@/lib/search-intent";
 import { SearchExactResult } from "@/components/orium/SearchExactResult";
 import { usePublicPricingSettings } from "@/lib/pricing-settings";
+import { takeCatalogPrefetch } from "@/lib/catalog-prefetch";
 
 // gavetas abertas sob demanda: fora do carregamento inicial da Home
 const FiltersSheet = lazyUI(() => import("@/components/orium/FiltersSheet").then((m) => ({ default: m.FiltersSheet })));
@@ -441,11 +442,15 @@ function Catalog() {
         ...(brand !== "todas" ? { p_brand: brand } : {}),
       };
 
-      const { data, error } = await withQueryTimeout(
-        (requestSignal) => supabase.rpc("search_catalog", args).abortSignal(requestSignal),
-        15_000,
-        signal,
-      );
+      // 1ª página da Home: a consulta já saiu no <head>, junto com o download do app
+      const early = pageParam === 0 ? await takeCatalogPrefetch(args) : null;
+      const { data, error } = early
+        ? { data: early as never, error: null }
+        : await withQueryTimeout(
+            (requestSignal) => supabase.rpc("search_catalog", args).abortSignal(requestSignal),
+            15_000,
+            signal,
+          );
       if (error) throw error;
       const list = data ?? [];
       const rows = list.map(({ rank: _rank, total: _total, ...p }) => p) as CatalogProduct[];

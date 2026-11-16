@@ -18,8 +18,8 @@ async function staff(context: { supabase: any; userId: string }) {
 
 async function owner(context: { supabase: any; userId: string }) {
   const db = await staff(context);
-  const { data } = await db.from("profiles").select("role").eq("id", context.userId).maybeSingle();
-  if (data?.role !== "owner") throw new Error("Somente o proprietário pode aprovar políticas e alterar modos de IA.");
+  const { data } = await db.from("user_roles").select("role").eq("user_id", context.userId).eq("role", "owner").maybeSingle();
+  if (!data) throw new Error("Somente o proprietário pode aprovar políticas e alterar modos de IA.");
   return db;
 }
 
@@ -90,13 +90,16 @@ export const omniInbox = createServerFn({ method: "GET" })
     const [{ data: conversations, error }, { data: channels, error: ce }, { data: team }] = await Promise.all([
       query,
       db.from("omni_channels").select("id,name,connection_status,ai_mode,automation_enabled,updated_at").order("name"),
-      db.from("profiles").select("id,name,email,role").in("role", ["owner", "admin"]).limit(80),
+      db.from("user_roles").select("user_id").in("role", ["owner", "admin"]).limit(80),
     ]);
+    const teamIds = [...new Set(((team ?? []) as any[]).map((r) => r.user_id as string))];
+    const { data: people } = teamIds.length ? await db.from("profiles").select("*").in("id", teamIds) : { data: [] };
+    const byId = new Map(((people ?? []) as any[]).map((p) => [p.id, p]));
     if (error || ce) throw new Error((error || ce).message);
     return {
       conversations: (conversations ?? []) as OmniConversation[],
       channels: channels ?? [],
-      team: (team ?? []).map((u: any) => ({ id: u.id, name: u.name || u.email || "Atendente" })),
+      team: teamIds.map((id) => { const u: any = byId.get(id) ?? {}; return { id, name: u.full_name || u.name || u.display_name || u.email || "Atendente" }; }),
     };
   });
 

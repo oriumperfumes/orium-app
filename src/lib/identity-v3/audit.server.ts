@@ -58,11 +58,11 @@ async function all<T>(fetchPage: (from: number, to: number) => PromiseLike<{ dat
 export async function loadBrandDict(db: Db): Promise<{ dict: BrandDict; aliasOf: (a: string, b: string) => boolean }> {
   const [brands, aliases, v3] = await Promise.all([
     all<{ id: string; name: string }>((f, t) =>
-      db.from("brands").select("id, canonical_name").range(f, t).then((r) => ({ data: (r.data ?? []).map((b) => ({ id: b.id, name: b.canonical_name })) })),
+      db.from("brands").select("id, canonical_name").order("id").range(f, t).then((r) => ({ data: (r.data ?? []).map((b) => ({ id: b.id, name: b.canonical_name })) })),
     ),
-    all<{ brand_id: string; alias: string }>((f, t) => db.from("brand_aliases").select("brand_id, alias").range(f, t)),
+    all<{ brand_id: string; alias: string }>((f, t) => db.from("brand_aliases").select("brand_id, alias").order("brand_id").order("alias").range(f, t)),
     all<{ brand_id: string | null; alias: string }>((f, t) =>
-      db.from("catalog_aliases").select("brand_id, alias").eq("alias_type", "brand").range(f, t),
+      db.from("catalog_aliases").select("brand_id, alias").eq("alias_type", "brand").order("alias").order("brand_id").range(f, t),
     ),
   ]);
   const nameById = new Map(brands.map((b) => [b.id, b.name]));
@@ -141,9 +141,9 @@ export async function runIdentityAudit(
           .order("id")
           .range(f, t),
       ),
-      all<{ product_a: string; product_b: string }>((f, t) => db.from("identity_negative_pairs").select("product_a, product_b").range(f, t)),
+      all<{ product_a: string; product_b: string }>((f, t) => db.from("identity_negative_pairs").select("product_a, product_b").order("product_a").order("product_b").range(f, t)),
       all<{ supplier_product_id: string; product_id: string | null; state: string }>((f, t) =>
-        db.from("identity_mappings").select("supplier_product_id, product_id, state").range(f, t),
+        db.from("identity_mappings").select("supplier_product_id, product_id, state").order("supplier_product_id").range(f, t),
       ),
       db.from("identity_settings").select("*").maybeSingle(),
     ]);

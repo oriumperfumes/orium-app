@@ -19,6 +19,7 @@ const HUB_TABS = ["Visão geral", "Sincronização", "Comparação"] as const;
 import { Button } from "@/components/ui/button";
 import { relativeTime, dateBR } from "@/lib/format";
 import { syncSupplier, resetSupplierSync, testSupplierConnection } from "@/lib/sync.functions";
+import { setSupplierRemoved } from "@/lib/supplier-hub.functions";
 
 export const Route = createFileRoute("/_authenticated/admin/fornecedores")({
   head: () => ({
@@ -174,7 +175,7 @@ function AdminSuppliers() {
             secondary={<AdminSecondaryAction icon={<RefreshCw className={allBusy ? "animate-spin" : ""} />} disabled={allBusy || busy !== null} onClick={syncAll}>{allBusy ? "Sincronizando todos" : "Sincronizar todos"}</AdminSecondaryAction>}
           />
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {(data?.suppliers ?? []).map((s: any) => (
+            {(data?.suppliers ?? []).filter((s: any) => s.active !== false).map((s: any) => (
               <div key={s.id} className="flex min-w-0 flex-col gap-3 rounded-2xl border border-border/60 bg-card p-4 shadow-soft">
                 <div className="flex min-w-0 items-start justify-between gap-2">
                   <div className="min-w-0">
@@ -197,6 +198,7 @@ function AdminSuppliers() {
               </div>
             ))}
           </div>
+          <RemovedSuppliers list={(data?.suppliers ?? []).filter((s: any) => s.active === false)} />
         </div>
       ) : null}
 
@@ -479,5 +481,43 @@ function ComparisonTab() {
       {picked ? <OfferComparison productId={picked} /> : null}
       <p className="text-xs text-muted-foreground">O mais barato nem sempre é a melhor compra: frete, prazo e disponibilidade confirmada contam. Frete desconhecido aparece como “a consultar”.</p>
     </div>
+  );
+}
+
+/** Fornecedores removidos: ficam guardados e podem voltar com um toque. */
+function RemovedSuppliers({ list }: { list: any[] }) {
+  const restore = useServerFn(setSupplierRemoved);
+  const qc = useQueryClient();
+  const [busy, setBusy] = useState<string | null>(null);
+  if (!list.length) return null;
+  return (
+    <section className="rounded-2xl border border-border/60 bg-card p-4">
+      <p className="text-sm font-semibold">Removidos</p>
+      <ul className="mt-2 divide-y divide-border/60">
+        {list.map((s) => (
+          <li key={s.id} className="flex items-center justify-between gap-3 py-2.5">
+            <span className="min-w-0 truncate text-sm text-muted-foreground">{s.name}</span>
+            <AdminSecondaryAction
+              disabled={busy === s.id}
+              onClick={async () => {
+                setBusy(s.id);
+                try {
+                  await restore({ data: { id: s.id, removed: false } });
+                  toast.success(`${s.name} voltou. Sincronize para atualizar os produtos.`);
+                  qc.invalidateQueries({ queryKey: ["admin-suppliers"] });
+                  qc.invalidateQueries({ queryKey: ["composer-supply"] });
+                } catch (e: any) {
+                  toast.error(e?.message ?? "Não foi possível trazer de volta.");
+                } finally {
+                  setBusy(null);
+                }
+              }}
+            >
+              {busy === s.id ? "Voltando…" : "Trazer de volta"}
+            </AdminSecondaryAction>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

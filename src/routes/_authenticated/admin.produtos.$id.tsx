@@ -17,6 +17,7 @@ import { brl, dateBR } from "@/lib/format";
 import { OfferComparison } from "@/components/orium/admin/suppliers/OfferComparison";
 import { getProductPricing } from "@/lib/pricing.functions";
 import { getAdminProductRow } from "@/lib/admin-insight.functions";
+import { adminSetProductDecants } from "@/lib/product-internal.functions";
 
 export const Route = createFileRoute("/_authenticated/admin/produtos/$id")({
   head: () => ({ meta: [{ title: "Produto — Orium Admin" }, { name: "robots", content: "noindex" }] }),
@@ -219,6 +220,7 @@ function DecantAdmin({
   price10: number | null;
 }) {
   const qc = useQueryClient();
+  const saveDecants = useServerFn(adminSetProductDecants);
   const [on, setOn] = useState(available);
   const [p2, setP2] = useState(price2 == null ? "" : String(price2));
   const [p5, setP5] = useState(price5 == null ? "" : String(price5));
@@ -240,8 +242,8 @@ function DecantAdmin({
     try {
       const values = { decant_available: on, decant_price_2ml: num(p2), decant_price_5ml: num(p5), decant_price_10ml: num(p10) };
       if (Object.values(values).some((v) => typeof v === "number" && !(v > 0))) throw new Error("Preço inválido.");
-      const { error } = await supabase.from("products").update(values).eq("id", productId);
-      if (error) throw error;
+      // products não aceita mais escrita direta de `authenticated`: a equipe é confirmada no servidor.
+      await saveDecants({ data: { productId, ...values } });
       toast.success("Decants atualizados.");
       qc.invalidateQueries({ queryKey: ["admin-product", productId] });
     } catch (err) {

@@ -12,6 +12,8 @@ export type PublicPricingSettings = {
   wholesale_min_quantity: number | null;
   pix_discount_percent: number | null;
   pix_discount_active: boolean | null;
+  /** Admin → Precificação: loja inteira com preço sob consulta. */
+  prices_on_request?: boolean | null;
 };
 
 export async function fetchPublicPricingSettings(): Promise<PublicPricingSettings | null> {

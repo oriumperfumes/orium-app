@@ -13,10 +13,10 @@ import { setSplashing } from "@/lib/splash-state";
 /** Antes da pintura no cliente; no servidor não roda (nem avisa). */
 const useBeforePaint = typeof document === "undefined" ? useEffect : useLayoutEffect;
 
-/** Tempo para o símbolo terminar de se desenhar antes de abrir a loja. */
-const MIN_VISIBLE = 1150;
+/** Tempo mínimo da abertura: o bastante para o símbolo aparecer, sem prender quem já carregou. */
+const MIN_VISIBLE = 650;
 /** Rede lenta nunca prende o cliente na abertura. */
-const MAX_VISIBLE = 2400;
+const MAX_VISIBLE = 1800;
 
 export function AppSplash() {
   const [active, setActive] = useState(false);

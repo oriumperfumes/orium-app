@@ -442,3 +442,31 @@ export const updatePricingRules = createServerFn({ method: "POST" })
     const r = await applyRules((context as Ctx).supabase, (context as Ctx).userId, data, "admin");
     return { changes: r.changes.length, recalculated: r.recalculated };
   });
+
+/**
+ * Chave geral "Preços sob consulta" (Admin → Precificação). Ligada, a loja
+ * mostra "Sob consulta" no lugar de todos os preços e não fecha pedido pelo site.
+ * Grava com o cliente do usuário: a política do banco só deixa o dono alterar.
+ */
+export const setPricesOnRequest = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { on: boolean }) => ({ on: data?.on === true }))
+  .handler(async ({ data, context }) => {
+    await assertStaff(context as Ctx);
+    const { supabase, userId } = context as Ctx;
+    const { data: rows, error } = await supabase
+      .from("pricing_settings")
+      .update({ prices_on_request: data.on, updated_at: new Date().toISOString() })
+      .eq("id", true)
+      .select("prices_on_request");
+    if (error) throw new Error(error.message);
+    if (!rows?.length) throw new Error("Só o dono da loja pode mudar esta opção.");
+    await supabase.from("activity_logs").insert({
+      user_id: userId,
+      action: "pricing_rules_update",
+      entity: "pricing_settings",
+      entity_id: null,
+      details: { source: "admin", changes: [{ key: "prices_on_request", to: data.on }] },
+    });
+    return { on: data.on };
+  });

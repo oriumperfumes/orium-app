@@ -9,7 +9,7 @@ import {
   useRouterState,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/lib/auth";
 import { CartProvider } from "@/lib/cart";
@@ -19,6 +19,7 @@ import { KitProvider } from "@/lib/kit";
 import { KitSheetMount } from "@/components/orium/kit-mount";
 import { BottomNav } from "@/components/orium/BottomNav";
 import { AccountScreenMount } from "@/components/orium/account-shared";
+import { RecoveryLinkHandler } from "@/components/orium/RecoveryLinkHandler";
 
 import { AppSplash } from "@/components/orium/AppSplash";
 import { registerAppServiceWorker } from "@/lib/pwa";
@@ -31,6 +32,7 @@ import { LiveProvider } from "@/lib/live";
 
 
 import appCss from "../styles.css?url";
+import { catalogPrefetchScript, supabaseOrigin } from "@/lib/catalog-prefetch";
 
 import { reportLovableError } from "../lib/lovable-error-reporting";
 
@@ -131,11 +133,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   errorComponent: ErrorComponent,
 });
 
+const SUPABASE_ORIGIN = supabaseOrigin();
+const CATALOG_PREFETCH = catalogPrefetchScript();
+
 function RootShell({ children }: { children: ReactNode }) {
   return (
     <html lang="pt-BR" className="dark" style={{ colorScheme: "dark" }} suppressHydrationWarning>
       <head>
         <HeadContent />
+        {/* banco já conectado e 1ª página do catálogo pedida antes do app baixar */}
+        {SUPABASE_ORIGIN ? <link rel="preconnect" href={SUPABASE_ORIGIN} crossOrigin="anonymous" /> : null}
+        {CATALOG_PREFETCH ? <script suppressHydrationWarning dangerouslySetInnerHTML={{ __html: CATALOG_PREFETCH }} /> : null}
         <script
           dangerouslySetInnerHTML={{
             // sem zoom: pinça (o iOS ignora user-scalable), Ctrl+roda e Ctrl +/-/0 no computador; o duplo toque sai pelo touch-action no CSS
@@ -175,6 +183,35 @@ function AreaMarker() {
   return null;
 }
 
+/**
+ * Só monta depois que a página carregou e o navegador ficou livre: a presença
+ * "Ao vivo" (chamada ao servidor + conexão em tempo real) não disputa a rede
+ * com o catálogo nos primeiros segundos.
+ */
+function AfterLoad({ children }: { children: ReactNode }) {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    let idle = 0;
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const go = () => {
+      t = setTimeout(() => {
+        const ric = (window as unknown as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+        if (ric) idle = ric(() => setReady(true), { timeout: 2000 });
+        else setReady(true);
+      }, 1500);
+    };
+    if (document.readyState === "complete") go();
+    else window.addEventListener("load", go, { once: true });
+    return () => {
+      window.removeEventListener("load", go);
+      if (t) clearTimeout(t);
+      const cic = (window as unknown as { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback;
+      if (idle && cic) cic(idle);
+    };
+  }, []);
+  return ready ? <>{children}</> : null;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
@@ -194,6 +231,7 @@ function RootComponent() {
               <LeadProvider>
                 <KitProvider>
                   <AreaMarker />
+                  <RecoveryLinkHandler />
                   <AppSplash />
                   <Outlet />
                   <BottomNav />
@@ -204,7 +242,9 @@ function RootComponent() {
                   <SaveChoicesPrompt />
                   <VersionUpdatePrompt />
                   <DecantComboCelebration />
-                  <LiveProvider />
+                  <AfterLoad>
+                    <LiveProvider />
+                  </AfterLoad>
 
                   <Toaster position="top-center" />
                 </KitProvider>

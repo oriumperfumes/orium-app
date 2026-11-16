@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Loader2, SlidersHorizontal } from "lucide-react";
+import { Loader2, MessageCircle, SlidersHorizontal } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { brl, productTitle } from "@/lib/format";
 import { commercialPrice } from "@/lib/commercial-price";
 import { getPaymentPricing } from "@/lib/payment-rule";
-import { pricingImpact, updatePricingRules, type PricingImpact } from "@/lib/pricing-admin.functions";
+import { pricingImpact, setPricesOnRequest, updatePricingRules, type PricingImpact } from "@/lib/pricing-admin.functions";
 import { AdminCard, AdminEmpty } from "@/components/orium/admin/AdminUI";
 import { CountInput, HelpTip, MoneyInput, PercentInput } from "@/components/orium/admin/PriceBits";
 
@@ -62,6 +62,63 @@ function usePricingRules() {
     queryFn: async () => (await supabase.from("decant_settings").select("*").maybeSingle()).data,
   });
   return { settings: settings.data, decants: decants.data, loading: settings.isPending || decants.isPending };
+}
+
+/**
+ * Chave geral: todos os preços do catálogo público sob consulta.
+ * Ligada, o cliente vê "Sob consulta" + WhatsApp no lugar dos preços e o site
+ * não fecha pedido; desligada, tudo volta como estava (nenhum preço é alterado).
+ */
+export function PricesOnRequestCard() {
+  const qc = useQueryClient();
+  const save = useServerFn(setPricesOnRequest);
+  const { settings, loading } = usePricingRules();
+  const [busy, setBusy] = useState(false);
+  const on = (settings as { prices_on_request?: boolean } | null | undefined)?.prices_on_request === true;
+
+  const toggle = async (next: boolean) => {
+    setBusy(true);
+    try {
+      await save({ data: { on: next } });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["admin-pricing-rules"] }),
+        qc.invalidateQueries({ queryKey: ["pricing-settings"] }),
+      ]);
+      toast.success(next ? "Preços sob consulta ativados na loja." : "Preços voltaram a aparecer na loja.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não foi possível salvar.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <AdminCard className="min-w-0">
+      <div className="flex items-start gap-4">
+        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#1F1F1F] text-[#FFD599]">
+          <MessageCircle className="size-5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[15px] font-semibold">Preços sob consulta</p>
+          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+            {on
+              ? "Ativo: o catálogo público mostra “Sob consulta” no lugar de todos os preços e o cliente fala com a Orium pelo WhatsApp. O site não fecha pedido."
+              : "Desligado: os preços aparecem normalmente na loja. Ligue para esconder todos os preços e atender só pelo WhatsApp."}
+          </p>
+        </div>
+        {loading || busy ? (
+          <Loader2 className="mt-2 size-5 shrink-0 animate-spin text-muted-foreground" />
+        ) : (
+          <Switch
+            className="mt-2 shrink-0"
+            checked={on}
+            onCheckedChange={(v) => void toggle(v)}
+            aria-label="Preços sob consulta em toda a loja"
+          />
+        )}
+      </div>
+    </AdminCard>
+  );
 }
 
 /** Resumo de abrir a tela: quatro regras em uma olhada. */

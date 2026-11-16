@@ -111,7 +111,7 @@ export async function resyncRestockForOrder(
   const listId = await openRestockList(db, userId);
   const { data: items } = await db
     .from("catalog_order_items")
-    .select("id, product_id, quantity, supplier_id, unit_cost_snapshot, variant, decant_ml")
+    .select("id, product_id, quantity, supplier_id, supplier_chosen, unit_cost_snapshot, variant, decant_ml")
     .eq("order_id", orderId);
 
   const touched = new Set<string>();
@@ -128,16 +128,30 @@ export async function resyncRestockForOrder(
       .select("best_cost, best_supplier_id")
       .eq("product_id", line.product_id)
       .maybeSingle();
-    const supplierId = cost?.best_supplier_id ?? line.supplier_id ?? null;
-    const unitCost = Number(cost?.best_cost ?? line.unit_cost_snapshot ?? 0);
+    // fornecedor escolhido no pedido manda; senão, o melhor custo do momento
+    const supplierId = line.supplier_chosen ? line.supplier_id : (cost?.best_supplier_id ?? line.supplier_id ?? null);
+    const unitCost = Number((line.supplier_chosen ? line.unit_cost_snapshot : null) ?? cost?.best_cost ?? line.unit_cost_snapshot ?? 0);
 
+    const prevSource = existing.get(line.id);
+    if (prevSource) {
+      // já foi pedido/recebido do fornecedor para ESTE pedido: não mexe (o perfume é dele)
+      const { data: prevItem } = await db.from("restock_items").select("id, status").eq("id", prevSource.restock_item_id).maybeSingle();
+      if (prevItem && prevItem.status !== "a comprar") {
+        existing.delete(line.id);
+        continue;
+      }
+    }
+
+    // só junta com o que AINDA vai ser pedido: venda nova nunca "pega carona"
+    // num perfume que já foi comprado/recebido para outro cliente
     let query = db
       .from("restock_items")
       .select("id, status, unit_cost")
       .eq("restock_list_id", listId)
-      .eq("product_id", line.product_id);
+      .eq("product_id", line.product_id)
+      .eq("status", "a comprar");
     query = supplierId ? query.eq("supplier_id", supplierId) : query.is("supplier_id", null);
-    const { data: target } = await query.maybeSingle();
+    const { data: target } = await query.order("created_at", { ascending: true }).limit(1).maybeSingle();
 
     let restockItemId = target?.id as string | undefined;
     if (!restockItemId) {
@@ -154,7 +168,7 @@ export async function resyncRestockForOrder(
         .single();
       if (error || !inserted) continue;
       restockItemId = inserted.id;
-    } else if (target?.status === "a comprar" && unitCost > 0) {
+    } else if (unitCost > 0) {
       await db.from("restock_items").update({ unit_cost: unitCost }).eq("id", restockItemId);
     }
 
@@ -243,7 +257,7 @@ export async function restockPreviewForOrder(db: any, orderId: string): Promise<
   const { data: lines } = await db
     .from("catalog_order_items")
     .select(
-      "id, product_id, product_name_snapshot, image_snapshot, variant, variant_label, decant_ml, quantity, supplier_id, supplier_snapshot, unit_cost_snapshot",
+      "id, product_id, product_name_snapshot, image_snapshot, variant, variant_label, decant_ml, quantity, supplier_id, supplier_chosen, supplier_snapshot, unit_cost_snapshot",
     )
     .eq("order_id", orderId);
 
@@ -272,7 +286,7 @@ export async function restockPreviewForOrder(db: any, orderId: string): Promise<
   const supplierIds = [
     ...new Set(
       (lines ?? [])
-        .map((l: any) => costs.get(l.product_id)?.best_supplier_id ?? l.supplier_id)
+        .map((l: any) => (l.supplier_chosen ? l.supplier_id : (costs.get(l.product_id)?.best_supplier_id ?? l.supplier_id)))
         .filter(Boolean),
     ),
   ];
@@ -284,7 +298,7 @@ export async function restockPreviewForOrder(db: any, orderId: string): Promise<
 
   return (lines ?? []).map((l: any) => {
     const cost = costs.get(l.product_id);
-    const supplierId = cost?.best_supplier_id ?? l.supplier_id ?? null;
+    const supplierId = l.supplier_chosen ? l.supplier_id : (cost?.best_supplier_id ?? l.supplier_id ?? null);
     const decant = l.variant === "DECANT";
     return {
       orderItemId: l.id,
@@ -299,7 +313,7 @@ export async function restockPreviewForOrder(db: any, orderId: string): Promise<
       supplierId,
       supplierName:
         (supplierId ? suppliers.get(supplierId) : null) ?? l.supplier_snapshot ?? "Sem fornecedor definido",
-      unitCost: Number(cost?.best_cost ?? l.unit_cost_snapshot ?? 0),
+      unitCost: Number((l.supplier_chosen ? l.unit_cost_snapshot : null) ?? cost?.best_cost ?? l.unit_cost_snapshot ?? 0),
       sentQuantity: Number(sent.get(l.id) ?? 0),
       // decant sai do frasco já aberto: nada é sugerido automaticamente
       suggested: decant ? 0 : Number(l.quantity ?? 0),
@@ -336,7 +350,7 @@ export async function addOrderItemsToRestock(
 
     const { data: line } = await db
       .from("catalog_order_items")
-      .select("id, order_id, product_id, supplier_id, unit_cost_snapshot")
+      .select("id, order_id, product_id, supplier_id, supplier_chosen, unit_cost_snapshot")
       .eq("id", pick.orderItemId)
       .maybeSingle();
     if (!line || line.order_id !== orderId || !line.product_id) continue;
@@ -357,16 +371,18 @@ export async function addOrderItemsToRestock(
       .select("best_cost, best_supplier_id")
       .eq("product_id", line.product_id)
       .maybeSingle();
-    const supplierId = cost?.best_supplier_id ?? line.supplier_id ?? null;
-    const unitCost = Number(cost?.best_cost ?? line.unit_cost_snapshot ?? 0);
+    // fornecedor escolhido no pedido manda; senão, o melhor custo do momento
+    const supplierId = line.supplier_chosen ? line.supplier_id : (cost?.best_supplier_id ?? line.supplier_id ?? null);
+    const unitCost = Number((line.supplier_chosen ? line.unit_cost_snapshot : null) ?? cost?.best_cost ?? line.unit_cost_snapshot ?? 0);
 
     let query = db
       .from("restock_items")
       .select("id, status")
       .eq("restock_list_id", listId)
-      .eq("product_id", line.product_id);
+      .eq("product_id", line.product_id)
+      .eq("status", "a comprar");
     query = supplierId ? query.eq("supplier_id", supplierId) : query.is("supplier_id", null);
-    const { data: target } = await query.maybeSingle();
+    const { data: target } = await query.order("created_at", { ascending: true }).limit(1).maybeSingle();
 
     let restockItemId = target?.id as string | undefined;
     if (!restockItemId) {
@@ -383,7 +399,7 @@ export async function addOrderItemsToRestock(
         .single();
       if (error || !inserted) continue;
       restockItemId = inserted.id;
-    } else if (target?.status === "a comprar" && unitCost > 0) {
+    } else if (unitCost > 0) {
       await db.from("restock_items").update({ unit_cost: unitCost }).eq("id", restockItemId);
     }
 
@@ -412,4 +428,99 @@ export async function addOrderItemsToRestock(
   }
 
   return { ok: true as const, created, alreadySent, warnings: [...new Set(warnings)] };
+}
+
+/* ------------------------------------------------------------------ *
+ * Voltar itens para "a comprar" sem duplicar linha.
+ * Só existe UMA linha "a comprar" por perfume+fornecedor (índice parcial
+ * restock_items_unique_open_line). Se já houver outra aberta, as origens
+ * (pedidos) passam para ela e a linha antiga some.
+ * ------------------------------------------------------------------ */
+
+async function openTwin(db: any, item: any) {
+  let q = db
+    .from("restock_items")
+    .select("id")
+    .eq("restock_list_id", item.restock_list_id)
+    .eq("product_id", item.product_id)
+    .eq("status", "a comprar")
+    .neq("id", item.id);
+  q = item.supplier_id ? q.eq("supplier_id", item.supplier_id) : q.is("supplier_id", null);
+  const { data } = await q.limit(1).maybeSingle();
+  return (data?.id as string | undefined) ?? null;
+}
+
+/** Volta a linha inteira para "a comprar" (ou junta com a que já está aberta). */
+export async function reopenRestockItems(db: any, itemIds: string[]) {
+  const now = new Date().toISOString();
+  let reopened = 0;
+  for (const id of [...new Set(itemIds.filter(Boolean))]) {
+    const { data: item } = await db.from("restock_items").select("*").eq("id", id).maybeSingle();
+    if (!item || item.status === "a comprar") continue;
+    const twin = await openTwin(db, item);
+    if (twin) {
+      await db.from("restock_item_sources").update({ restock_item_id: twin }).eq("restock_item_id", id);
+      await db.from("restock_items").delete().eq("id", id);
+      await recomputeItem(db, twin);
+    } else {
+      await db
+        .from("restock_items")
+        .update({ status: "a comprar", purchased_at: null, received_at: null, planned_purchase_date: null, updated_at: now })
+        .eq("id", id);
+    }
+    reopened += 1;
+  }
+  return reopened;
+}
+
+/**
+ * Tira UM pedido de cliente de uma linha já pedida/recebida e devolve a parte
+ * dele para "a comprar" (os outros clientes da linha continuam como estão).
+ */
+export async function detachOrderFromItem(db: any, sourceId: string) {
+  const { data: src } = await db.from("restock_item_sources").select("*").eq("id", sourceId).maybeSingle();
+  if (!src) return;
+  const { data: item } = await db.from("restock_items").select("*").eq("id", src.restock_item_id).maybeSingle();
+  if (!item || item.status === "a comprar") return;
+  const { data: all } = await db.from("restock_item_sources").select("id, quantity").eq("restock_item_id", item.id);
+  const others = (all ?? []).filter((x: any) => x.id !== sourceId);
+  if (!others.length) {
+    // a linha era só deste pedido: some do pedido ao fornecedor e volta inteira
+    const { data: sois } = await db.from("supplier_order_items").select("id, supplier_order_id").eq("restock_item_id", item.id);
+    if (sois?.length) {
+      await db.from("supplier_order_items").delete().in("id", sois.map((x: any) => x.id));
+      for (const oid of new Set<string>(sois.map((x: any) => x.supplier_order_id))) {
+        const { count } = await db.from("supplier_order_items").select("id", { count: "exact", head: true }).eq("supplier_order_id", oid);
+        if (!count) await db.from("supplier_orders").delete().eq("id", oid);
+      }
+    }
+    await reopenRestockItems(db, [item.id]);
+    return;
+  }
+  // linha dividida: a parte deste pedido vai para a linha aberta (nova ou existente)
+  const twin = await openTwin(db, item);
+  let target = twin;
+  if (!target) {
+    const { data: fresh } = await db
+      .from("restock_items")
+      .insert({
+        restock_list_id: item.restock_list_id,
+        product_id: item.product_id,
+        supplier_id: item.supplier_id,
+        quantity: src.quantity,
+        unit_cost: item.unit_cost,
+        extra_fee: item.extra_fee ?? 0,
+        status: "a comprar",
+        manual_choice: item.manual_choice ?? false,
+        cost_locked: item.cost_locked ?? false,
+      })
+      .select("id")
+      .single();
+    target = fresh?.id ?? null;
+  }
+  if (!target) return;
+  await db.from("restock_item_sources").update({ restock_item_id: target }).eq("id", sourceId);
+  await recomputeItem(db, target);
+  const rest = others.reduce((s: number, x: any) => s + Number(x.quantity ?? 0), 0);
+  await db.from("restock_items").update({ quantity: rest, updated_at: new Date().toISOString() }).eq("id", item.id);
 }

@@ -7,6 +7,7 @@
  * A visibilidade vem do `open` do contexto de
  * busca, então o gesto/botão de voltar do celular também fecha a tela.
  */
+import { useConsultIds } from "@/lib/price-on-request";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "@tanstack/react-router";
@@ -278,6 +279,7 @@ function IdleState({
   onOpen: (p: { slug: string } & Record<string, unknown>) => void;
 }) {
   const { items, isLoading } = useTopViewed(30, 5);
+  const consultIds = useConsultIds();
   const suggestions = recent.length ? recent.slice(0, 6) : DEFAULT_SUGGESTIONS;
   return (
     <div className="search-idle lg:mt-4 lg:grid lg:grid-cols-2 lg:gap-16">
@@ -315,7 +317,9 @@ function IdleState({
                     <span className="block truncate text-[16px] font-bold text-white">{productTitle(p.canonical_name)}</span>
                     {p.brand ? <span className="block truncate text-[14px] text-[#A9A9A9]">{p.brand}</span> : null}
                   </span>
-                  {p.retail_price ? (
+                  {consultIds.has(p.id) ? (
+                    <span className="text-[14px] font-bold text-[#FFD599]">Sob consulta</span>
+                  ) : p.retail_price ? (
                     <span className="text-[16px] font-bold text-white tabular-nums">{brl(Number(p.retail_price))}</span>
                   ) : null}
                   <ChevronRight className="size-5 shrink-0 text-[#8C8C8C]" strokeWidth={2} />

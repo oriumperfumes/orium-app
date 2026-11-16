@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { isOnRequest, useConsultIds } from "@/lib/price-on-request";
 import { Link } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight, Flame } from "lucide-react";
 import { brl, productTitle } from "@/lib/format";
@@ -211,7 +212,8 @@ function MiniCard({ product, onChoose }: { product: TopSoldProduct; onChoose?: (
     },
   });
 
-  const showBottle = bottleOk && Number(product.retail_price ?? 0) > 0;
+  const consult = isOnRequest(product as never, useConsultIds());
+  const showBottle = !consult && bottleOk && Number(product.retail_price ?? 0) > 0;
   const from = decantOk && settings !== undefined ? decantPrice(product, settings, 2) : null;
   const onPromo = showBottle && !!priced.promotion && priced.basePrice > priced.finalPrice;
 
@@ -254,7 +256,8 @@ function MiniCard({ product, onChoose }: { product: TopSoldProduct; onChoose?: (
               <span className="tabular-nums">{brl(from)}</span>
             </p>
           ) : null}
-          {!product.in_stock ? <p className="mt-0.5 text-[11px] text-muted-foreground">Indisponível</p> : null}
+          {consult ? <p className="mt-1 text-[13px] font-bold text-[#FFD599]">Sob consulta</p> : null}
+          {!product.in_stock && !consult ? <p className="mt-0.5 text-[11px] text-muted-foreground">Indisponível</p> : null}
           {onPromo && priced.promotion ? <PromotionBadge promotion={priced.promotion} size="sm" compact className="mt-1" /> : null}
         </div>
       </Link>

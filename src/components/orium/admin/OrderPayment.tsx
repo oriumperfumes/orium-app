@@ -166,7 +166,7 @@ export function paymentEventLabel(event: string, details: any): string | null {
   if (!event.startsWith("pagamento_")) return null;
   const amt = brl(Math.abs(Number(details?.amount ?? 0)));
   switch (event) {
-    case "pagamento_sinal": return `Sinal recebido · ${amt}`;
+    case "pagamento_sinal": return `Pagamento recebido · ${amt}`;
     case "pagamento_saldo": return `Saldo recebido · ${amt} — pagamento concluído`;
     case "pagamento_integral": return `Pagamento integral recebido · ${amt}`;
     case "pagamento_estornado": return `Pagamento estornado · −${amt}`;

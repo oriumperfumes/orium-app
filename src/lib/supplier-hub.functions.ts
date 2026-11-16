@@ -122,6 +122,29 @@ export const updateSupplierSettings = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/**
+ * Tirar um fornecedor (ou trazer de volta). Não apaga nada: o fornecedor e as
+ * ofertas ficam desligados — sem sincronizar, sem preço, sem compra, fora do
+ * Novo pedido. Pedidos e compras antigos continuam com o nome dele.
+ */
+export const setSupplierRemoved = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { id: string; removed: boolean }) => {
+    if (typeof d?.id !== "string") throw new Error("Fornecedor inválido.");
+    return { id: d.id, removed: d.removed === true };
+  })
+  .handler(async ({ data, context }) => {
+    await assertStaff(context);
+    const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
+    const patch = data.removed
+      ? { active: false, priority: "inactive", auto_sync: false }
+      : { active: true, priority: "secondary", auto_sync: true };
+    const { error } = await db.from("suppliers").update(patch as never).eq("id", data.id);
+    if (error) throw new Error(error.message);
+    await db.from("supplier_products").update({ active: !data.removed }).eq("supplier_id", data.id);
+    return { ok: true as const };
+  });
+
 export const setProductSupplierPreference = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { productId: string; supplierId: string; mode: "preferred" | "blocked" | null }) => d)
@@ -148,7 +171,9 @@ export const compareProductOffers = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context);
     const { buildOfferComparison } = await import("@/lib/suppliers/hub.server");
-    return buildOfferComparison(context.supabase, data.productId, data.units ?? 1);
+    // A comparação lê colunas internas de products (estoque local, origem da disponibilidade): cliente de serviço após assertStaff.
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    return buildOfferComparison(supabaseAdmin, data.productId, data.units ?? 1);
   });
 
 /* ---------- Catálogo público por oferta ---------- */
@@ -159,7 +184,9 @@ export const listSupplierCatalogOffers = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context);
     const { listCatalogOffers } = await import("@/lib/suppliers/catalog.server");
-    return listCatalogOffers(context.supabase, data);
+    // O catálogo do fornecedor mostra o estoque local do produto vinculado (coluna interna): cliente de serviço após assertStaff.
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    return listCatalogOffers(supabaseAdmin, data);
   });
 
 export const setOfferCatalog = createServerFn({ method: "POST" })

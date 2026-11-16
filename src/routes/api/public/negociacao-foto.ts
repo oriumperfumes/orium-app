@@ -15,6 +15,12 @@ export const Route = createFileRoute("/api/public/negociacao-foto")({
         // Só nomes simples do próprio espaço: sem subir diretórios.
         if (!/^[a-zA-Z0-9._-]+$/.test(path)) return new Response("Not found", { status: 404 });
 
+        // foto já servida antes sai do cache da borda, sem ir ao armazenamento
+        const edge = (globalThis as unknown as { caches?: { default?: Cache } }).caches?.default ?? null;
+        const cacheKey = new Request(new URL(`/api/public/negociacao-foto?path=${encodeURIComponent(path)}`, request.url).toString());
+        const hit = edge ? await edge.match(cacheKey).catch(() => undefined) : undefined;
+        if (hit) return hit;
+
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
         const bucket = supabaseAdmin.storage.from("negociacao");
 
@@ -26,7 +32,7 @@ export const Route = createFileRoute("/api/public/negociacao-foto")({
         }
         if (error || !data) return new Response("Not found", { status: 404 });
 
-        return new Response(await data.arrayBuffer(), {
+        const res = new Response(await data.arrayBuffer(), {
           headers: {
             "content-type": data.type || "image/jpeg",
             // Diz qual versão foi entregue: o Admin usa isso para saber
@@ -36,6 +42,9 @@ export const Route = createFileRoute("/api/public/negociacao-foto")({
             "cache-control": "public, max-age=31536000, immutable",
           },
         });
+        // só a versão exata pedida (a reserva "full" no lugar do card pode mudar depois)
+        if (edge && variant === (/-card\.webp$/i.test(path) ? "card" : "full")) await edge.put(cacheKey, res.clone()).catch(() => undefined);
+        return res;
       },
     },
   },

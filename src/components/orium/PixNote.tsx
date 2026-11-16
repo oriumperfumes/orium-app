@@ -3,6 +3,7 @@
  * regra central (nunca por fórmula solta em componente).
  */
 import { brl } from "@/lib/format";
+import { CARD_AVAILABLE } from "@/lib/checkout-rules";
 import { getPaymentPricing, pixOffLabel, usePaymentSettings } from "@/lib/payment";
 import { cn } from "@/lib/utils";
 
@@ -24,7 +25,7 @@ export function PixNote({
   return (
     <p className={cn("flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs", className)}>
       <span className="font-semibold text-gold">{off}</span>
-      {showCard ? (
+      {showCard && CARD_AVAILABLE ? (
         <span key={pricing.cardPrice} className="value-in text-muted-foreground">
           ou {brl(pricing.cardPrice)} no cartão
         </span>

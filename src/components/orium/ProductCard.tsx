@@ -1,6 +1,6 @@
 import { imgSrcSet, imgVariant } from "@/lib/product-img";
 import { Link, useRouter } from "@tanstack/react-router";
-import { Plus, Minus, Check, Loader2 } from "lucide-react";
+import { Plus, Minus, Check, Loader2, MessageCircle } from "lucide-react";
 import { memo, useRef, useState, type RefObject } from "react";
 import { toast } from "sonner";
 import { brl, productTitle } from "@/lib/format";
@@ -22,6 +22,7 @@ import { ReadyTag } from "@/components/orium/badges";
 import { track } from "@/lib/analytics";
 import { useTapOpen } from "@/hooks/use-tap-open";
 import type { AdminProductInsight } from "@/lib/admin-insight.functions";
+import { consultLink, isOnRequest, useConsultIds } from "@/lib/price-on-request";
 
 
 
@@ -244,6 +245,7 @@ function ProductCardBase({
 }) {
 
   const imgRef = useRef<HTMLDivElement | null>(null);
+  const consult = isOnRequest(product as never, useConsultIds());
   const settings = useDecantSettings();
   const promotions = usePromotions();
   const decant = canDecant(product);
@@ -357,7 +359,15 @@ function ProductCardBase({
           </div>
 
           <div className="mt-1.5 flex-1">
-            {showBottleFirst && bottlePriced != null ? (
+            {consult ? (
+              <>
+                <p className="text-[10.5px] text-muted-foreground">
+                  {product.volume_ml ? `Frasco ${product.volume_ml}ml` : "Frasco completo"}
+                </p>
+                <p className="text-[16px] leading-tight font-bold tracking-tight text-[#FFD599] @min-[220px]/card:text-[18px]">Sob consulta</p>
+                <p className="mt-0.5 text-[10.5px] text-[#8C8C8C]">Preço no WhatsApp</p>
+              </>
+            ) : showBottleFirst && bottlePriced != null ? (
               <>
                 <div
                   key={`frasco-${bottlePriced.finalPrice}`}
@@ -441,7 +451,17 @@ function ProductCardBase({
 
       {/* CTA sempre na mesma altura, qualquer que seja o tamanho do nome. */}
       <div className="pt-2.5">
-        {bottleOnPromo ? (
+        {consult ? (
+          <a
+            href={consultLink(product)}
+            target="_blank"
+            rel="noreferrer"
+            onClick={() => track("consultant_help_clicked", { productId: product.id, meta: { reason: "sob-consulta" } })}
+            className="press inline-flex h-[34px] items-center gap-1.5 rounded-full bg-[#FFD599] px-4 text-[13px] font-bold text-black transition-colors hover:bg-[#FFDDAA] @min-[220px]/card:h-[40px] @min-[220px]/card:px-5 @min-[220px]/card:text-[14px]"
+          >
+            <MessageCircle className="size-4" strokeWidth={2.4} /> Consultar
+          </a>
+        ) : bottleOnPromo ? (
           <Link
             to="/perfume/$slug"
             params={{ slug: product.slug }}

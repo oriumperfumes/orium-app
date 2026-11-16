@@ -960,6 +960,7 @@ export type Database = {
           id: string
           image_snapshot: string | null
           order_id: string
+          paid: boolean
           product_id: string | null
           product_name_snapshot: string
           promotion_discount: number
@@ -967,6 +968,7 @@ export type Database = {
           promotion_percent: number | null
           quantity: number
           subtotal: number
+          supplier_chosen: boolean
           supplier_id: string | null
           supplier_product_id: string | null
           supplier_snapshot: string | null
@@ -984,6 +986,7 @@ export type Database = {
           id?: string
           image_snapshot?: string | null
           order_id: string
+          paid?: boolean
           product_id?: string | null
           product_name_snapshot: string
           promotion_discount?: number
@@ -991,6 +994,7 @@ export type Database = {
           promotion_percent?: number | null
           quantity?: number
           subtotal?: number
+          supplier_chosen?: boolean
           supplier_id?: string | null
           supplier_product_id?: string | null
           supplier_snapshot?: string | null
@@ -1008,6 +1012,7 @@ export type Database = {
           id?: string
           image_snapshot?: string | null
           order_id?: string
+          paid?: boolean
           product_id?: string | null
           product_name_snapshot?: string
           promotion_discount?: number
@@ -1015,6 +1020,7 @@ export type Database = {
           promotion_percent?: number | null
           quantity?: number
           subtotal?: number
+          supplier_chosen?: boolean
           supplier_id?: string | null
           supplier_product_id?: string | null
           supplier_snapshot?: string | null
@@ -3734,6 +3740,7 @@ export type Database = {
         Row: {
           id: boolean
           pix_discount_active: boolean
+          prices_on_request: boolean
           pix_discount_percent: number
           psych_max_reduction: number
           psych_pricing_active: boolean
@@ -3746,6 +3753,7 @@ export type Database = {
         Insert: {
           id?: boolean
           pix_discount_active?: boolean
+          prices_on_request?: boolean
           pix_discount_percent?: number
           psych_max_reduction?: number
           psych_pricing_active?: boolean
@@ -3758,6 +3766,7 @@ export type Database = {
         Update: {
           id?: boolean
           pix_discount_active?: boolean
+          prices_on_request?: boolean
           pix_discount_percent?: number
           psych_max_reduction?: number
           psych_pricing_active?: boolean
@@ -4324,6 +4333,7 @@ export type Database = {
           manual_pricing: boolean
           pinned_at: string | null
           pinned_new: boolean
+          price_on_request: boolean
           product_line: string | null
           product_type: string
           public_visible: boolean
@@ -4401,6 +4411,7 @@ export type Database = {
           manual_pricing?: boolean
           pinned_at?: string | null
           pinned_new?: boolean
+          price_on_request?: boolean
           product_line?: string | null
           product_type?: string
           public_visible?: boolean
@@ -4478,6 +4489,7 @@ export type Database = {
           manual_pricing?: boolean
           pinned_at?: string | null
           pinned_new?: boolean
+          price_on_request?: boolean
           product_line?: string | null
           product_type?: string
           public_visible?: boolean
@@ -4859,8 +4871,8 @@ export type Database = {
           extra_fee: number
           id: string
           manual_choice: boolean
-          product_id: string | null
           planned_purchase_date: string | null
+          product_id: string | null
           purchased_at: string | null
           quantity: number
           received_at: string | null
@@ -4877,8 +4889,8 @@ export type Database = {
           extra_fee?: number
           id?: string
           manual_choice?: boolean
-          product_id?: string | null
           planned_purchase_date?: string | null
+          product_id?: string | null
           purchased_at?: string | null
           quantity?: number
           received_at?: string | null
@@ -4895,8 +4907,8 @@ export type Database = {
           extra_fee?: number
           id?: string
           manual_choice?: boolean
-          product_id?: string | null
           planned_purchase_date?: string | null
+          product_id?: string | null
           purchased_at?: string | null
           quantity?: number
           received_at?: string | null
@@ -5436,6 +5448,137 @@ export type Database = {
             columns: ["supplier_product_id"]
             isOneToOne: true
             referencedRelation: "supplier_products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_order_items: {
+        Row: {
+          brand: string | null
+          created_at: string
+          id: string
+          image_url: string | null
+          issue_note: string | null
+          issue_qty: number
+          name: string
+          product_id: string | null
+          quantity: number
+          received_qty: number | null
+          resolution: string | null
+          resolved_at: string | null
+          restock_item_id: string | null
+          result: string | null
+          supplier_order_id: string
+          unit_cost: number
+          volume_ml: number | null
+        }
+        Insert: {
+          brand?: string | null
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          issue_note?: string | null
+          issue_qty?: number
+          name?: string
+          product_id?: string | null
+          quantity?: number
+          received_qty?: number | null
+          resolution?: string | null
+          resolved_at?: string | null
+          restock_item_id?: string | null
+          result?: string | null
+          supplier_order_id: string
+          unit_cost?: number
+          volume_ml?: number | null
+        }
+        Update: {
+          brand?: string | null
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          issue_note?: string | null
+          issue_qty?: number
+          name?: string
+          product_id?: string | null
+          quantity?: number
+          received_qty?: number | null
+          resolution?: string | null
+          resolved_at?: string | null
+          restock_item_id?: string | null
+          result?: string | null
+          supplier_order_id?: string
+          unit_cost?: number
+          volume_ml?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_order_items_restock_item_id_fkey"
+            columns: ["restock_item_id"]
+            isOneToOne: false
+            referencedRelation: "restock_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_order_items_supplier_order_id_fkey"
+            columns: ["supplier_order_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_orders: {
+        Row: {
+          checked_at: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          message: string | null
+          sent_via: string
+          seq: number
+          status: string
+          supplier_id: string | null
+          supplier_name: string
+          total: number
+          units: number
+          updated_at: string
+        }
+        Insert: {
+          checked_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          message?: string | null
+          sent_via?: string
+          seq?: number
+          status?: string
+          supplier_id?: string | null
+          supplier_name?: string
+          total?: number
+          units?: number
+          updated_at?: string
+        }
+        Update: {
+          checked_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          message?: string | null
+          sent_via?: string
+          seq?: number
+          status?: string
+          supplier_id?: string | null
+          supplier_name?: string
+          total?: number
+          units?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_orders_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
             referencedColumns: ["id"]
           },
         ]
@@ -6323,6 +6466,39 @@ export type Database = {
           },
         ]
       }
+      widget_keys: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          last_used_at: string | null
+          name: string
+          revoked_at: string | null
+          token_hash: string
+          token_hint: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          last_used_at?: string | null
+          name: string
+          revoked_at?: string | null
+          token_hash: string
+          token_hint: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          last_used_at?: string | null
+          name?: string
+          revoked_at?: string | null
+          token_hash?: string
+          token_hint?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       fragrance_pyramid_status: {
@@ -6694,6 +6870,7 @@ export type Database = {
         Returns: {
           pix_discount_active: boolean
           pix_discount_percent: number
+          prices_on_request: boolean
           wholesale_min_quantity: number
         }[]
       }
@@ -6723,6 +6900,7 @@ export type Database = {
           starts_at: string
         }[]
       }
+      public_ready_to_deliver_ids: { Args: never; Returns: string[] }
       public_sale_modes: {
         Args: never
         Returns: {
