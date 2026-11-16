@@ -30,7 +30,7 @@ import { usePublicPricingSettings } from "@/lib/pricing-settings";
 import { AdminInternalSection } from "@/components/orium/AdminInternalSection";
 import { HelpChooseButton } from "@/components/orium/HelpChooseButton";
 import { ProductPurchase, type BuyMode } from "@/components/orium/ProductPurchase";
-import { consultLink } from "@/lib/price-on-request";
+import { consultLink, isOnRequest, useConsultIds } from "@/lib/price-on-request";
 import { ProductScent } from "@/components/orium/ProductScent";
 import { track, watchProductDwell } from "@/lib/analytics";
 
@@ -235,6 +235,8 @@ function ProductPageContent({
   const genderLabel =
     data?.gender_norm === "MALE" ? "Masculino" : data?.gender_norm === "FEMALE" ? "Feminino" : data?.gender_norm === "UNISEX" ? "Unissex" : null;
   const meta = [data?.concentration, profile?.family, genderLabel].filter(Boolean).join(" · ");
+  // perfume sob consulta, ou a loja inteira (Admin → Precificação)
+  const onRequest = isOnRequest(data as never, useConsultIds());
 
   return (
     <div className="min-h-screen bg-background">
@@ -316,7 +318,7 @@ function ProductPageContent({
                 <div className="h-[124px] skeleton rounded-[20px]" />
                 <div className="h-12 skeleton rounded-full" />
               </div>
-            ) : (data as any).price_on_request ? (
+            ) : onRequest ? (
               <ConsultPanel product={data as any} />
             ) : (
               <ProductPurchase
@@ -335,7 +337,7 @@ function ProductPageContent({
               />
             )}
 
-            {!data.in_stock && !(data as any).price_on_request ? (
+            {!data.in_stock && !onRequest ? (
               <div className="mt-5">
                 <StockAlertCard productId={data.id} name={data.canonical_name} />
               </div>

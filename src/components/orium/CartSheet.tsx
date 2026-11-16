@@ -1,4 +1,5 @@
 import { imgVariant } from "@/lib/product-img";
+import { ORIUM_WHATSAPP, usePricesOnRequestAll } from "@/lib/price-on-request";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Minus,
@@ -122,6 +123,8 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
 
   const { lead, updateLead } = useLead();
   const checkoutTracked = useRef(false);
+  // Admin → Precificação → "Preços sob consulta": sacola sem preço nem checkout
+  const onRequestAll = usePricesOnRequestAll();
 
   // mantém o campo tocado visível acima do teclado, sem pulos
   const onFieldFocus = (event: React.FocusEvent<HTMLDivElement>) => {
@@ -419,8 +422,59 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
     </>
   );
 
+  // ———————————————————— Sacola com preços sob consulta ————————————————————
+  function renderOnRequestBag() {
+    const list = cart.items
+      .map((i) => `• ${i.quantity}x ${[i.brand, productTitle(i.name)].filter(Boolean).join(" ")}${i.variant === "DECANT" ? ` (decant ${i.decantMl} ml)` : ""}`)
+      .join("\n");
+    const msg = `Oi, Orium! Queria saber o preço destes perfumes:\n${list}`;
+    return (
+      <>
+        <h1 className="text-[40px] leading-[1.15] font-bold tracking-[-0.035em] text-white">Sacola</h1>
+        <p className="mt-1 text-[16px] text-[#BABABA] tabular-nums">
+          {cart.totalQuantity} {cart.totalQuantity === 1 ? "item" : "itens"}
+        </p>
+        <ul className="mt-5 space-y-2">
+          {cart.items.map((i) => (
+            <li key={i.key} className="flex items-center justify-between gap-3 rounded-[18px] bg-[#1A1A1A] px-4 py-3">
+              <span className="min-w-0">
+                <span className="block truncate text-[15px] font-semibold text-white">{productTitle(i.name)}</span>
+                <span className="block text-[13px] text-[#8C8C8C]">
+                  {[i.brand, i.variant === "DECANT" ? `Decant ${i.decantMl} ml` : "Frasco"].filter(Boolean).join(" · ")} · {i.quantity}x
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => cart.remove(i.key)}
+                className="press shrink-0 text-[13px] font-semibold text-[#A9A9A9]"
+              >
+                Remover
+              </button>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-6 rounded-[24px] bg-[#1A1A1A] p-5">
+          <p className="text-[20px] font-bold text-[#FFD599]">Preços sob consulta</p>
+          <p className="mt-1 text-[15px] leading-snug text-[#A9A9A9]">
+            No momento os preços são informados pelo WhatsApp. Mande a sua lista e a Orium responde com valores e disponibilidade.
+          </p>
+        </div>
+        <a
+          href={`https://wa.me/${ORIUM_WHATSAPP}?text=${encodeURIComponent(msg)}`}
+          target="_blank"
+          rel="noreferrer"
+          onClick={() => track("consultant_help_clicked", { meta: { reason: "sob-consulta-sacola" } })}
+          className="press mt-6 flex h-[60px] w-full items-center justify-center gap-2 rounded-full bg-[#FFD599] text-[17px] font-bold text-[#15130F]"
+        >
+          Consultar no WhatsApp <ArrowRight className="size-5" strokeWidth={2.4} />
+        </a>
+      </>
+    );
+  }
+
   // ———————————————————— Sacola (Figma "Carrinho") ————————————————————
   function renderBag() {
+    if (onRequestAll) return renderOnRequestBag();
     return (
       <>
         <h1 className="text-[40px] leading-[1.15] font-bold tracking-[-0.035em] text-white">Sacola</h1>

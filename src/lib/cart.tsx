@@ -19,6 +19,20 @@ import { quoteCart } from "@/lib/promotions.functions";
 import type { CouponFeedback } from "@/lib/promotions.server";
 import { usePublicPricingSettings } from "@/lib/pricing-settings";
 import { track } from "@/lib/analytics";
+import { toast } from "sonner";
+import { ORIUM_WHATSAPP } from "@/lib/price-on-request";
+
+function warnOnRequest() {
+  toast("Preços sob consulta", {
+    description: "Fale com a Orium pelo WhatsApp para saber o preço e fazer o pedido.",
+    action: {
+      label: "WhatsApp",
+      onClick: () => {
+        window.open(`https://wa.me/${ORIUM_WHATSAPP}?text=${encodeURIComponent("Oi, Orium! Queria saber os preços 😊")}`, "_blank", "noopener");
+      },
+    },
+  });
+}
 
 const KEY = "orium-cart";
 const COUPON_KEY = "orium-coupon";
@@ -318,15 +332,26 @@ export function CartProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const add: CartContext["add"] = useCallback((item, quantity = 1) => {
-    setItems((prev) => merge(prev, item, quantity));
-    trackAdd(item, quantity);
-  }, []);
+  // Admin → Precificação → "Preços sob consulta": nada entra na sacola.
+  const onRequestAll = settings?.prices_on_request === true;
 
-  const addMany: CartContext["addMany"] = useCallback((list) => {
-    setItems((prev) => list.reduce((acc, { item, quantity }) => merge(acc, item, quantity), prev));
-    list.forEach(({ item, quantity }) => trackAdd(item, quantity));
-  }, []);
+  const add: CartContext["add"] = useCallback(
+    (item, quantity = 1) => {
+      if (onRequestAll) return warnOnRequest();
+      setItems((prev) => merge(prev, item, quantity));
+      trackAdd(item, quantity);
+    },
+    [onRequestAll],
+  );
+
+  const addMany: CartContext["addMany"] = useCallback(
+    (list) => {
+      if (onRequestAll) return warnOnRequest();
+      setItems((prev) => list.reduce((acc, { item, quantity }) => merge(acc, item, quantity), prev));
+      list.forEach(({ item, quantity }) => trackAdd(item, quantity));
+    },
+    [onRequestAll],
+  );
 
   const applyCoupon = useCallback((code: string) => {
     const clean = code.trim().toUpperCase();

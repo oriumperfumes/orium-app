@@ -8,6 +8,7 @@ import { DecantComboCard, useFeaturedCombo } from "@/components/orium/DecantComb
 import { cn } from "@/lib/utils";
 import vialsImg from "@/assets/home-decants-vials.webp";
 import trioImg from "@/assets/home-frascos-trio.webp";
+import { usePricesOnRequestAll } from "@/lib/price-on-request";
 
 /**
  * Dois cartões claros logo abaixo do vídeo: Decants (prove antes) e Frascos
@@ -16,10 +17,13 @@ import trioImg from "@/assets/home-frascos-trio.webp";
 export function HomeShortcuts({ onExplore, total }: { onExplore: () => void; total?: number | undefined }) {
   const settings = useDecantSettings();
   // só mostra o preço depois que a configuração chega: nada de valor provisório
-  const from = settings === undefined ? null : decantPrice(null, settings, 2);
+  const onRequestAll = usePricesOnRequestAll();
+  const from = settings === undefined || onRequestAll ? null : decantPrice(null, settings, 2);
   const { ref, seen } = useRevealOnce<HTMLDivElement>();
   // com promoção no ar, o cartão dela ocupa o lugar de "Decants": um só banner de decant na Home
-  const { ready, featured } = useFeaturedCombo();
+  const { ready, featured: combo } = useFeaturedCombo();
+  // preços sob consulta: sem cartão de combo com valor
+  const featured = onRequestAll ? null : combo;
 
   return (
     <div

@@ -229,6 +229,10 @@ export const placeCatalogOrder = createServerFn({ method: "POST" })
 
     const { priceCart } = await import("@/lib/promotions.server");
     const { data: settings } = await db.from("pricing_settings").select("*").maybeSingle();
+    // Admin → Precificação → "Preços sob consulta": a loja não fecha pedido pelo site.
+    if ((settings as { prices_on_request?: boolean } | null)?.prices_on_request === true) {
+      throw new Error("No momento os preços são sob consulta. Fale com a Orium pelo WhatsApp para fechar o seu pedido.");
+    }
     const minQty = settings?.wholesale_min_quantity ?? 6;
     const totalQuantity = items.reduce((s, i) => s + i.quantity, 0);
     // atacado é regra de FRASCOS: decants nunca contam nem recebem desconto

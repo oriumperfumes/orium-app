@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+import { usePricesOnRequestAll } from "@/lib/price-on-request";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Check, Heart } from "lucide-react";
@@ -130,6 +131,7 @@ function TasteKit({ products }: { products: CatalogProduct[] }) {
   const promotions = usePromotions();
   const [ml, setMl] = useState<DecantMl>(2);
   const [added, setAdded] = useState(false);
+  const onRequestAll = usePricesOnRequestAll();
 
   const items = useMemo(() => products.filter((p) => canDecant(p)), [products]);
   const lines = items.map((p) => {
@@ -140,7 +142,8 @@ function TasteKit({ products }: { products: CatalogProduct[] }) {
   const total = lines.reduce((sum, l) => sum + l.final, 0);
   const allIn = lines.length > 0 && lines.every((l) => cart.quantityOf(l.p.id, "DECANT", ml) > 0);
 
-  if (items.length < 2) return null;
+  // preços sob consulta (Admin → Precificação): sem kit com total
+  if (items.length < 2 || onRequestAll) return null;
 
   const addAll = () => {
     cart.addMany(

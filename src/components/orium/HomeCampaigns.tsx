@@ -5,6 +5,7 @@ import { getOffers, type Offer } from "@/lib/offers.functions";
 import { OfferPopup } from "@/components/orium/OfferPopup";
 import { AnnouncementCard } from "@/components/orium/AnnouncementCard";
 import { useAuth } from "@/lib/auth";
+import { usePricesOnRequestAll } from "@/lib/price-on-request";
 
 /**
  * FILA DE COMUNICAÇÕES — nunca dois avisos ao mesmo tempo.
@@ -15,6 +16,7 @@ export function HomeCampaigns({ onExplore }: { onExplore?: (() => void) | undefi
   const load = useServerFn(getOffers);
   const [offers, setOffers] = useState<Offer[] | null>(null);
   const [done, setDone] = useState(false);
+  const onRequestAll = usePricesOnRequestAll();
 
   useEffect(() => {
     let cancelled = false;
@@ -33,6 +35,8 @@ export function HomeCampaigns({ onExplore }: { onExplore?: (() => void) | undefi
   }, [session?.user.id]);
 
   if (offers === null) return null;
+  // preços sob consulta: nada de oferta com valor na Home
+  if (onRequestAll) return null;
   if (offers.length > 0 && !done) return <OfferPopup offers={offers} onDone={() => setDone(true)} />;
   // Sem oferta pendente (ou já vista nesta sessão) o cupom pode aparecer.
   if (offers.length > 0) return null;

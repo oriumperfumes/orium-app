@@ -3740,6 +3740,7 @@ export type Database = {
         Row: {
           id: boolean
           pix_discount_active: boolean
+          prices_on_request: boolean
           pix_discount_percent: number
           psych_max_reduction: number
           psych_pricing_active: boolean
@@ -3752,6 +3753,7 @@ export type Database = {
         Insert: {
           id?: boolean
           pix_discount_active?: boolean
+          prices_on_request?: boolean
           pix_discount_percent?: number
           psych_max_reduction?: number
           psych_pricing_active?: boolean
@@ -3764,6 +3766,7 @@ export type Database = {
         Update: {
           id?: boolean
           pix_discount_active?: boolean
+          prices_on_request?: boolean
           pix_discount_percent?: number
           psych_max_reduction?: number
           psych_pricing_active?: boolean
@@ -6867,6 +6870,7 @@ export type Database = {
         Returns: {
           pix_discount_active: boolean
           pix_discount_percent: number
+          prices_on_request: boolean
           wholesale_min_quantity: number
         }[]
       }

@@ -9,10 +9,29 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { productTitle } from "@/lib/format";
+import { usePublicPricingSettings } from "@/lib/pricing-settings";
 
 export const ORIUM_WHATSAPP = "5521977174508";
 
+/**
+ * Chave geral (Admin → Precificação → "Preços sob consulta"): quando ligada,
+ * TODO o catálogo público fica sob consulta.
+ */
+export function usePricesOnRequestAll() {
+  const { data } = usePublicPricingSettings();
+  return data?.prices_on_request === true;
+}
+
+/** Conjunto que responde "sim" para qualquer id: a loja inteira sob consulta. */
+class AllIds extends Set<string> {
+  override has(_id: string) {
+    return true;
+  }
+}
+const ALL = new AllIds();
+
 export function useConsultIds() {
+  const all = usePricesOnRequestAll();
   const { data } = useQuery({
     queryKey: ["price-on-request-ids"],
     staleTime: 5 * 60 * 1000,
@@ -22,6 +41,7 @@ export function useConsultIds() {
       return new Set<string>((data ?? []).map((r: { id: string }) => r.id));
     },
   });
+  if (all) return ALL;
   return data ?? EMPTY;
 }
 const EMPTY = new Set<string>();
