@@ -322,13 +322,13 @@ function ProductCardBase({
         >
           <ProductImage product={product} eager={index < 2} />
           {/* Um selo por vez: novidade só aparece quando não há promoção. */}
-          {product.is_new && percent === 0 ? (
+          {product.is_new && (percent === 0 || consult) ? (
             <span className="gold-chip absolute top-2.5 left-2.5 rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase">
               Novidade
             </span>
           ) : null}
 
-          {percent > 0 ? (
+          {percent > 0 && !consult ? (
             <span className="gold-chip absolute top-2.5 left-2.5 rounded-full px-2 py-0.5 text-[10px] font-bold">
               -{Math.round(percent)}%
             </span>

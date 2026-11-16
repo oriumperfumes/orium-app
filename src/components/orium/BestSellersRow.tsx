@@ -214,7 +214,8 @@ function MiniCard({ product, onChoose }: { product: TopSoldProduct; onChoose?: (
 
   const consult = isOnRequest(product as never, useConsultIds());
   const showBottle = !consult && bottleOk && Number(product.retail_price ?? 0) > 0;
-  const from = decantOk && settings !== undefined ? decantPrice(product, settings, 2) : null;
+  // sob consulta (o perfume ou a loja inteira): nenhum valor de decant nem botão de compra
+  const from = !consult && decantOk && settings !== undefined ? decantPrice(product, settings, 2) : null;
   const onPromo = showBottle && !!priced.promotion && priced.basePrice > priced.finalPrice;
 
   return (
@@ -262,7 +263,7 @@ function MiniCard({ product, onChoose }: { product: TopSoldProduct; onChoose?: (
         </div>
       </Link>
       <div className="pt-2.5">
-        {decantOk && onChoose ? (
+        {!consult && decantOk && onChoose ? (
           <button
             type="button"
             onClick={() => onChoose(asCatalog)}

@@ -30,7 +30,9 @@ export function MoneyInput({
   onChange: (v: number | null) => void;
   className?: string;
 }) {
-  const [text, setText] = useState(() => (value == null || !Number.isFinite(value) ? "" : value.toFixed(2)));
+  const [text, setText] = useState(() =>
+    value == null || !Number.isFinite(value) ? "" : value.toFixed(2),
+  );
   const [focused, setFocused] = useState(false);
 
   useEffect(() => {
@@ -50,19 +52,23 @@ export function MoneyInput({
     onChange(Number(cents.toFixed(2)));
   };
 
-  const shown = text && Number.isFinite(Number(text))
-    ? new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(text))
-    : "";
+  const shown =
+    text && Number.isFinite(Number(text))
+      ? new Intl.NumberFormat("pt-BR", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }).format(Number(text))
+      : "";
 
   return (
-    <div className={cn("min-w-0 space-y-1.5", className)}>
+    <div className={cn("min-w-0 space-y-2", className)}>
       {label ? (
-        <label htmlFor={id} className="block text-xs font-medium text-muted-foreground">
+        <label htmlFor={id} className="block text-[14px] font-semibold text-[#D4D4D4]">
           {label}
         </label>
       ) : null}
-      <div className="flex h-12 min-w-0 items-center gap-2 rounded-xl border border-border/70 bg-background px-3 focus-within:border-gold/60">
-        <span className="shrink-0 text-sm text-muted-foreground">R$</span>
+      <div className="flex h-[52px] min-w-0 items-center gap-2 rounded-[18px] bg-[#232323] px-4 focus-within:ring-2 focus-within:ring-[#FFD599]/50">
+        <span className="shrink-0 text-[15px] font-semibold text-[#8C8C8C]">R$</span>
         <input
           id={id}
           type="text"
@@ -76,10 +82,10 @@ export function MoneyInput({
           }}
           onChange={(e) => commit(e.target.value)}
           placeholder="0,00"
-          className="min-w-0 flex-1 bg-transparent text-base tabular-nums outline-none"
+          className="min-w-0 flex-1 bg-transparent text-[17px] font-semibold tabular-nums text-white outline-none placeholder:text-[#6F6F6F]"
         />
       </div>
-      {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+      {hint ? <div className="text-[13px] leading-snug text-[#8C8C8C]">{hint}</div> : null}
     </div>
   );
 }
@@ -109,13 +115,13 @@ export function PercentInput({
   }, [value, focused]);
 
   return (
-    <div className={cn("min-w-0 space-y-1.5", className)}>
+    <div className={cn("min-w-0 space-y-2", className)}>
       {label ? (
-        <label htmlFor={id} className="block text-xs font-medium text-muted-foreground">
+        <label htmlFor={id} className="block text-[14px] font-semibold text-[#D4D4D4]">
           {label}
         </label>
       ) : null}
-      <div className="flex h-12 min-w-0 items-center gap-2 rounded-xl border border-border/70 bg-background px-3 focus-within:border-gold/60">
+      <div className="flex h-[52px] min-w-0 items-center gap-2 rounded-[18px] bg-[#232323] px-4 focus-within:ring-2 focus-within:ring-[#FFD599]/50">
         <input
           id={id}
           type="text"
@@ -130,11 +136,11 @@ export function PercentInput({
             onChange(raw === "" || Number.isNaN(n) ? null : n);
           }}
           placeholder="0"
-          className="min-w-0 flex-1 bg-transparent text-base tabular-nums outline-none"
+          className="min-w-0 flex-1 bg-transparent text-[17px] font-semibold tabular-nums text-white outline-none placeholder:text-[#6F6F6F]"
         />
-        <span className="shrink-0 text-sm text-muted-foreground">%</span>
+        <span className="shrink-0 text-[15px] font-semibold text-[#8C8C8C]">%</span>
       </div>
-      {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+      {hint ? <div className="text-[13px] leading-snug text-[#8C8C8C]">{hint}</div> : null}
     </div>
   );
 }
@@ -154,9 +160,9 @@ export function CountInput({
   hint?: ReactNode;
 }) {
   return (
-    <div className="min-w-0 space-y-1.5">
+    <div className="min-w-0 space-y-2">
       {label ? (
-        <label htmlFor={id} className="block text-xs font-medium text-muted-foreground">
+        <label htmlFor={id} className="block text-[14px] font-semibold text-[#D4D4D4]">
           {label}
         </label>
       ) : null}
@@ -169,9 +175,9 @@ export function CountInput({
           const only = digits(e.target.value);
           onChange(only ? Number(only) : null);
         }}
-        className="h-12 w-full min-w-0 rounded-xl border border-border/70 bg-background px-3 text-base tabular-nums outline-none focus:border-gold/60"
+        className="h-[52px] w-full min-w-0 rounded-[18px] bg-[#232323] px-4 text-[17px] font-semibold tabular-nums text-white outline-none focus:ring-2 focus:ring-[#FFD599]/50"
       />
-      {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+      {hint ? <div className="text-[13px] leading-snug text-[#8C8C8C]">{hint}</div> : null}
     </div>
   );
 }
@@ -184,14 +190,17 @@ export function HelpTip({ title, children }: { title: string; children: ReactNod
         <button
           type="button"
           aria-label={`Sobre ${title}`}
-          className="grid size-6 shrink-0 place-items-center rounded-full text-muted-foreground hover:text-foreground"
+          className="grid size-7 shrink-0 place-items-center rounded-full text-[#8C8C8C] transition-colors hover:bg-white/[0.06] hover:text-white"
         >
           <HelpCircle className="size-4" strokeWidth={1.75} />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[260px] rounded-2xl p-4 text-sm">
+      <PopoverContent
+        align="start"
+        className="w-[280px] rounded-[22px] border-0 bg-[#232323] p-4 text-[14px] text-white"
+      >
         <p className="mb-1 font-semibold">{title}</p>
-        <p className="text-muted-foreground">{children}</p>
+        <p className="leading-snug text-[#A9A9A9]">{children}</p>
       </PopoverContent>
     </Popover>
   );
@@ -209,7 +218,10 @@ export function PriceValue({
 }) {
   const known = typeof value === "number" && Number.isFinite(value);
   return (
-    <span key={known ? value.toFixed(2) : "none"} className={cn("admin-value-in tabular-nums", className)}>
+    <span
+      key={known ? value.toFixed(2) : "none"}
+      className={cn("admin-value-in tabular-nums", className)}
+    >
       {known ? brl(value) : placeholder}
     </span>
   );
@@ -233,43 +245,51 @@ export function LadderStep({
 }) {
   const toneClass =
     tone === "gold"
-      ? "text-gold"
+      ? "text-[#FFD599]"
       : tone === "warning"
-        ? "text-warning"
+        ? "text-[#F5C26B]"
         : tone === "danger"
-          ? "text-destructive"
+          ? "text-[#FF9A8A]"
           : tone === "muted"
-            ? "text-muted-foreground"
-            : "text-foreground";
+            ? "text-[#8C8C8C]"
+            : "text-white";
   return (
-    <div className="flex min-w-0 items-start justify-between gap-3">
-      <div className="flex min-w-0 items-center gap-1">
-        <p className="min-w-0 truncate text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
-          {label}
-        </p>
-        {help}
+    <div
+      className={cn(
+        "flex min-w-0 items-center justify-between gap-3 rounded-[20px] px-4 py-3",
+        strong ? "bg-[#2A2620]" : "bg-[#232323]",
+      )}
+    >
+      <div className="min-w-0">
+        <div className="flex min-w-0 items-center gap-1">
+          <p className="min-w-0 truncate text-[14px] font-semibold text-[#D4D4D4]">{label}</p>
+          {help}
+        </div>
+        {note ? <p className="mt-0.5 truncate text-[12.5px] text-[#8C8C8C]">{note}</p> : null}
       </div>
-      <div className="min-w-0 text-right">
-        <PriceValue
-          value={value}
-          className={cn(strong ? "text-xl font-semibold" : "text-base font-medium", toneClass)}
-        />
-        {note ? <p className="mt-0.5 text-xs text-muted-foreground">{note}</p> : null}
-      </div>
+      <PriceValue
+        value={value}
+        className={cn(
+          "shrink-0 font-bold tracking-[-0.02em]",
+          strong ? "text-[24px]" : "text-[17px]",
+          toneClass,
+        )}
+      />
     </div>
   );
 }
 
-/** Seta entre degraus, com a operação aplicada. */
+/** Ligação entre degraus, com a operação aplicada. */
 export function LadderArrow({ children }: { children: ReactNode }) {
   return (
-    <p className="py-1.5 pl-1 text-xs text-muted-foreground">
-      <span aria-hidden>↓</span> {children}
-    </p>
+    <div className="flex min-w-0 items-center gap-3 py-1.5 pl-6">
+      <span aria-hidden className="h-5 w-px shrink-0 bg-white/15" />
+      <p className="min-w-0 text-[12.5px] leading-snug text-[#8C8C8C]">{children}</p>
+    </div>
   );
 }
 
-/** Métrica compacta do resumo (2x2 no celular). */
+/** Métrica compacta (bloco #232323). */
 export function MiniMetric({
   label,
   value,
@@ -280,14 +300,14 @@ export function MiniMetric({
   tone?: "gold" | "warning" | "danger";
 }) {
   return (
-    <div className="min-w-0 rounded-2xl border border-border/60 bg-card p-3">
-      <p className="truncate text-[11px] tracking-[0.08em] text-muted-foreground uppercase">{label}</p>
+    <div className="min-w-0 rounded-[20px] bg-[#232323] p-4">
+      <p className="truncate text-[13px] text-[#A9A9A9]">{label}</p>
       <p
         className={cn(
-          "mt-1 truncate text-base font-semibold tabular-nums",
-          tone === "gold" && "text-gold",
-          tone === "warning" && "text-warning",
-          tone === "danger" && "text-destructive",
+          "mt-1.5 truncate text-[20px] leading-tight font-bold tracking-[-0.02em] tabular-nums",
+          tone === "gold" && "text-[#FFD599]",
+          tone === "warning" && "text-[#F5C26B]",
+          tone === "danger" && "text-[#FF9A8A]",
         )}
       >
         {value}
