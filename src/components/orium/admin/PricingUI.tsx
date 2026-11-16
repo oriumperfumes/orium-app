@@ -574,3 +574,216 @@ export function PxPreview({
     </div>
   );
 }
+
+/* ------------------------------------------------------------------ *
+ * Criação em passos (promoção, cupom, combo): uma pergunta por vez à
+ * esquerda e, à direita, a prévia do que o cliente vê + o resumo, que
+ * mudam enquanto se digita. No celular a prévia fica no topo, compacta.
+ * ------------------------------------------------------------------ */
+
+export type PxStep = { key: string; label: string; hint?: string };
+
+export function PxWizard({
+  open,
+  onClose,
+  title,
+  steps,
+  step,
+  onStep,
+  preview,
+  summary,
+  children,
+  onNext,
+  canNext = true,
+  finishLabel,
+  busy,
+  freeNav,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  steps: PxStep[];
+  step: number;
+  onStep: (i: number) => void;
+  preview: ReactNode;
+  summary?: Array<{ label: string; value: ReactNode }>;
+  children: ReactNode;
+  /** chamado no último passo */
+  onNext: () => void;
+  /** o passo atual está completo */
+  canNext?: boolean;
+  finishLabel: string;
+  busy?: boolean;
+  /** edição: pode pular entre passos à vontade */
+  freeNav?: boolean;
+}) {
+  const last = step === steps.length - 1;
+  const current = steps[step]!;
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="flex max-h-[calc(100svh-2rem)] max-w-[980px] flex-col gap-0 overflow-hidden rounded-[32px] border-0 bg-[#121212] p-0 text-white sm:p-0 lg:grid lg:grid-cols-[minmax(0,1fr)_380px] [&>button:last-child]:top-5 [&>button:last-child]:right-5 [&>button:last-child]:grid [&>button:last-child]:size-10 [&>button:last-child]:place-items-center [&>button:last-child]:rounded-full [&>button:last-child]:bg-[#232323] [&>button:last-child]:opacity-100">
+        {/* coluna do formulário */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:max-h-[calc(100svh-2rem)]">
+          <div className="shrink-0 px-6 pt-6 pr-20 lg:pr-6">
+            <DialogTitle className="text-[26px] leading-tight font-bold tracking-[-0.03em] text-white">
+              {title}
+            </DialogTitle>
+            <DialogDescription className="sr-only">{title}</DialogDescription>
+
+            {/* passos: barra de progresso + nomes */}
+            <ol
+              className="mt-4 grid gap-2"
+              style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}
+            >
+              {steps.map((s, i) => {
+                const done = i < step;
+                const on = i === step;
+                const reachable = freeNav || i <= step;
+                return (
+                  <li key={s.key} className="min-w-0">
+                    <button
+                      type="button"
+                      disabled={!reachable}
+                      onClick={() => onStep(i)}
+                      className="group w-full min-w-0 text-left disabled:cursor-default"
+                      aria-current={on ? "step" : undefined}
+                    >
+                      <span className="block h-1.5 overflow-hidden rounded-full bg-[#2A2A2A]">
+                        <span
+                          className="block h-full rounded-full bg-[#FFD599] transition-[width] duration-[var(--motion-standard)] ease-[var(--ease-orium)]"
+                          style={{ width: done || on ? "100%" : "0%" }}
+                        />
+                      </span>
+                      <span
+                        className={cn(
+                          "mt-2 block truncate text-[12.5px] font-semibold transition-colors",
+                          on
+                            ? "text-white"
+                            : done
+                              ? "text-[#A9A9A9] group-hover:text-white"
+                              : "text-[#5F5F5F]",
+                        )}
+                      >
+                        {s.label}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+
+          {/* prévia compacta no celular */}
+          <div className="shrink-0 px-6 pt-4 lg:hidden">{preview}</div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-6 pb-6">
+            <div key={current.key} className="ord-slide min-w-0 space-y-5">
+              <div>
+                <p className="text-[13px] font-semibold text-[#8C8C8C]">
+                  Passo {step + 1} de {steps.length}
+                </p>
+                <h3 className="mt-0.5 text-[21px] leading-tight font-bold tracking-[-0.02em]">
+                  {current.label}
+                </h3>
+                {current.hint ? (
+                  <p className="mt-1 text-[14px] leading-snug text-[#A9A9A9]">{current.hint}</p>
+                ) : null}
+              </div>
+              {children}
+            </div>
+          </div>
+
+          <div className="flex shrink-0 gap-2 border-t border-white/[0.06] px-6 pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+20px)]">
+            {step > 0 ? (
+              <PxSecondary className="h-[54px] px-6" onClick={() => onStep(step - 1)}>
+                Voltar
+              </PxSecondary>
+            ) : (
+              <PxSecondary className="h-[54px] px-6" onClick={onClose}>
+                Cancelar
+              </PxSecondary>
+            )}
+            <PxPrimary
+              className="flex-1"
+              loading={busy}
+              disabled={!canNext}
+              onClick={() => (last ? onNext() : onStep(step + 1))}
+            >
+              {last ? finishLabel : "Continuar"}
+            </PxPrimary>
+          </div>
+        </div>
+
+        {/* coluna da prévia (computador) */}
+        <aside className="hidden min-h-0 flex-col gap-4 overflow-y-auto bg-[#0C0C0C] p-6 pt-20 lg:flex">
+          <p className="text-[13px] font-semibold text-[#8C8C8C]">Como o cliente vê</p>
+          {preview}
+          {summary?.length ? (
+            <div className="rounded-[22px] bg-[#1A1A1A] p-4">
+              <p className="mb-2 text-[13px] font-semibold text-[#8C8C8C]">Resumo</p>
+              <dl className="space-y-2">
+                {summary.map((r) => (
+                  <div
+                    key={r.label}
+                    className="flex min-w-0 items-baseline justify-between gap-3 text-[14px]"
+                  >
+                    <dt className="shrink-0 text-[#A9A9A9]">{r.label}</dt>
+                    <dd className="min-w-0 truncate text-right font-semibold">{r.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          ) : null}
+        </aside>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Atalhos de valor (10%, 15%...; 7 dias...). O selecionado fica branco. */
+export function PxQuick<T extends string | number>({
+  options,
+  value,
+  onPick,
+}: {
+  options: Array<{ value: T; label: ReactNode }>;
+  value: T | null | undefined;
+  onPick: (v: T) => void;
+}) {
+  return (
+    <div className="flex min-w-0 flex-wrap gap-2">
+      {options.map((o) => (
+        <button
+          key={String(o.value)}
+          type="button"
+          aria-pressed={value === o.value}
+          onClick={() => onPick(o.value)}
+          className={cn(
+            "press h-10 shrink-0 rounded-full px-4 text-[14px] font-bold tabular-nums transition-colors duration-200",
+            value === o.value
+              ? "bg-white text-[#15130F]"
+              : "bg-[#232323] text-[#D4D4D4] hover:bg-[#2C2C2C]",
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Valor de input datetime-local daqui a N dias, às 23:59 (relógio do aparelho). */
+export function pxEndInDays(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T23:59`;
+}
+
+/** "17/11 às 23:59" a partir do valor de um input datetime-local. */
+export function pxShortDate(v: string): string {
+  if (!v) return "";
+  const [date, time] = v.split("T");
+  const [, m, d] = (date ?? "").split("-");
+  return `${d}/${m}${time ? ` às ${time}` : ""}`;
+}

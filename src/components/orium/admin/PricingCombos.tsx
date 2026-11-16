@@ -29,11 +29,13 @@ import {
   PxKpi,
   PxKpiRow,
   PxNote,
-  PxPrimary,
-  PxSection,
-  PxSheet,
+  PxQuick,
   PxStatus,
   PxTag,
+  PxWizard,
+  pxEndInDays,
+  pxShortDate,
+  type PxStep,
 } from "@/components/orium/admin/PricingUI";
 
 /* ------------------------------------------------------------------ *
@@ -382,6 +384,27 @@ export function DecantCombosPanel({
   );
 }
 
+const COMBO_STEPS: PxStep[] = [
+  { key: "oferta", label: "A oferta", hint: "Quantos decants, por quanto e de quais tamanhos." },
+  {
+    key: "cartao",
+    label: "Cartão e período",
+    hint: "A etiqueta do cartão dourado da Home e quando o combo vale.",
+  },
+];
+
+const QTY_QUICK = [2, 3, 4, 5, 6].map((v) => ({ value: v, label: `${v} decants` }));
+const END_QUICK = [
+  { value: 0, label: "Sem fim" },
+  { value: 7, label: "7 dias" },
+  { value: 15, label: "15 dias" },
+  { value: 30, label: "30 dias" },
+];
+
+/** Período em texto curto, para o resumo. */
+const comboPeriod = (starts: string, ends: string) =>
+  `${starts ? `de ${pxShortDate(starts)}` : "começa agora"} · ${ends ? `até ${pxShortDate(ends)}` : "sem data final"}`;
+
 function ComboSheet({
   row,
   open,
@@ -393,25 +416,37 @@ function ComboSheet({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const [step, setStep] = useState(0);
   const [name, setName] = useState(row?.name ?? "Promoção da semana");
   const [quantity, setQuantity] = useState<number>(row?.quantity ?? 3);
   const [price, setPrice] = useState<number | null>(row ? Number(row.combo_price) : 100);
   const [sizes, setSizes] = useState<number[]>(row?.decant_sizes ?? [5]);
   const [starts, setStarts] = useState(isoToSaoPauloInput(row?.starts_at ?? null));
   const [ends, setEnds] = useState(isoToSaoPauloInput(row?.ends_at ?? null));
+  const [endPick, setEndPick] = useState<number | null>(row?.ends_at ? null : 0);
   const [busy, setBusy] = useState(false);
 
   const regular = useRegularUnit(sizes);
   const normal = regular != null ? Number((regular * quantity).toFixed(2)) : null;
   const valid = price != null && price > 0 && (normal == null || price < normal);
+  const saving = normal != null && price != null ? Number((normal - price).toFixed(2)) : null;
+  // sugestões de preço: ~20%, 30% e 40% abaixo do normal, em reais redondos
+  const suggestions =
+    normal != null
+      ? [0.8, 0.7, 0.6]
+          .map((f) => Math.max(1, Math.floor((normal * f) / 5) * 5))
+          .filter((v, i, a) => a.indexOf(v) === i)
+      : [];
 
   const save = async () => {
     if (!price || price <= 0) {
       toast.error("Informe o preço do combo.");
+      setStep(0);
       return;
     }
     if (normal != null && price >= normal) {
       toast.error(`O combo precisa custar menos que o preço normal (${comboBrl(normal)}).`);
+      setStep(0);
       return;
     }
     setBusy(true);
@@ -439,37 +474,42 @@ function ComboSheet({
   };
 
   return (
-    <PxSheet
+    <PxWizard
       open={open}
       onClose={onClose}
       title={row ? "Editar combo" : "Novo combo de decants"}
-      description="O cartão abaixo é exatamente o que o cliente vê na Home."
-      footer={
-        <PxPrimary className="w-full" loading={busy} onClick={() => void save()}>
-          {row ? "Salvar combo" : "Criar combo"}
-        </PxPrimary>
-      }
+      steps={COMBO_STEPS}
+      step={step}
+      onStep={setStep}
+      freeNav={!!row}
+      preview={<ComboPreview name={name} quantity={quantity} price={price ?? 0} sizes={sizes} />}
+      summary={[
+        { label: "Preço normal", value: normal != null ? comboBrl(normal) : "—" },
+        { label: "Preço do combo", value: price != null ? comboBrl(price) : "—" },
+        {
+          label: "Cliente economiza",
+          value:
+            saving != null && saving > 0 ? (
+              <span className="text-[#FFD599]">{comboBrl(saving)}</span>
+            ) : (
+              "—"
+            ),
+        },
+        {
+          label: "Cada decant",
+          value: price ? comboBrl(comboUnitPrice({ quantity, combo_price: price })) : "—",
+        },
+        { label: "Período", value: comboPeriod(starts, ends) },
+      ]}
+      canNext={step === 0 ? valid : !(starts && ends && ends <= starts)}
+      onNext={() => void save()}
+      finishLabel={row ? "Salvar combo" : "Criar combo"}
+      busy={busy}
     >
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void save();
-        }}
-        className="min-w-0 space-y-3"
-      >
-        <ComboPreview name={name} quantity={quantity} price={price ?? 0} sizes={sizes} />
-
-        <PxSection>
-          <PxField label="Etiqueta do cartão" htmlFor="combo-name">
-            <PxInput
-              id="combo-name"
-              value={name}
-              onChange={(e) => setName(e.target.value.slice(0, 32))}
-              placeholder="Promoção da semana"
-            />
-          </PxField>
-
+      {step === 0 ? (
+        <>
           <PxField label="Quantos decants formam o combo">
+            <PxQuick options={QTY_QUICK} value={quantity} onPick={setQuantity} />
             <div className="flex h-[56px] items-center justify-between rounded-full bg-[#232323] px-1.5">
               <button
                 type="button"
@@ -493,27 +533,6 @@ function ComboSheet({
             </div>
           </PxField>
 
-          <MoneyInput
-            id="combo-price"
-            label="Preço do combo inteiro"
-            value={price}
-            onChange={setPrice}
-            hint={
-              normal != null ? (
-                <>
-                  Preço normal: {comboBrl(normal)}.{" "}
-                  {valid && price != null ? (
-                    <span className="font-semibold text-[#FFD599]">
-                      O cliente economiza {comboBrl(Number((normal - price).toFixed(2)))}.
-                    </span>
-                  ) : (
-                    <span className="text-[#FF9A8A]">O combo precisa custar menos que isso.</span>
-                  )}
-                </>
-              ) : undefined
-            }
-          />
-
           <PxField label="Tamanhos que entram" hint="Nenhum marcado = todos os tamanhos.">
             <div className="flex min-w-0 gap-2">
               {DECANT_SIZES.map((ml) => (
@@ -533,34 +552,80 @@ function ComboSheet({
               ))}
             </div>
           </PxField>
-        </PxSection>
 
-        <PxSection title="Período">
-          <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
-            <PxField label="Começa em (opcional)" htmlFor="combo-start">
-              <PxInput
-                id="combo-start"
-                type="datetime-local"
-                value={starts}
-                onChange={(e) => setStarts(e.target.value)}
+          <PxField label="Preço do combo inteiro">
+            {suggestions.length ? (
+              <PxQuick
+                options={suggestions.map((v) => ({ value: v, label: comboBrl(v) }))}
+                value={price}
+                onPick={(v) => setPrice(v)}
               />
-            </PxField>
-            <PxField label="Termina em (opcional)" htmlFor="combo-end">
-              <PxInput
-                id="combo-end"
-                type="datetime-local"
-                value={ends}
-                onChange={(e) => setEnds(e.target.value)}
-              />
-            </PxField>
-          </div>
-        </PxSection>
+            ) : null}
+            <MoneyInput id="combo-price" value={price} onChange={setPrice} />
+          </PxField>
 
-        <PxNote>
-          O cliente pode misturar perfumes. Quando junta {quantity} decants, o combo fecha sozinho
-          na Sacola; sobras pagam o preço normal. O cupom não acumula com o combo.
-        </PxNote>
-      </form>
-    </PxSheet>
+          {normal != null ? (
+            valid && saving != null ? (
+              <PxNote tone="good">
+                Preço normal {comboBrl(normal)} · o cliente economiza {comboBrl(saving)}.
+              </PxNote>
+            ) : (
+              <PxNote tone="warning">
+                O combo precisa custar menos que o preço normal ({comboBrl(normal)}).
+              </PxNote>
+            )
+          ) : null}
+        </>
+      ) : (
+        <>
+          <PxField
+            label="Etiqueta do cartão"
+            htmlFor="combo-name"
+            hint="Aparece no selo escuro do cartão dourado."
+          >
+            <PxInput
+              id="combo-name"
+              value={name}
+              onChange={(e) => setName(e.target.value.slice(0, 32))}
+              placeholder="Promoção da semana"
+            />
+          </PxField>
+          <PxField label="Começa" hint="Vazio = começa assim que você salvar.">
+            <PxInput
+              id="combo-start"
+              type="datetime-local"
+              value={starts}
+              onChange={(e) => setStarts(e.target.value)}
+            />
+          </PxField>
+          <PxField label="Termina">
+            <PxQuick
+              options={END_QUICK}
+              value={endPick}
+              onPick={(v) => {
+                setEndPick(v);
+                setEnds(v === 0 ? "" : pxEndInDays(v));
+              }}
+            />
+            <PxInput
+              id="combo-end"
+              type="datetime-local"
+              value={ends}
+              onChange={(e) => {
+                setEnds(e.target.value);
+                setEndPick(e.target.value ? null : 0);
+              }}
+            />
+          </PxField>
+          {starts && ends && ends <= starts ? (
+            <PxNote tone="warning">O fim precisa ser depois do começo.</PxNote>
+          ) : null}
+          <PxNote>
+            O cliente pode misturar perfumes. Quando junta {quantity} decants, o combo fecha sozinho
+            na Sacola; sobras pagam o preço normal. O cupom não acumula com o combo.
+          </PxNote>
+        </>
+      )}
+    </PxWizard>
   );
 }

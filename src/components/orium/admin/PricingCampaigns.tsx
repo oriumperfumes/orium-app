@@ -45,13 +45,16 @@ import {
   PxNote,
   PxPrimary,
   PxSecondary,
-  PxSection,
+  PxQuick,
   PxSeg,
-  PxSheet,
   PxStat,
   PxStatus,
   PxSwitchRow,
   PxTag,
+  PxWizard,
+  pxEndInDays,
+  pxShortDate,
+  type PxStep,
 } from "@/components/orium/admin/PricingUI";
 import {
   CampaignCopyEditor,
@@ -447,8 +450,45 @@ export function PromotionsPanel({
   );
 }
 
+const PERCENT_QUICK = [5, 10, 15, 20, 25, 30].map((v) => ({ value: v, label: `${v}%` }));
+const END_QUICK = [
+  { value: 0, label: "Sem fim" },
+  { value: 3, label: "3 dias" },
+  { value: 7, label: "7 dias" },
+  { value: 15, label: "15 dias" },
+  { value: 30, label: "30 dias" },
+];
+
+const PROMO_STEPS: PxStep[] = [
+  {
+    key: "desconto",
+    label: "Desconto",
+    hint: "Dê um nome para a campanha e escolha quanto de desconto.",
+  },
+  {
+    key: "produtos",
+    label: "Produtos",
+    hint: "Escolha perfumes ou deixe vazio para valer no catálogo inteiro.",
+  },
+  {
+    key: "periodo",
+    label: "Período",
+    hint: "Sem datas, a promoção começa agora e só termina quando você pausar.",
+  },
+  {
+    key: "loja",
+    label: "Na loja",
+    hint: "Selo do aplicativo e o aviso que aparece uma vez para o cliente.",
+  },
+];
+
+/** Período em texto curto, para prévia e resumo. */
+const periodText = (starts: string, ends: string) =>
+  `${starts ? `de ${pxShortDate(starts)}` : "começa agora"} · ${ends ? `até ${pxShortDate(ends)}` : "sem data final"}`;
+
 function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient();
+  const [step, setStep] = useState(0);
   const [name, setName] = useState("");
   const [percent, setPercent] = useState<number | null>(10);
   const [appliesTo, setAppliesTo] = useState<AppliesTo>("BOTH");
@@ -456,6 +496,7 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
   const [ids, setIds] = useState<string[]>([]);
   const [starts, setStarts] = useState("");
   const [ends, setEnds] = useState("");
+  const [endPick, setEndPick] = useState<number | null>(0);
   const [announce, setAnnounce] = useState(true);
   const [appExclusive, setAppExclusive] = useState(true);
   const [badgeLabel, setBadgeLabel] = useState("");
@@ -477,25 +518,52 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
       (
         await supabase
           .from("products")
-          .select("canonical_name, retail_price")
+          .select("canonical_name, brand, image_url, retail_price")
           .eq("id", ids[0]!)
           .maybeSingle()
       ).data,
   });
-  const base = preview?.retail_price != null ? Number(preview.retail_price) : null;
+  const single = ids.length === 1 ? preview : null;
+  const base = single?.retail_price != null ? Number(single.retail_price) : null;
   const promoPrice = base != null ? applyPercent(base, pct) : null;
 
-  const create = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const reset = () => {
+    setStep(0);
+    setName("");
+    setPercent(10);
+    setAppliesTo("BOTH");
+    setSizes([]);
+    setIds([]);
+    setStarts("");
+    setEnds("");
+    setEndPick(0);
+    setBadgeLabel("");
+    setCopy(emptyCampaignCopy());
+  };
+  const close = () => {
+    reset();
+    onClose();
+  };
+
+  const stepOk = [
+    name.trim().length > 0 && pct > 0 && pct <= 90,
+    true,
+    !(starts && ends && ends <= starts),
+    true,
+  ];
+
+  const create = async () => {
     if (!name.trim()) {
       toast.error("Dê um nome para a promoção.");
+      setStep(0);
       return;
     }
     if (!(pct > 0 && pct <= 90)) {
       toast.error("O desconto deve ficar entre 1% e 90%.");
+      setStep(0);
       return;
     }
-    if (campaignCopyIssues(copy, promoVars).length > 0) {
+    if (announce && campaignCopyIssues(copy, promoVars).length > 0) {
       toast.error("Há variáveis sem valor na comunicação da campanha.");
       return;
     }
@@ -517,13 +585,8 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
       });
       if (error) throw error;
       toast.success("Promoção criada.");
-      setName("");
-      setBadgeLabel("");
-      setCopy(emptyCampaignCopy());
-      setIds([]);
-      setSizes([]);
       qc.invalidateQueries();
-      onClose();
+      close();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Não foi possível criar.");
     } finally {
@@ -531,28 +594,102 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
     }
   };
 
+  const scope =
+    ids.length === 0
+      ? "Catálogo inteiro"
+      : ids.length === 1
+        ? productTitle(single?.canonical_name ?? "1 perfume")
+        : `${ids.length} perfumes`;
+
+  const card = (
+    <div className="min-w-0 overflow-hidden rounded-[26px] bg-[#FFD599] p-5 text-[#15130F]">
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <span className="inline-flex min-w-0 items-center gap-2 truncate rounded-full bg-[#15130F] px-3 py-1 text-[12px] font-semibold text-[#FFD599]">
+          <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-[#FFD599]" />
+          <span className="truncate">
+            {appExclusive ? badgeLabel.trim() || "Exclusivo no app" : "Promoção"}
+          </span>
+        </span>
+        <span className="shrink-0 text-[12.5px] font-bold opacity-60">
+          {APPLIES_OPTIONS.find((o) => o.value === appliesTo)?.label}
+        </span>
+      </div>
+      <p className="mt-4 truncate text-[15px] font-bold opacity-70">
+        {name.trim() || "Nome da promoção"}
+      </p>
+      <p className="text-[46px] leading-none font-bold tracking-[-0.05em] tabular-nums">
+        {pct}% <span className="text-[22px] tracking-[-0.02em]">OFF</span>
+      </p>
+      {base != null ? (
+        <div className="mt-4 flex min-w-0 items-center gap-3 rounded-[18px] bg-[#15130F]/[0.06] p-2.5">
+          {single?.image_url ? (
+            <span className="shrink-0 overflow-hidden rounded-[12px] bg-white">
+              <ItemThumb src={single.image_url} alt={single.canonical_name ?? ""} size={44} />
+            </span>
+          ) : null}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13.5px] font-semibold">{scope}</span>
+            <span className="flex items-baseline gap-2 tabular-nums">
+              <span className="text-[12.5px] line-through opacity-55">{brl(base)}</span>
+              <span className="text-[17px] font-bold">{brl(promoPrice)}</span>
+            </span>
+          </span>
+        </div>
+      ) : (
+        <p className="mt-3 truncate text-[14px] font-semibold opacity-70">{scope}</p>
+      )}
+      <p className="mt-3 text-[12.5px] font-semibold opacity-60">{periodText(starts, ends)}</p>
+    </div>
+  );
+
   return (
-    <PxSheet
+    <PxWizard
       open={open}
-      onClose={onClose}
+      onClose={close}
       title="Nova promoção"
-      description="Uma camada de desconto sobre o preço atual. O preço base não muda."
-      footer={
-        <PxPrimary type="submit" form="promo-form" className="w-full" loading={busy}>
-          Criar promoção
-        </PxPrimary>
-      }
+      steps={PROMO_STEPS}
+      step={step}
+      onStep={setStep}
+      preview={card}
+      summary={[
+        { label: "Desconto", value: `${pct}% OFF` },
+        { label: "Produtos", value: scope },
+        {
+          label: "Vale para",
+          value: appliesShort({
+            applies_to: appliesTo,
+            decant_sizes: appliesTo === "FULL" ? [] : sizes,
+          }),
+        },
+        { label: "Período", value: periodText(starts, ends) },
+        { label: "Aviso ao cliente", value: announce ? "uma vez" : "não" },
+      ]}
+      canNext={stepOk[step]}
+      onNext={() => void create()}
+      finishLabel="Criar promoção"
+      busy={busy}
     >
-      <form id="promo-form" onSubmit={create} className="min-w-0 space-y-3">
-        <PxSection title="O que entra">
-          <PxField label="Nome" htmlFor="promo-name">
+      {step === 0 ? (
+        <>
+          <PxField label="Nome da campanha" htmlFor="promo-name">
             <PxInput
               id="promo-name"
+              autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Semana dos decants"
+              placeholder="Ex.: Semana dos decants"
             />
           </PxField>
+          <PxField label="Desconto">
+            <PxQuick options={PERCENT_QUICK} value={pct} onPick={(v) => setPercent(v)} />
+            <PercentInput id="promo-pct" value={percent} onChange={setPercent} />
+          </PxField>
+          {!(pct > 0 && pct <= 90) ? (
+            <PxNote tone="warning">O desconto deve ficar entre 1% e 90%.</PxNote>
+          ) : null}
+        </>
+      ) : step === 1 ? (
+        <>
           <ProductPicker ids={ids} setIds={setIds} />
           <PxField label="Vale para">
             <PxSeg
@@ -563,7 +700,7 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
             />
           </PxField>
           {appliesTo !== "FULL" ? (
-            <PxField label="Tamanhos de decant" hint="Nenhum marcado = todos.">
+            <PxField label="Tamanhos de decant" hint="Nenhum marcado = todos os tamanhos.">
               <div className="flex min-w-0 gap-2">
                 {SIZES.map((ml) => (
                   <PxChip
@@ -579,57 +716,45 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
               </div>
             </PxField>
           ) : null}
-        </PxSection>
-
-        <PxSection title="Desconto">
-          <PercentInput
-            id="promo-pct"
-            label="Quanto de desconto"
-            value={percent}
-            onChange={setPercent}
-          />
-          {base != null ? (
-            <div className="min-w-0 rounded-[22px] bg-[#FFD599] p-4 text-[#15130F]">
-              <p className="text-[13px] font-bold opacity-70">Prévia</p>
-              <p className="mt-1 flex min-w-0 flex-wrap items-baseline gap-2">
-                <span className="text-[14px] line-through opacity-60 tabular-nums">
-                  {brl(base)}
-                </span>
-                <span className="text-[26px] font-bold tracking-[-0.03em] tabular-nums">
-                  {brl(promoPrice)}
-                </span>
-              </p>
-              <p className="text-[13px] opacity-70">
-                Economia de {brl(base - (promoPrice ?? base))} · {pct}% OFF
-              </p>
-            </div>
+        </>
+      ) : step === 2 ? (
+        <>
+          <PxField label="Começa" hint="Vazio = começa assim que você criar.">
+            <PxInput
+              id="promo-start"
+              type="datetime-local"
+              value={starts}
+              onChange={(e) => setStarts(e.target.value)}
+            />
+          </PxField>
+          <PxField label="Termina">
+            <PxQuick
+              options={END_QUICK}
+              value={endPick}
+              onPick={(v) => {
+                setEndPick(v);
+                setEnds(v === 0 ? "" : pxEndInDays(v));
+              }}
+            />
+            <PxInput
+              id="promo-end"
+              type="datetime-local"
+              value={ends}
+              onChange={(e) => {
+                setEnds(e.target.value);
+                setEndPick(e.target.value ? null : 0);
+              }}
+            />
+          </PxField>
+          {starts && ends && ends <= starts ? (
+            <PxNote tone="warning">O fim precisa ser depois do começo.</PxNote>
           ) : null}
-        </PxSection>
-
-        <PxSection title="Período">
-          <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
-            <PxField label="Começa em (opcional)" htmlFor="promo-start">
-              <PxInput
-                id="promo-start"
-                type="datetime-local"
-                value={starts}
-                onChange={(e) => setStarts(e.target.value)}
-              />
-            </PxField>
-            <PxField label="Termina em (opcional)" htmlFor="promo-end">
-              <PxInput
-                id="promo-end"
-                type="datetime-local"
-                value={ends}
-                onChange={(e) => setEnds(e.target.value)}
-              />
-            </PxField>
-          </div>
-        </PxSection>
-
-        <PxSection title="Na loja">
+        </>
+      ) : (
+        <>
           <PxSwitchRow
             title="Desconto exclusivo do aplicativo"
+            hint="Mostra um selo no perfume para quem compra pelo app."
             checked={appExclusive}
             onChange={setAppExclusive}
           />
@@ -644,7 +769,8 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
             </PxField>
           ) : null}
           <PxSwitchRow
-            title="Anunciar uma vez ao cliente"
+            title="Avisar o cliente uma vez"
+            hint="Um aviso na loja quando a promoção entrar no ar."
             checked={announce}
             onChange={setAnnounce}
           />
@@ -658,9 +784,9 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
               fallbackMessage={`${pct}% OFF em ${name.trim() || "seus perfumes"}`}
             />
           ) : null}
-        </PxSection>
-      </form>
-    </PxSheet>
+        </>
+      )}
+    </PxWizard>
   );
 }
 
@@ -1098,8 +1224,48 @@ function CouponTester({ coupons }: { coupons: CouponRow[] }) {
   );
 }
 
+const COUPON_STEPS: PxStep[] = [
+  {
+    key: "codigo",
+    label: "Código",
+    hint: "O que o cliente digita na Sacola e quanto ele economiza.",
+  },
+  {
+    key: "quem",
+    label: "Onde vale",
+    hint: "Quem pode ver o cupom e em quais produtos ele funciona.",
+  },
+  { key: "limites", label: "Limites", hint: "Quantas vezes pode ser usado e até quando." },
+  {
+    key: "aviso",
+    label: "Divulgação",
+    hint: "Cupons públicos podem aparecer uma vez para o cliente na loja.",
+  },
+];
+
+const USES_QUICK = [
+  { value: "", label: "Sem limite" },
+  { value: "10", label: "10" },
+  { value: "50", label: "50" },
+  { value: "100", label: "100" },
+];
+const PER_USER_QUICK = [
+  { value: "1", label: "1 vez" },
+  { value: "2", label: "2 vezes" },
+  { value: "", label: "Sem limite" },
+];
+
+/** Código fácil de ditar: ORIUM + 4 letras/números sem confusão (sem 0/O, 1/I). */
+function randomCouponCode() {
+  const abc = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let s = "";
+  for (let i = 0; i < 4; i++) s += abc[Math.floor(Math.random() * abc.length)];
+  return `ORIUM${s}`;
+}
+
 function NewCouponSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient();
+  const [step, setStep] = useState(0);
   const [code, setCode] = useState("");
   const [percent, setPercent] = useState<number | null>(10);
   const [visibility, setVisibility] = useState<"PUBLIC" | "SECRET">("SECRET");
@@ -1108,31 +1274,56 @@ function NewCouponSheet({ open, onClose }: { open: boolean; onClose: () => void 
   const [maxTotal, setMaxTotal] = useState("");
   const [maxPerUser, setMaxPerUser] = useState("1");
   const [ends, setEnds] = useState("");
+  const [endPick, setEndPick] = useState<number | null>(0);
   const [stackable, setStackable] = useState(false);
   const [announce, setAnnounce] = useState(false);
   const [copy, setCopy] = useState<CampaignCopyValue>(emptyCampaignCopy());
   const [busy, setBusy] = useState(false);
 
   const pct = Number(percent) || 0;
+  const clean = code.trim().toUpperCase().replace(/\s+/g, "");
   const couponVars: CampaignVars = {
-    coupon: code.trim().toUpperCase() || "CUPOM",
+    coupon: clean || "CUPOM",
     discount: String(pct),
     category:
       appliesTo === "DECANT" ? "decants" : appliesTo === "FULL" ? "frascos" : "todo o catálogo",
   };
+  const showAnnounce = announce && visibility === "PUBLIC";
 
-  const create = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const clean = code.trim().toUpperCase().replace(/\s+/g, "");
+  const reset = () => {
+    setStep(0);
+    setCode("");
+    setPercent(10);
+    setVisibility("SECRET");
+    setAppliesTo("BOTH");
+    setIds([]);
+    setMaxTotal("");
+    setMaxPerUser("1");
+    setEnds("");
+    setEndPick(0);
+    setStackable(false);
+    setAnnounce(false);
+    setCopy(emptyCampaignCopy());
+  };
+  const close = () => {
+    reset();
+    onClose();
+  };
+
+  const stepOk = [clean.length >= 3 && pct > 0 && pct <= 90, true, true, true];
+
+  const create = async () => {
     if (clean.length < 3) {
       toast.error("O código precisa ter ao menos 3 letras.");
+      setStep(0);
       return;
     }
     if (!(pct > 0 && pct <= 90)) {
       toast.error("O desconto deve ficar entre 1% e 90%.");
+      setStep(0);
       return;
     }
-    if (campaignCopyIssues(copy, { ...couponVars, coupon: clean }).length > 0) {
+    if (showAnnounce && campaignCopyIssues(copy, { ...couponVars, coupon: clean }).length > 0) {
       toast.error("Há variáveis sem valor na comunicação da campanha.");
       return;
     }
@@ -1160,78 +1351,144 @@ function NewCouponSheet({ open, onClose }: { open: boolean; onClose: () => void 
             : error.message,
         );
       toast.success("Cupom criado.");
-      setCode("");
-      setIds([]);
-      setCopy(emptyCampaignCopy());
       qc.invalidateQueries();
-      onClose();
+      close();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Não foi possível criar.");
+      if (err instanceof Error && err.message.includes("Já existe")) setStep(0);
     } finally {
       setBusy(false);
     }
   };
 
-  return (
-    <PxSheet
-      open={open}
-      onClose={onClose}
-      title="Novo cupom"
-      description="O cliente digita o código na Sacola. O valor final é sempre confirmado pelo servidor."
-      footer={
-        <PxPrimary type="submit" form="coupon-form" className="w-full" loading={busy}>
-          Criar cupom
-        </PxPrimary>
-      }
-    >
-      <form id="coupon-form" onSubmit={create} className="min-w-0 space-y-3">
-        {/* prévia do ticket */}
-        <div className="flex min-w-0 items-stretch overflow-hidden rounded-[24px] bg-[#FFD599] text-[#15130F]">
-          <div className="min-w-0 flex-1 p-5">
-            <p className="text-[13px] font-bold opacity-60">
-              {visibility === "PUBLIC" ? "Cupom público" : "Cupom secreto"}
-            </p>
-            <p className="truncate text-[28px] leading-tight font-bold tracking-[0.04em]">
-              {code.trim().toUpperCase() || "CUPOM"}
-            </p>
-          </div>
-          <span
-            aria-hidden
-            className="my-4 w-0 border-l-[1.5px] border-dashed border-[#15130F]/25"
-          />
-          <div className="grid shrink-0 place-items-center px-5">
-            <p className="text-[30px] leading-none font-bold tracking-[-0.03em] tabular-nums">
+  const ticket = (
+    <div className="min-w-0 overflow-hidden rounded-[26px] bg-[#FFD599] text-[#15130F]">
+      <div className="flex min-w-0 items-stretch">
+        <div className="min-w-0 flex-1 p-5">
+          <p className="text-[12.5px] font-bold opacity-60">
+            {visibility === "PUBLIC" ? "Cupom público" : "Cupom secreto"}
+          </p>
+          <p className="mt-1 truncate text-[28px] leading-tight font-bold tracking-[0.04em]">
+            {clean || "CUPOM"}
+          </p>
+          <p className="mt-1 truncate text-[13px] font-semibold opacity-60">
+            {ids.length
+              ? `${ids.length} ${ids.length === 1 ? "perfume" : "perfumes"}`
+              : APPLIES_LABEL[appliesTo]}
+          </p>
+        </div>
+        <span
+          aria-hidden
+          className="relative my-0 w-0 border-l-[1.5px] border-dashed border-[#15130F]/25"
+        >
+          <span className="absolute -top-3 -left-3 size-6 rounded-full bg-[#121212] lg:bg-[#0C0C0C]" />
+          <span className="absolute -bottom-3 -left-3 size-6 rounded-full bg-[#121212] lg:bg-[#0C0C0C]" />
+        </span>
+        <div className="grid shrink-0 place-items-center px-5">
+          <div className="text-center">
+            <p className="text-[34px] leading-none font-bold tracking-[-0.04em] tabular-nums">
               {pct}%
             </p>
             <p className="text-[12px] font-bold opacity-60">OFF</p>
           </div>
         </div>
+      </div>
+      <div className="border-t border-dashed border-[#15130F]/20 px-5 py-3 text-[12.5px] font-semibold opacity-70">
+        R$ 300 na Sacola → {brl(applyPercent(300, pct))}
+      </div>
+    </div>
+  );
 
-        <PxSection title="Código e desconto">
-          <PxField label="Código" htmlFor="cup-code">
-            <PxInput
-              id="cup-code"
-              value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
-              placeholder="ORIUM10"
-              className="uppercase"
-            />
+  return (
+    <PxWizard
+      open={open}
+      onClose={close}
+      title="Novo cupom"
+      steps={COUPON_STEPS}
+      step={step}
+      onStep={setStep}
+      preview={ticket}
+      summary={[
+        { label: "Desconto", value: `${pct}% OFF` },
+        { label: "Visibilidade", value: visibility === "PUBLIC" ? "Público" : "Secreto" },
+        {
+          label: "Vale para",
+          value: ids.length ? `${ids.length} perfumes` : APPLIES_LABEL[appliesTo],
+        },
+        {
+          label: "Usos",
+          value: `${maxTotal || "sem limite"} · ${maxPerUser ? `${maxPerUser} por cliente` : "livre por cliente"}`,
+        },
+        { label: "Validade", value: ends ? `até ${pxShortDate(ends)}` : "sem data final" },
+        { label: "Com promoção", value: stackable ? "acumula" : "a melhor condição" },
+      ]}
+      canNext={stepOk[step]}
+      onNext={() => void create()}
+      finishLabel="Criar cupom"
+      busy={busy}
+    >
+      {step === 0 ? (
+        <>
+          <PxField
+            label="Código"
+            htmlFor="cup-code"
+            hint="Letras e números, sem espaço. Mínimo 3 caracteres."
+          >
+            <div className="flex min-w-0 gap-2">
+              <PxInput
+                id="cup-code"
+                autoFocus
+                value={code}
+                onChange={(e) => setCode(e.target.value.toUpperCase().replace(/\s+/g, ""))}
+                placeholder="ORIUM10"
+                className="flex-1 font-bold tracking-[0.06em] uppercase"
+              />
+              <PxSecondary
+                className="h-[52px] shrink-0 px-4"
+                onClick={() => setCode(randomCouponCode())}
+              >
+                Gerar
+              </PxSecondary>
+            </div>
           </PxField>
-          <PercentInput id="cup-pct" label="Desconto" value={percent} onChange={setPercent} />
-          <PxField label="Visibilidade">
-            <PxSeg
-              label="Visibilidade"
-              value={visibility}
-              onChange={setVisibility}
-              options={[
-                { value: "SECRET", label: "Secreto" },
-                { value: "PUBLIC", label: "Público" },
-              ]}
-            />
+          <PxField label="Desconto">
+            <PxQuick options={PERCENT_QUICK} value={pct} onPick={(v) => setPercent(v)} />
+            <PercentInput id="cup-pct" value={percent} onChange={setPercent} />
           </PxField>
-        </PxSection>
-
-        <PxSection title="Onde vale">
+        </>
+      ) : step === 1 ? (
+        <>
+          <div className="grid min-w-0 grid-cols-2 gap-2">
+            {(
+              [
+                ["SECRET", "Secreto", "Só quem recebe o código consegue usar."],
+                ["PUBLIC", "Público", "Pode aparecer na loja para todos."],
+              ] as const
+            ).map(([v, label, hint]) => (
+              <button
+                key={v}
+                type="button"
+                aria-pressed={visibility === v}
+                onClick={() => setVisibility(v)}
+                className={cn(
+                  "press min-w-0 rounded-[22px] p-4 text-left transition-colors duration-200",
+                  visibility === v
+                    ? "bg-white text-[#15130F]"
+                    : "bg-[#232323] text-white hover:bg-[#2A2A2A]",
+                )}
+              >
+                <span className="block text-[16px] font-bold">{label}</span>
+                <span
+                  className={cn(
+                    "mt-1 block text-[13px] leading-snug",
+                    visibility === v ? "text-[#15130F]/65" : "text-[#8C8C8C]",
+                  )}
+                >
+                  {hint}
+                </span>
+              </button>
+            ))}
+          </div>
           <PxField label="Vale para">
             <PxSeg
               label="Vale para"
@@ -1241,36 +1498,40 @@ function NewCouponSheet({ open, onClose }: { open: boolean; onClose: () => void 
             />
           </PxField>
           <ProductPicker ids={ids} setIds={setIds} />
-        </PxSection>
-
-        <PxSection title="Limites">
-          <div className="grid min-w-0 grid-cols-2 gap-3">
-            <PxField label="Usos no total" htmlFor="cup-max">
-              <PxInput
-                id="cup-max"
-                inputMode="numeric"
-                value={maxTotal}
-                onChange={(e) => setMaxTotal(e.target.value.replace(/\D/g, ""))}
-                placeholder="sem limite"
-                className="tabular-nums"
-              />
-            </PxField>
-            <PxField label="Por cliente" htmlFor="cup-user">
-              <PxInput
-                id="cup-user"
-                inputMode="numeric"
-                value={maxPerUser}
-                onChange={(e) => setMaxPerUser(e.target.value.replace(/\D/g, ""))}
-                className="tabular-nums"
-              />
-            </PxField>
-          </div>
-          <PxField label="Válido até (opcional)" htmlFor="cup-end">
+        </>
+      ) : step === 2 ? (
+        <>
+          <PxField label="Usos no total">
+            <PxQuick options={USES_QUICK} value={maxTotal} onPick={setMaxTotal} />
+            <PxInput
+              id="cup-max"
+              inputMode="numeric"
+              value={maxTotal}
+              onChange={(e) => setMaxTotal(e.target.value.replace(/\D/g, ""))}
+              placeholder="sem limite"
+              className="tabular-nums"
+            />
+          </PxField>
+          <PxField label="Usos por cliente">
+            <PxQuick options={PER_USER_QUICK} value={maxPerUser} onPick={setMaxPerUser} />
+          </PxField>
+          <PxField label="Válido até">
+            <PxQuick
+              options={END_QUICK}
+              value={endPick}
+              onPick={(v) => {
+                setEndPick(v);
+                setEnds(v === 0 ? "" : pxEndInDays(v));
+              }}
+            />
             <PxInput
               id="cup-end"
               type="datetime-local"
               value={ends}
-              onChange={(e) => setEnds(e.target.value)}
+              onChange={(e) => {
+                setEnds(e.target.value);
+                setEndPick(e.target.value ? null : 0);
+              }}
             />
           </PxField>
           <PxSwitchRow
@@ -1279,25 +1540,33 @@ function NewCouponSheet({ open, onClose }: { open: boolean; onClose: () => void 
             checked={stackable}
             onChange={setStackable}
           />
+        </>
+      ) : visibility === "PUBLIC" ? (
+        <>
           <PxSwitchRow
-            title="Anunciar uma vez"
-            hint="Só para cupons públicos."
+            title="Avisar o cliente uma vez"
+            hint="Um aviso na loja com o código do cupom."
             checked={announce}
             onChange={setAnnounce}
           />
-          {announce && visibility === "PUBLIC" ? (
+          {announce ? (
             <CampaignCopyEditor
               idPrefix="cup-copy"
               value={copy}
               onChange={setCopy}
               vars={couponVars}
-              badge={`${code.trim().toUpperCase() || "CUPOM"} · ${pct}% OFF`}
-              fallbackMessage={`Use ${code.trim().toUpperCase() || "CUPOM"} e economize ${pct}% no seu pedido.`}
+              badge={`${clean || "CUPOM"} · ${pct}% OFF`}
+              fallbackMessage={`Use ${clean || "CUPOM"} e economize ${pct}% no seu pedido.`}
             />
           ) : null}
-        </PxSection>
-      </form>
-    </PxSheet>
+        </>
+      ) : (
+        <PxNote>
+          Cupom secreto não aparece na loja: só quem recebe o código consegue usar. Para divulgar na
+          loja, volte e escolha “Público”.
+        </PxNote>
+      )}
+    </PxWizard>
   );
 }
 
