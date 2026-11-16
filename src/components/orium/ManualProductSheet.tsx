@@ -1,13 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Camera, ImagePlus, Loader2, Trash2, X } from "lucide-react";
+import { Check, Droplet, FlaskConical, Layers, Loader2, MessageCircle, Trash2 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,9 +14,26 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { FragranceEditor } from "@/components/orium/FragranceEditor";
-import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
-import { useVisualViewport } from "@/hooks/use-visual-viewport";
+import { AdminConfirm } from "@/components/orium/admin/AdminUI";
+import { SidePanel } from "@/components/orium/admin/orders/model";
+import {
+  BrandPicker,
+  ChoiceCards,
+  Field,
+  GoldButton,
+  PanelCard,
+  PanelFooter,
+  PanelHeader,
+  PhotoField,
+  QuickChips,
+  Segmented,
+  SoftButton,
+  TextArea,
+  TextInput,
+  ToggleRow,
+} from "@/components/orium/admin/PanelKit";
 import { optimizePhoto } from "@/lib/image-optimize";
+import { brl } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { DECANT_SIZES, decantPrice, type DecantMl } from "@/lib/decants";
 import { useDecantSettings } from "@/lib/use-decant-settings";
@@ -37,11 +49,13 @@ import {
 import { refreshSaleModes } from "@/lib/sale-mode";
 
 /**
- * Cadastro manual de perfumes (Admin → Produtos → Adicionar produto).
+ * CADASTRO DE PERFUME (Admin → Produtos → Adicionar produto).
  *
- * Uma coluna, painel inferior e teclado tratado pelo visual viewport, como na
- * Negociação. O produto entra no catálogo normal e a escolha "Decant / Frasco /
- * Ambos" define como ele é vendido em todo o site.
+ * Janela grande que nasce do botão: no computador, à esquerda a foto e a
+ * prévia ao vivo do cartão da loja (com o que falta); à direita o cadastro em
+ * blocos numerados — o perfume, como vende, preço, estoque e vitrine, texto e
+ * notas. No celular vira uma coluna só. O produto entra no catálogo normal e
+ * "Decant / Frasco / Ambos" define como ele é vendido em todo o site.
  */
 
 type Draft = {
@@ -100,16 +114,16 @@ const emptyDraft: Draft = {
   priceOnRequest: false,
 };
 
-const SALE_MODES: Array<{ value: SaleModeInput; label: string; hint: string }> = [
-  { value: "DECANT", label: "Decant", hint: "Só frações de 2ml, 5ml e 10ml." },
-  { value: "FULL", label: "Frasco", hint: "Só o frasco completo." },
-  { value: "BOTH", label: "Ambos", hint: "O cliente escolhe decant ou frasco." },
+const SALE_MODES: Array<{ value: SaleModeInput; label: string; hint: string; icon: ReactNode }> = [
+  { value: "DECANT", label: "Decant", hint: "Só 2, 5 e 10 ml", icon: <Droplet /> },
+  { value: "FULL", label: "Frasco", hint: "Só o frasco fechado", icon: <FlaskConical /> },
+  { value: "BOTH", label: "Os dois", hint: "O cliente escolhe", icon: <Layers /> },
 ];
 
 const VISIBILITIES: Array<{ value: VisibilityInput; label: string }> = [
-  { value: "ATIVO", label: "Ativo" },
-  { value: "OCULTO", label: "Oculto" },
+  { value: "ATIVO", label: "À venda" },
   { value: "INDISPONIVEL", label: "Indisponível" },
+  { value: "OCULTO", label: "Oculto" },
 ];
 
 const CONCENTRATIONS = ["EDP", "EDT", "Parfum", "Extrait", "Cologne"];
@@ -140,15 +154,20 @@ export function ManualProductSheet({
   prefill?: ManualProductPrefill | null;
 }) {
   const [draft, setDraft] = useState<Draft>(emptyDraft);
+  /** último estado salvo/carregado: fechar com algo diferente pede confirmação */
+  const [baseline, setBaseline] = useState<string>(JSON.stringify(emptyDraft));
+  const [askDiscard, setAskDiscard] = useState(false);
   const [loading, setLoading] = useState(false);
+  const dirty = !loading && JSON.stringify(draft) !== baseline;
+  const requestClose = () => (dirty ? setAskDiscard(true) : onClose());
   const load = useServerFn(getManualProduct);
-  const vv = useVisualViewport(open);
-  useBodyScrollLock(open);
 
   useEffect(() => {
     if (!open) return;
     if (!productId) {
-      setDraft({ ...emptyDraft, ...(prefill ?? {}), ...(prefill?.priceOnRequest ? { saleMode: "FULL" as SaleModeInput } : {}) });
+      const start = { ...emptyDraft, ...(prefill ?? {}), ...(prefill?.priceOnRequest ? { saleMode: "FULL" as SaleModeInput } : {}) };
+      setDraft(start);
+      setBaseline(JSON.stringify(start));
       return;
     }
     setLoading(true);
@@ -164,7 +183,7 @@ export function ManualProductSheet({
           const value = p[key];
           return value == null ? "" : String(value);
         };
-        setDraft({
+        const loaded: Draft = {
           id: String(p["id"]),
           name: String(p["canonical_name"] ?? ""),
           brandId: (p["brand_id"] as string | null) ?? null,
@@ -188,100 +207,98 @@ export function ManualProductSheet({
           decant5: num("decant_price_5ml"),
           decant10: num("decant_price_10ml"),
           priceOnRequest: p["price_on_request"] === true,
-        });
+        };
+        setDraft(loaded);
+        setBaseline(JSON.stringify(loaded));
       })
       .catch((e) => toast.error((e as Error).message))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, productId]);
 
-  const style: React.CSSProperties = vv.supported
-    ? vv.isKeyboardOpen
-      ? { height: vv.height, maxHeight: vv.height, top: vv.offsetTop, bottom: "auto" }
-      : { maxHeight: Math.round(vv.height * 0.92) }
-    : {};
-
   return (
-    <Drawer
-      open={open}
-      onOpenChange={(o) => !o && onClose()}
-      repositionInputs={false}
-      dismissible={!vv.isKeyboardOpen}
-    >
-      <DrawerContent
-        style={style}
-        className={cn("flex min-h-0 flex-col overflow-hidden", !vv.supported && "max-h-[92dvh]")}
-      >
-        <DrawerHeader className="shrink-0 pb-2">
-          <DrawerTitle>{draft.id ? "Editar produto" : "Adicionar produto"}</DrawerTitle>
-        </DrawerHeader>
+    <>
+      <SidePanel open={open} onClose={requestClose} label={draft.id ? "Editar produto" : "Adicionar produto"} wide>
         {loading ? (
-          <div className="grid flex-1 place-items-center py-10 text-muted-foreground">
-            <Loader2 className="size-5 animate-spin" />
+          <div className="grid flex-1 place-items-center text-[#8C8C8C]">
+            <Loader2 className="size-6 animate-spin" />
           </div>
         ) : (
           <ManualProductForm
             draft={draft}
             setDraft={setDraft}
-            keyboardOpen={vv.isKeyboardOpen}
             onSaved={onSaved}
+            onPersisted={(d) => setBaseline(JSON.stringify(d))}
             onClose={onClose}
+            requestClose={requestClose}
           />
         )}
-      </DrawerContent>
-    </Drawer>
+      </SidePanel>
+      <AdminConfirm
+        open={askDiscard}
+        onOpenChange={setAskDiscard}
+        title="Sair sem salvar?"
+        description="O que você preencheu neste perfume ainda não foi salvo."
+        confirmLabel="Sair sem salvar"
+        danger
+        onConfirm={onClose}
+      />
+    </>
   );
 }
 
 function ManualProductForm({
   draft,
   setDraft,
-  keyboardOpen,
   onSaved,
+  onPersisted,
   onClose,
+  requestClose,
 }: {
   draft: Draft;
-  setDraft: (d: Draft) => void;
-  keyboardOpen: boolean;
+  setDraft: React.Dispatch<React.SetStateAction<Draft>>;
   onSaved?: (() => void) | undefined;
+  onPersisted: (d: Draft) => void;
   onClose: () => void;
+  requestClose: () => void;
 }) {
   const save = useServerFn(saveManualProduct);
   const upload = useServerFn(uploadProductPhoto);
   const remove = useServerFn(deleteManualProduct);
   const brandsFn = useServerFn(listBrandOptions);
-  const fileRef = useRef<HTMLInputElement | null>(null);
-  const cameraRef = useRef<HTMLInputElement | null>(null);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const [brands, setBrands] = useState<Array<{ id: string; canonical_name: string }>>([]);
-  const [brandQuery, setBrandQuery] = useState("");
   const [busy, setBusy] = useState<null | "photo" | "save" | "delete">(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const decantSettings = useDecantSettings();
-  const [customDecant, setCustomDecant] = useState(
-    !!(draft.decant2 || draft.decant5 || draft.decant10),
-  );
-
-  /** Preço geral daquele tamanho, já formatado, para servir de referência. */
-  const globalDecant = (ml: DecantMl) =>
-    decantPrice(null, decantSettings, ml).toFixed(2).replace(".", ",");
+  const [customDecant, setCustomDecant] = useState(!!(draft.decant2 || draft.decant5 || draft.decant10));
 
   useEffect(() => {
-    void brandsFn().then((r) => setBrands(r.brands)).catch(() => setBrands([]));
+    void brandsFn()
+      .then((r) => setBrands(r.brands))
+      .catch(() => setBrands([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const set = (patch: Partial<Draft>) => setDraft({ ...draft, ...patch });
-  const sellsBottle = draft.saleMode !== "DECANT";
+  const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
+  const sellsBottle = draft.saleMode !== "DECANT" || draft.priceOnRequest;
+  const sellsDecant = draft.saleMode !== "FULL" && !draft.priceOnRequest;
+  const brandName = brands.find((b) => b.id === draft.brandId)?.canonical_name ?? (draft.brandId ? "" : draft.newBrandName);
+  /** Preço geral daquele tamanho, para servir de referência. */
+  const globalDecant = (ml: DecantMl) => decantPrice(null, decantSettings, ml);
 
-  const brandName =
-    brands.find((b) => b.id === draft.brandId)?.canonical_name ?? (draft.brandId ? "" : draft.newBrandName);
-  const suggestions = brandQuery.trim()
-    ? brands
-        .filter((b) => b.canonical_name.toLowerCase().includes(brandQuery.trim().toLowerCase()))
-        .slice(0, 6)
-    : [];
+  const retail = toNumber(draft.retailPrice);
+  const cost = toNumber(draft.cost);
+  const profit = retail != null && cost != null ? retail - cost : null;
+
+  const needsPrice = !draft.priceOnRequest && draft.saleMode !== "DECANT" && draft.manualPricing;
+  const checklist = [
+    { ok: !!draft.imageUrl, label: "Foto" },
+    { ok: !!draft.name.trim(), label: "Nome" },
+    { ok: !!(draft.brandId || draft.newBrandName.trim()), label: "Marca" },
+    ...(needsPrice ? [{ ok: retail != null, label: "Preço do frasco" }] : []),
+  ];
+  const canSave = !!draft.name.trim() && !!(draft.brandId || draft.newBrandName.trim());
 
   const pickPhoto = async (file: File) => {
     setBusy("photo");
@@ -328,12 +345,12 @@ function ManualProductForm({
           priceOnRequest: draft.priceOnRequest,
         },
       });
+      const isNew = !draft.id;
       set({ id: res.id });
+      onPersisted({ ...draft, id: res.id });
       refreshSaleModes();
       onSaved?.();
-      toast.success(
-        draft.id ? "Produto atualizado." : "Produto criado. Complete as informações olfativas abaixo.",
-      );
+      toast.success(isNew ? "Perfume no catálogo! Agora, se quiser, complete as notas no fim." : "Produto atualizado.");
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -341,431 +358,255 @@ function ManualProductForm({
     }
   };
 
+  /** mantém o campo tocado visível acima do teclado do celular */
   const onFieldFocus = (event: React.FocusEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
     if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) return;
-    window.setTimeout(() => {
-      const scroller = scrollRef.current;
-      if (!scroller) return;
-      const field = target.getBoundingClientRect();
-      const viewport = scroller.getBoundingClientRect();
-      const targetTop = scroller.scrollTop + field.top - viewport.top - (viewport.height - field.height) / 2;
-      scroller.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
-    }, 320);
+    window.setTimeout(() => target.scrollIntoView({ block: "center", behavior: "smooth" }), 320);
   };
 
+  const conc = draft.concentration.trim();
+  const pinMode = draft.pinned ? (draft.pinnedNew ? "novo" : "topo") : "nao";
+
   return (
-    <div
-      ref={scrollRef}
-      onFocus={onFieldFocus}
-      data-vaul-no-drag=""
-      className={cn(
-        "min-h-0 flex-1 touch-pan-y space-y-5 overflow-x-hidden overflow-y-auto overscroll-contain px-4 [scrollbar-gutter:stable]",
-        keyboardOpen ? "pb-6" : "pb-[calc(1.5rem+env(safe-area-inset-bottom))]",
-      )}
-    >
-      {/* Foto: câmera ou galeria, otimizada antes de enviar */}
-      <div>
-        <Label className="text-sm">Foto do perfume</Label>
-        <div className="mt-2 flex items-center gap-3">
-          <div className="size-24 shrink-0 overflow-hidden rounded-2xl border border-border/60 bg-surface-3">
-            {draft.imageUrl ? (
-              <img src={draft.imageUrl} alt="Foto do perfume" className="size-full object-cover" />
-            ) : (
-              <div className="grid size-full place-items-center text-muted-foreground">
-                <ImagePlus className="size-5" />
+    <>
+      <PanelHeader
+        title={draft.id ? draft.name || "Editar produto" : "Novo perfume no catálogo"}
+        subtitle={draft.id ? "Cadastro manual · as mudanças valem para todo o site" : "Preencha de cima para baixo. Só nome e marca são obrigatórios."}
+        onClose={requestClose}
+      />
+
+      <div onFocus={onFieldFocus} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-6 lg:px-6">
+        <div className="ui-view-in grid gap-4 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)] lg:gap-6">
+          {/* esquerda: foto, prévia do cartão e o que falta */}
+          <aside className="min-w-0 space-y-3 lg:sticky lg:top-0 lg:self-start">
+            <PanelCard className="max-lg:mx-auto max-lg:w-full max-lg:max-w-[300px]">
+              <PhotoField url={draft.imageUrl} busy={busy === "photo"} onFile={(f) => void pickPhoto(f)} onRemove={() => set({ imageUrl: null })} />
+            </PanelCard>
+
+            <PanelCard title="Assim fica na loja" className="max-lg:hidden">
+              <StorePreview draft={draft} brandName={brandName} globalDecant={globalDecant} />
+            </PanelCard>
+
+            <PanelCard className="max-lg:hidden">
+              <p className="mb-3 text-[13px] font-semibold text-[#A9A9A9]">Para publicar</p>
+              <ul className="space-y-2">
+                {checklist.map((c) => (
+                  <li key={c.label} className="flex items-center gap-2.5 text-[14px]">
+                    <span
+                      className={cn(
+                        "grid size-6 shrink-0 place-items-center rounded-full transition-colors duration-300",
+                        c.ok ? "bg-[#7FCF9F] text-[#0F1F15]" : "bg-[#232323] text-transparent ring-1 ring-white/15",
+                      )}
+                    >
+                      <Check className={cn("size-3.5", c.ok && "pk-check-on")} strokeWidth={3} />
+                    </span>
+                    <span className={c.ok ? "text-white" : "text-[#8C8C8C]"}>{c.label}</span>
+                  </li>
+                ))}
+              </ul>
+            </PanelCard>
+          </aside>
+
+          {/* direita: o cadastro */}
+          <div className="min-w-0 space-y-3">
+            <Step n={1} title="O perfume">
+              <div className="space-y-4">
+                <Field label="Nome">
+                  <TextInput value={draft.name} onChange={(e) => set({ name: e.target.value })} placeholder="Ex.: Khamrah" autoFocus={!draft.id && !draft.name} />
+                </Field>
+                <Field label="Marca" hint={!draft.brandId && draft.newBrandName.trim() ? `A marca “${draft.newBrandName.trim()}” será criada ao salvar.` : undefined}>
+                  <BrandPicker brands={brands} brandId={draft.brandId} newBrandName={draft.newBrandName} onChange={(v) => set(v)} />
+                </Field>
+                <div className="grid gap-4 sm:grid-cols-[160px_1fr]">
+                  <Field label="Volume">
+                    <TextInput inputMode="numeric" suffix="ml" value={draft.volume} onChange={(e) => set({ volume: e.target.value.replace(/\D/g, "") })} placeholder="100" />
+                  </Field>
+                  <Field label="Concentração">
+                    <QuickChips options={CONCENTRATIONS} value={draft.concentration} onPick={(v) => set({ concentration: conc.toLowerCase() === v.toLowerCase() ? "" : v })} />
+                  </Field>
+                </div>
+                <Field label="Para quem">
+                  <Segmented full options={GENDERS} value={draft.gender || null} onChange={(v) => set({ gender: v })} />
+                </Field>
               </div>
+            </Step>
+
+            <Step n={2} title="Como vende">
+              <ToggleRow
+                icon={<MessageCircle />}
+                label="Preço sob consulta"
+                hint={draft.priceOnRequest ? "No site aparece “Consultar no WhatsApp” no lugar do preço. Não entra na sacola." : "Ligue para não mostrar preço e atender pelo WhatsApp."}
+                checked={draft.priceOnRequest}
+                onChange={(v) => set(v ? { priceOnRequest: true, saleMode: "FULL" } : { priceOnRequest: false })}
+              />
+              {!draft.priceOnRequest ? (
+                <div className="adm-pop mt-3">
+                  <ChoiceCards options={SALE_MODES} value={draft.saleMode} onChange={(v) => set({ saleMode: v })} />
+                </div>
+              ) : null}
+            </Step>
+
+            {!draft.priceOnRequest ? (
+              <Step n={3} title="Preço">
+                <div className="space-y-5">
+                  {sellsBottle ? (
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-[14.5px] font-bold">Frasco</p>
+                        <Segmented
+                          options={[
+                            { value: "manual", label: "Eu defino" },
+                            { value: "auto", label: "Automático" },
+                          ]}
+                          value={draft.manualPricing ? "manual" : "auto"}
+                          onChange={(v) => set({ manualPricing: v === "manual" })}
+                        />
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <Field label="Custo" hint="Opcional">
+                          <TextInput prefix="R$" inputMode="decimal" value={draft.cost} onChange={(e) => set({ cost: money(e.target.value) })} placeholder="0,00" />
+                        </Field>
+                        {draft.manualPricing ? (
+                          <>
+                            <Field label="Preço no Pix">
+                              <TextInput prefix="R$" inputMode="decimal" value={draft.retailPrice} onChange={(e) => set({ retailPrice: money(e.target.value) })} placeholder="0,00" />
+                            </Field>
+                            <Field label="Atacado" hint="Opcional">
+                              <TextInput prefix="R$" inputMode="decimal" value={draft.wholesalePrice} onChange={(e) => set({ wholesalePrice: money(e.target.value) })} placeholder="0,00" />
+                            </Field>
+                          </>
+                        ) : (
+                          <p className="self-center text-[13px] leading-snug text-[#8C8C8C] sm:col-span-2">O preço sai do custo mais a margem configurada em Precificação.</p>
+                        )}
+                      </div>
+                      {draft.manualPricing && retail != null && profit != null ? (
+                        <div className={cn("adm-pop flex flex-wrap items-center gap-x-4 gap-y-1 rounded-[16px] px-4 py-3 text-[13.5px]", profit < 0 ? "bg-[#2A1A18] text-[#FF9A8A]" : "bg-[#17251C] text-[#7FCF9F]")}>
+                          <span className="font-bold">
+                            {profit < 0 ? "Abaixo do custo" : "Lucro"} {brl(Math.abs(profit))}
+                          </span>
+                          <span>margem {((profit / retail) * 100).toFixed(1).replace(".", ",")}%</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {sellsDecant ? (
+                    <div className={cn("space-y-4", sellsBottle && "border-t border-white/[0.06] pt-5")}>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-[14.5px] font-bold">Decants</p>
+                        <Segmented
+                          options={[
+                            { value: "padrao", label: "Preço padrão" },
+                            { value: "proprio", label: "Só deste" },
+                          ]}
+                          value={customDecant ? "proprio" : "padrao"}
+                          onChange={(v) => {
+                            setCustomDecant(v === "proprio");
+                            if (v === "padrao") set({ decant2: "", decant5: "", decant10: "" });
+                          }}
+                        />
+                      </div>
+                      <div className="grid grid-cols-3 gap-2.5">
+                        {DECANT_SIZES.map((ml) => {
+                          const key = (ml === 2 ? "decant2" : ml === 5 ? "decant5" : "decant10") as "decant2" | "decant5" | "decant10";
+                          return customDecant ? (
+                            <Field key={ml} label={`${ml} ml`}>
+                              <TextInput
+                                prefix="R$"
+                                inputMode="decimal"
+                                value={draft[key]}
+                                onChange={(e) => set({ [key]: money(e.target.value) } as Partial<Draft>)}
+                                placeholder={globalDecant(ml).toFixed(2).replace(".", ",")}
+                              />
+                            </Field>
+                          ) : (
+                            <div key={ml} className="rounded-[18px] bg-[#232323] px-4 py-3">
+                              <p className="text-[12.5px] font-semibold text-[#8C8C8C]">{ml} ml</p>
+                              <p className="mt-0.5 text-[16px] font-bold tabular-nums">{brl(globalDecant(ml))}</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </Step>
+            ) : null}
+
+            <Step n={draft.priceOnRequest ? 3 : 4} title="Estoque e vitrine">
+              <div className="space-y-5">
+                <div className="grid gap-4 sm:grid-cols-[160px_1fr]">
+                  <Field label="Frascos na loja">
+                    <TextInput inputMode="numeric" suffix="un." value={draft.stock} onChange={(e) => set({ stock: e.target.value.replace(/\D/g, "") })} placeholder="1" />
+                  </Field>
+                  <Field label="No site">
+                    <Segmented full options={VISIBILITIES} value={draft.visibility} onChange={(v) => set({ visibility: v })} />
+                  </Field>
+                </div>
+                <Field label="Destaque no catálogo" hint="Fixado aparece no começo do catálogo.">
+                  <Segmented
+                    full
+                    options={[
+                      { value: "nao", label: "Normal" },
+                      { value: "topo", label: "Fixar no topo" },
+                      { value: "novo", label: "Topo + “Novidade”" },
+                    ]}
+                    value={pinMode}
+                    onChange={(v) => set({ pinned: v !== "nao", pinnedNew: v === "novo" })}
+                  />
+                </Field>
+              </div>
+            </Step>
+
+            <Step n={draft.priceOnRequest ? 4 : 5} title="Descrição">
+              <div className="space-y-4">
+                <TextArea value={draft.description} onChange={(e) => set({ description: e.target.value })} placeholder="Em poucas linhas, o que faz esse perfume valer a pena." />
+                <Field label="Link da Fragrantica" hint="Opcional. Ajuda a puxar acordes e notas depois.">
+                  <TextInput value={draft.fragranticaUrl} onChange={(e) => set({ fragranticaUrl: e.target.value })} placeholder="https://www.fragrantica.com/perfume/…" />
+                </Field>
+              </div>
+            </Step>
+
+            {draft.id ? (
+              <section className="min-w-0 rounded-[24px] bg-[#1A1A1A] p-2 sm:p-3">
+                <FragranceEditor productId={draft.id} defaultOpen allowCopyFromCatalog />
+              </section>
+            ) : (
+              <PanelCard tone="flat" title="Notas e acordes" hint="Depois de salvar, abre aqui o mesmo editor do catálogo: Fragrantica, acordes e pirâmide." />
             )}
           </div>
-          <div className="flex min-w-0 flex-col gap-2">
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="press h-10 rounded-full px-4 text-xs"
-                disabled={busy === "photo"}
-                onClick={() => cameraRef.current?.click()}
-              >
-                {busy === "photo" ? <Loader2 className="size-4 animate-spin" /> : <Camera className="size-4" />}
-                Tirar foto
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="press h-10 rounded-full px-4 text-xs"
-                disabled={busy === "photo"}
-                onClick={() => fileRef.current?.click()}
-              >
-                <ImagePlus className="size-4" />
-                Galeria
-              </Button>
-            </div>
-            {draft.imageUrl ? (
-              <Button
-                type="button"
-                variant="ghost"
-                className="press h-9 self-start rounded-full px-4 text-xs text-muted-foreground"
-                onClick={() => set({ imageUrl: null })}
-              >
-                <X className="size-3.5" /> Remover foto
-              </Button>
-            ) : null}
-          </div>
         </div>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            e.target.value = "";
-            if (file) void pickPhoto(file);
-          }}
-        />
-        <input
-          ref={cameraRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            e.target.value = "";
-            if (file) void pickPhoto(file);
-          }}
-        />
       </div>
 
-      <Field label="Nome do perfume">
-        <Input
-          className="h-11"
-          value={draft.name}
-          onChange={(e) => set({ name: e.target.value })}
-          placeholder="Ex.: Khamrah"
-        />
-      </Field>
-
-      <Field label="Marca">
-        <Input
-          className="h-11"
-          value={brandQuery || brandName}
-          onChange={(e) => {
-            setBrandQuery(e.target.value);
-            set({ brandId: null, newBrandName: e.target.value });
-          }}
-          placeholder="Ex.: Lattafa"
-        />
-        {suggestions.length ? (
-          <div className="mt-2 flex flex-wrap gap-2">
-            {suggestions.map((b) => (
-              <button
-                key={b.id}
-                type="button"
-                className="press h-9 rounded-full border border-border/70 px-3 text-xs text-muted-foreground"
-                onClick={() => {
-                  set({ brandId: b.id, newBrandName: "" });
-                  setBrandQuery("");
-                }}
-              >
-                {b.canonical_name}
-              </button>
-            ))}
-          </div>
-        ) : null}
-        {!draft.brandId && draft.newBrandName.trim() ? (
-          <p className="mt-2 text-xs text-muted-foreground">
-            Nova marca “{draft.newBrandName.trim()}” será criada se ainda não existir.
-          </p>
-        ) : null}
-      </Field>
-
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Volume (ml)">
-          <Input
-            className="h-11"
-            inputMode="numeric"
-            value={draft.volume}
-            onChange={(e) => set({ volume: e.target.value.replace(/\D/g, "") })}
-            placeholder="100"
-          />
-        </Field>
-        <Field label="Concentração">
-          <Input
-            className="h-11"
-            value={draft.concentration}
-            onChange={(e) => set({ concentration: e.target.value })}
-            placeholder="EDP"
-            list="orium-concentracoes"
-          />
-          <datalist id="orium-concentracoes">
-            {CONCENTRATIONS.map((c) => (
-              <option key={c} value={c} />
-            ))}
-          </datalist>
-        </Field>
-      </div>
-
-      <Field label="Gênero">
-        <div className="flex flex-wrap gap-2">
-          {GENDERS.map((g) => (
-            <Chip key={g.value} active={draft.gender === g.value} onClick={() => set({ gender: g.value })}>
-              {g.label}
-            </Chip>
-          ))}
-        </div>
-      </Field>
-
-      {/* Preço no site: normal ou sob consulta (WhatsApp) */}
-      <Field label="Preço no site">
-        <div className="flex flex-wrap gap-2">
-          <Chip active={!draft.priceOnRequest} onClick={() => set({ priceOnRequest: false })}>
-            Mostrar preço
-          </Chip>
-          <Chip active={draft.priceOnRequest} onClick={() => set({ priceOnRequest: true, saleMode: "FULL" })}>
-            Sob consulta (WhatsApp)
-          </Chip>
-        </div>
-        {draft.priceOnRequest ? (
-          <p className="mt-2 text-xs text-muted-foreground">
-            No site aparece <b>“Consultar no WhatsApp”</b> no lugar do preço, e o cliente fala direto com a Orium sobre este perfume. Não entra no carrinho.
-          </p>
-        ) : null}
-      </Field>
-
-      {draft.priceOnRequest ? null : (
-      <>
-      {/* Como este produto será vendido */}
-      <Field label="Como este produto será vendido?">
-        <div className="flex flex-wrap gap-2">
-          {SALE_MODES.map((m) => (
-            <Chip key={m.value} active={draft.saleMode === m.value} onClick={() => set({ saleMode: m.value })}>
-              {m.label}
-            </Chip>
-          ))}
-        </div>
-        <p className="mt-2 text-xs text-muted-foreground">
-          {SALE_MODES.find((m) => m.value === draft.saleMode)?.hint}
-        </p>
-      </Field>
-
-      {sellsBottle ? (
-        <div className="space-y-4 rounded-2xl border border-border/60 bg-surface-2 p-4">
-          <p className="text-sm font-medium">Frasco completo</p>
-
-          <div className="flex flex-wrap gap-2">
-            <Chip active={draft.manualPricing} onClick={() => set({ manualPricing: true })}>
-              Preço manual
-            </Chip>
-            <Chip active={!draft.manualPricing} onClick={() => set({ manualPricing: false })}>
-              Precificação automática
-            </Chip>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Custo (opcional)">
-              <Input
-                className="h-11"
-                inputMode="decimal"
-                value={draft.cost}
-                onChange={(e) => set({ cost: money(e.target.value) })}
-                placeholder="0,00"
-              />
-            </Field>
-            <Field label="Estoque (unidades)">
-              <Input
-                className="h-11"
-                inputMode="numeric"
-                value={draft.stock}
-                onChange={(e) => set({ stock: e.target.value.replace(/\D/g, "") })}
-                placeholder="1"
-              />
-            </Field>
-          </div>
-
-          {draft.manualPricing ? (
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Preço de venda">
-                <Input
-                  className="h-11"
-                  inputMode="decimal"
-                  value={draft.retailPrice}
-                  onChange={(e) => set({ retailPrice: money(e.target.value) })}
-                  placeholder="0,00"
-                />
-              </Field>
-              <Field label="Preço no atacado">
-                <Input
-                  className="h-11"
-                  inputMode="decimal"
-                  value={draft.wholesalePrice}
-                  onChange={(e) => set({ wholesalePrice: money(e.target.value) })}
-                  placeholder="opcional"
-                />
-              </Field>
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              O preço será calculado pelo custo mais a margem configurada em Precificação.
-            </p>
-          )}
-        </div>
-      ) : null}
-
-      {draft.saleMode !== "FULL" ? (
-        <div className="space-y-3 rounded-2xl border border-border/60 bg-surface-2 p-4">
-          <p className="text-sm font-medium">Decants</p>
-
-          <div className="flex flex-wrap gap-2">
-            <Chip
-              active={!customDecant}
-              onClick={() => {
-                setCustomDecant(false);
-                set({ decant2: "", decant5: "", decant10: "" });
-              }}
-            >
-              Preço padrão
-            </Chip>
-            <Chip active={customDecant} onClick={() => setCustomDecant(true)}>
-              Preço só deste perfume
-            </Chip>
-          </div>
-
-          {customDecant ? (
-            <>
-              <div className="grid grid-cols-3 gap-2">
-                {DECANT_SIZES.map((ml) => {
-                  const key = ml === 2 ? "decant2" : ml === 5 ? "decant5" : "decant10";
-                  return (
-                    <Field key={ml} label={`${ml}ml`}>
-                      <Input
-                        className="h-11"
-                        inputMode="decimal"
-                        value={draft[key as "decant2" | "decant5" | "decant10"]}
-                        onChange={(e) => set({ [key]: money(e.target.value) } as Partial<Draft>)}
-                        placeholder={globalDecant(ml)}
-                      />
-                    </Field>
-                  );
-                })}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Deixe vazio para usar o preço padrão daquele tamanho.
-              </p>
-            </>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              Usa os preços gerais da Orium:{" "}
-              {DECANT_SIZES.map((ml) => `${ml}ml R$ ${globalDecant(ml)}`).join(" · ")}
-            </p>
-          )}
-        </div>
-      ) : null}
-      </>
-      )}
-
-      <Field label="Disponibilidade">
-        <div className="flex flex-wrap gap-2">
-          {VISIBILITIES.map((v) => (
-            <Chip key={v.value} active={draft.visibility === v.value} onClick={() => set({ visibility: v.value })}>
-              {v.label}
-            </Chip>
-          ))}
-        </div>
-      </Field>
-
-      <Field label="Destaque no catálogo">
-        <div className="flex flex-wrap gap-2">
-          <Chip
-            active={draft.pinned && !draft.pinnedNew}
-            onClick={() => set({ pinned: true, pinnedNew: false })}
-          >
-            Fixar no topo
-          </Chip>
-          <Chip
-            active={draft.pinned && draft.pinnedNew}
-            onClick={() => set({ pinned: true, pinnedNew: true })}
-          >
-            Fixar com selo de novidade
-          </Chip>
-          <Chip active={!draft.pinned} onClick={() => set({ pinned: false, pinnedNew: false })}>
-            Sem destaque
-          </Chip>
-        </div>
-        <p className="mt-2 text-xs text-muted-foreground">
-          Fixado aparece no começo do catálogo. O selo "Novidade" é opcional.
-        </p>
-      </Field>
-
-      <Field label="Descrição">
-        <Textarea
-          rows={4}
-          value={draft.description}
-          onChange={(e) => set({ description: e.target.value })}
-          placeholder="Conte em poucas linhas o que faz esse perfume valer a pena."
-        />
-      </Field>
-
-      <Field label="Link do Fragrantica">
-        <Input
-          className="h-11"
-          value={draft.fragranticaUrl}
-          onChange={(e) => set({ fragranticaUrl: e.target.value })
-          }
-          placeholder="https://www.fragrantica.com/perfume/..."
-        />
-      </Field>
-
-      {/* Informações olfativas: mesmo sistema dos perfumes do catálogo */}
-      {draft.id ? (
-        <FragranceEditor productId={draft.id} defaultOpen allowCopyFromCatalog />
-      ) : (
-        <div className="rounded-2xl border border-border/60 bg-surface-2 p-4">
-          <p className="text-sm font-medium">Informações olfativas</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Salve o produto primeiro. Depois abre aqui o mesmo bloco dos perfumes do catálogo:
-            Fragrantica, acordes e pirâmide.
-          </p>
-        </div>
-      )}
-
-      <div className="space-y-2">
-        <Button
-          className="press h-12 w-full rounded-full text-sm font-semibold"
-          disabled={busy === "save" || !draft.name.trim() || !(draft.brandId || draft.newBrandName.trim())}
-          onClick={() => void submit()}
-        >
-          {busy === "save" ? <Loader2 className="size-4 animate-spin" /> : null} Salvar produto
-        </Button>
+      <PanelFooter>
         {draft.id ? (
-          <>
-            <Button variant="outline" className="press h-11 w-full rounded-full text-sm" onClick={onClose}>
-              Concluir
-            </Button>
-            <Button
-              variant="ghost"
-              className="press h-11 w-full rounded-full text-sm text-destructive"
-              onClick={() => setConfirmDelete(true)}
-            >
-              <Trash2 className="size-4" /> Excluir produto
-            </Button>
-          </>
+          <SoftButton aria-label="Excluir produto" icon={<Trash2 className="text-[#FF9A8A]" />} className="w-[52px] px-0" onClick={() => setConfirmDelete(true)} />
         ) : null}
-      </div>
+        <p className="mr-auto hidden min-w-0 truncate text-[13px] text-[#8C8C8C] lg:block">
+          {checklist.every((c) => c.ok) ? "Tudo pronto para publicar." : `Falta: ${checklist.filter((c) => !c.ok).map((c) => c.label.toLowerCase()).join(", ")}.`}
+        </p>
+        {draft.id ? (
+          <SoftButton className="flex-1 lg:flex-none lg:px-6" onClick={requestClose}>
+            Concluir
+          </SoftButton>
+        ) : null}
+        <GoldButton className="flex-[1.6] lg:min-w-[240px] lg:flex-none" loading={busy === "save"} disabled={!canSave || busy === "photo"} onClick={() => void submit()}>
+          {draft.id ? "Salvar alterações" : "Adicionar ao catálogo"}
+        </GoldButton>
+      </PanelFooter>
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <AlertDialogContent>
+        <AlertDialogContent className="max-w-[min(92vw,26rem)] rounded-[28px]">
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir este produto?</AlertDialogTitle>
-            <AlertDialogDescription>
-              O perfume sai do catálogo, dos favoritos e dos carrinhos. Pedidos antigos continuam
-              intactos.
-            </AlertDialogDescription>
+            <AlertDialogDescription>O perfume sai do catálogo, dos favoritos e dos carrinhos. Pedidos antigos continuam intactos.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel className="h-11 rounded-full">Cancelar</AlertDialogCancel>
             <AlertDialogAction
               disabled={busy === "delete"}
+              className="h-11 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={async () => {
                 if (!draft.id) return;
                 setBusy("delete");
@@ -788,48 +629,54 @@ function ManualProductForm({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   );
 }
 
-function Chip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
+/** Bloco numerado do cadastro. */
+function Step({ n, title, children }: { n: number; title: string; children: ReactNode }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={
-        "press h-10 rounded-full border px-4 text-xs " +
-        (active
-          ? "border-foreground bg-foreground text-background"
-          : "border-border/70 text-muted-foreground")
-      }
-    >
+    <section className="min-w-0 rounded-[24px] bg-[#1A1A1A] p-4 sm:p-5">
+      <div className="mb-4 flex items-center gap-3">
+        <span className="grid size-7 shrink-0 place-items-center rounded-full bg-[#FFD599] text-[13px] font-bold text-[#15130F] tabular-nums">{n}</span>
+        <h3 className="text-[17px] leading-tight font-bold tracking-[-0.01em]">{title}</h3>
+      </div>
       {children}
-    </button>
+    </section>
   );
 }
 
-function Field({
-  label,
-  children,
-  className,
-}: {
-  label: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
+/** Prévia do cartão da loja, atualizada a cada letra. */
+function StorePreview({ draft, brandName, globalDecant }: { draft: Draft; brandName: string; globalDecant: (ml: DecantMl) => number }) {
+  const retail = toNumber(draft.retailPrice);
+  const from = draft.saleMode !== "FULL" ? Math.min(...DECANT_SIZES.map((ml) => toNumber(draft[`decant${ml}` as "decant2"]) ?? globalDecant(ml))) : null;
   return (
-    <div className={className}>
-      <Label className="text-sm">{label}</Label>
-      <div className="mt-2">{children}</div>
+    <div className="overflow-hidden rounded-[20px] bg-[#101010] p-2">
+      <div className="relative aspect-square overflow-hidden rounded-[16px] bg-[#232323]">
+        {draft.imageUrl ? <img src={draft.imageUrl} alt="" className="size-full object-cover" /> : <div className="grid size-full place-items-center text-[13px] text-[#6F6F6F]">sem foto</div>}
+        {draft.pinned && draft.pinnedNew ? <span className="absolute top-2 left-2 rounded-full bg-[#FFD599] px-2 py-0.5 text-[11px] font-bold text-[#15130F]">Novidade</span> : null}
+        {draft.visibility !== "ATIVO" ? (
+          <span className="absolute top-2 right-2 rounded-full bg-black/70 px-2 py-0.5 text-[11px] font-semibold text-white">{draft.visibility === "OCULTO" ? "Oculto" : "Indisponível"}</span>
+        ) : null}
+      </div>
+      <div className="px-1.5 pt-2.5 pb-1.5">
+        <p className="truncate text-[11px] font-semibold tracking-[0.06em] text-[#8C8C8C] uppercase">{brandName || "Marca"}</p>
+        <p className="mt-0.5 truncate text-[15px] font-bold">{draft.name || "Nome do perfume"}</p>
+        <p className="truncate text-[12px] text-[#8C8C8C]">{[draft.volume ? `${draft.volume} ml` : null, draft.concentration || null].filter(Boolean).join(" · ") || " "}</p>
+        <p className="mt-2 text-[15px] font-bold tabular-nums">
+          {draft.priceOnRequest ? (
+            <span className="text-[#FFD599]">Consultar no WhatsApp</span>
+          ) : draft.saleMode === "DECANT" ? (
+            from != null ? `a partir de ${brl(from)}` : "—"
+          ) : retail != null ? (
+            brl(retail)
+          ) : draft.manualPricing ? (
+            <span className="text-[#6F6F6F]">R$ —</span>
+          ) : (
+            <span className="text-[13px] font-semibold text-[#8C8C8C]">preço automático</span>
+          )}
+        </p>
+      </div>
     </div>
   );
 }

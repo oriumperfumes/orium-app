@@ -322,3 +322,87 @@ export const setNegotiationPhoto = createServerFn({ method: "POST" })
     }
     return { path: data.path };
   });
+
+export type NegotiationCatalogHit = {
+  id: string;
+  name: string;
+  brand: string | null;
+  volumeMl: number | null;
+  concentration: string | null;
+  imageUrl: string | null;
+  /** já tem acordes/notas/descrição para copiar */
+  hasFragrance: boolean;
+};
+
+/**
+ * Busca no catálogo para "Adicionar à Negociação a partir do catálogo".
+ * Só leitura: devolve nome, marca, volume, foto e se já existe ficha olfativa
+ * (que é copiada depois com `copyFragranceFrom`). Nada do catálogo muda.
+ */
+export const searchCatalogForNegotiation = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { q: string }) => ({ q: String(data?.q ?? "").slice(0, 80) }))
+  .handler(async ({ data, context }) => {
+    await staffOnly(context as unknown as Ctx);
+    // o termo entra num filtro `or(...)`: tira o que muda a sintaxe do filtro
+    const term = data.q.replace(/[,()%*\\]/g, " ").replace(/\s+/g, " ").trim();
+    const empty: NegotiationCatalogHit[] = [];
+    if (term.length < 2) return { items: empty };
+    const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
+
+    const words = term.split(" ").filter((w) => w.length >= 2);
+    let query = db
+      .from("products")
+      .select("id, canonical_name, brand, volume_ml, concentration, image_url, product_type, active, catalog_eligible")
+      .neq("product_type", "NEGOCIACAO");
+    // cada palavra precisa aparecer no nome ou na marca ("club nuit" acha "Club de Nuit")
+    for (const w of words.slice(0, 4)) query = query.or(`canonical_name.ilike.%${w}%,brand.ilike.%${w}%`);
+    const { data: rows, error } = await query.limit(40);
+    if (error) throw new Error(error.message);
+
+    const list = (rows ?? []) as Array<{
+      id: string;
+      canonical_name: string;
+      brand: string | null;
+      volume_ml: number | null;
+      concentration: string | null;
+      image_url: string | null;
+      active: boolean | null;
+      catalog_eligible: boolean | null;
+    }>;
+    const ids = list.map((r) => r.id);
+    if (!ids.length) return { items: empty };
+
+    const [{ data: details }, { data: accords }, { data: notes }] = await Promise.all([
+      db.from("fragrance_details").select("product_id, description").in("product_id", ids),
+      db.from("fragrance_accords").select("product_id").in("product_id", ids),
+      db.from("fragrance_notes").select("product_id").in("product_id", ids),
+    ]);
+    const withInfo = new Set<string>([
+      ...((accords ?? []) as Array<{ product_id: string }>).map((r) => r.product_id),
+      ...((notes ?? []) as Array<{ product_id: string }>).map((r) => r.product_id),
+      ...((details ?? []) as Array<{ product_id: string; description: string | null }>).filter((d) => d.description).map((d) => d.product_id),
+    ]);
+
+    const t = term.toLowerCase();
+    const items: NegotiationCatalogHit[] = list
+      .map((r) => ({
+        id: r.id,
+        name: r.canonical_name,
+        brand: r.brand,
+        volumeMl: r.volume_ml,
+        concentration: r.concentration,
+        imageUrl: r.image_url,
+        hasFragrance: withInfo.has(r.id),
+        score:
+          (r.canonical_name.toLowerCase().startsWith(t) ? 4 : 0) +
+          (r.active && r.catalog_eligible ? 2 : 0) +
+          (r.image_url ? 1 : 0) +
+          (withInfo.has(r.id) ? 1 : 0),
+      }))
+      .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+      .slice(0, 18)
+      .map(({ score: _score, ...rest }) => rest);
+
+    return { items };
+  });
