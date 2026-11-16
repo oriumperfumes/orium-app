@@ -4,18 +4,19 @@
  * Tudo vem do banco (pirâmide e acordes confirmados pela equipe). Sem dado
  * confirmado, a seção simplesmente não aparece — nada é inventado.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Clock3, Moon, SprayCan, Sun } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useRevealOnce } from "@/components/orium/Reveal";
 import { cn } from "@/lib/utils";
+import { accordColor } from "@/lib/accord-color";
 
 type NoteRow = {
   note_label: string;
   pyramid_level: string;
   position: number;
-  olfactory_notes: { canonical_name: string } | null;
+  olfactory_notes: { canonical_name: string; image_url: string | null } | null;
 };
 
 type Stage = {
@@ -30,23 +31,23 @@ const STAGES: Stage[] = [
   {
     key: "TOP",
     stop: "Borrifou",
-    when: "Nos primeiros 15 minutos",
+    when: "0 a 15 min",
     title: "Saída",
-    about: "O primeiro impacto, logo ao borrifar. É a parte mais viva do perfume e some mais rápido.",
+    about: "O primeiro impacto: a parte mais viva, que some mais rápido.",
   },
   {
     key: "HEART",
     stop: "30 min",
-    when: "Depois de 30 minutos",
+    when: "30 min a 3 h",
     title: "Coração",
-    about: "A alma da fragrância: é o que você e quem está perto mais sentem ao longo do dia.",
+    about: "A alma do perfume: o que você e quem está perto mais sentem.",
   },
   {
     key: "BASE",
-    stop: "3 h ou mais",
-    when: "Depois de 3 horas",
+    stop: "3 h+",
+    when: "3 h ou mais",
     title: "Fundo",
-    about: "O rastro final. Fica na pele e na roupa até o fim do dia — às vezes até o dia seguinte.",
+    about: "O rastro que fica na pele e na roupa até o fim do dia.",
   },
 ];
 
@@ -101,14 +102,27 @@ export function ProductScent({ productId }: { productId: string }) {
           .order("position"),
         supabase
           .from("fragrance_notes")
-          .select("note_label, pyramid_level, position, olfactory_notes(canonical_name)")
+          .select("note_label, pyramid_level, position, olfactory_notes(canonical_name, image_url)")
           .eq("product_id", productId)
           .order("position"),
       ]);
+      const rows = (notes.data ?? []) as unknown as NoteRow[];
+      // notas sem foto na biblioteca: tenta a foto guardada pelo nome
+      const missing = rows.filter((r) => !r.olfactory_notes?.image_url).map((r) => r.olfactory_notes?.canonical_name ?? r.note_label);
+      const images = new Map<string, string>();
+      if (missing.length) {
+        const { data: assets } = await supabase
+          .from("olfactory_note_assets")
+          .select("canonical_note_name, image_url")
+          .in("canonical_note_name", missing);
+        for (const a of (assets ?? []) as Array<{ canonical_note_name: string; image_url: string | null }>)
+          if (a.image_url) images.set(strip(a.canonical_note_name), a.image_url);
+      }
       return {
         details: details.data,
         accords: accords.data ?? [],
-        notes: (notes.data ?? []) as unknown as NoteRow[],
+        notes: rows,
+        images,
       };
     },
   });
@@ -134,7 +148,7 @@ export function ProductScent({ productId }: { productId: string }) {
   return (
     // computador: evolução na pele e perfil do cheiro lado a lado
     <div className="lg:grid lg:grid-cols-2 lg:items-start lg:gap-12 wide:gap-16">
-      {notes.length ? <SkinTimeline notes={notes} /> : null}
+      {notes.length ? <SkinTimeline notes={notes} images={data?.images ?? new Map()} /> : null}
       {accords.length ? (
         <ScentProfile
           accords={accords.map((a) => ({ name: a.accord_name as string, intensity: Number(a.intensity ?? 0.6) }))}
@@ -147,99 +161,125 @@ export function ProductScent({ productId }: { productId: string }) {
 
 /* ———————————————————— Como ele evolui na pele ———————————————————— */
 
-function SkinTimeline({ notes }: { notes: NoteRow[] }) {
+const DWELL = 3600; // ms em cada fase no "passa sozinho"
+
+function SkinTimeline({ notes, images }: { notes: NoteRow[]; images: Map<string, string> }) {
   // cada nota aparece uma única vez: na primeira fase em que surge (sem
   // duplicatas de grafia, como "Lavanda" e "lavanda francesa" → nome canônico)
   const used = new Set<string>();
   const stages = STAGES.map((s) => {
-    const list: string[] = [];
+    const list: Array<{ name: string; img: string | null }> = [];
     for (const n of notes.filter((x) => x.pyramid_level === s.key).sort((a, b) => a.position - b.position)) {
       const name = (n.olfactory_notes?.canonical_name ?? n.note_label ?? "").trim();
-      const key = strip(name);
-      if (!name || used.has(key)) continue;
-      used.add(key);
-      list.push(name);
-      if (list.length === 5) break;
+      const k = strip(name);
+      if (!name || used.has(k)) continue;
+      used.add(k);
+      list.push({ name, img: n.olfactory_notes?.image_url ?? images.get(k) ?? null });
+      if (list.length === 6) break;
     }
     return { ...s, notes: list };
   }).filter((s) => s.notes.length);
+
   const [at, setAt] = useState(0);
+  const [auto, setAuto] = useState(true);
   const { ref, seen } = useRevealOnce<HTMLElement>();
+
+  // quando aparece na tela, passa pelas fases sozinho (como stories); um toque para
+  useEffect(() => {
+    if (!seen || !auto || stages.length < 2) return;
+    const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) return;
+    const t = setTimeout(() => {
+      if (at >= stages.length - 1) setAuto(false);
+      else setAt(at + 1);
+    }, DWELL);
+    return () => clearTimeout(t);
+  }, [seen, auto, at, stages.length]);
+
   if (!stages.length) return null;
   const stage = stages[Math.min(at, stages.length - 1)]!;
-  const progress = stages.length > 1 ? (at / (stages.length - 1)) * 100 : 0;
+  const pick = (i: number) => {
+    setAuto(false);
+    setAt(i);
+  };
 
   return (
     <section
       ref={ref}
       aria-label="Como ele evolui na pele"
-      className={cn("pd-reveal mt-10 rounded-[24px] bg-[#1A1A1A] p-5 pb-6 lg:p-8", seen && "is-in")}
+      className={cn("pd-reveal skin mt-10 overflow-hidden rounded-[28px] bg-[#1A1A1A] p-5 pb-6 lg:p-8", seen && "is-in")}
     >
-      <h2 className="text-[18px] font-bold tracking-[-0.01em] text-white">Como ele evolui na pele</h2>
-      <p className="mt-1 text-[13px] text-[#A9A9A9]">Toque no tempo para ver o que você sente.</p>
-
-      {/* linha do tempo */}
-      <div className="relative mt-6" role="tablist" aria-label="Tempo na pele">
-        <div aria-hidden className="absolute top-[11px] right-[11px] left-[11px] h-[2px] rounded-full bg-white/15">
-          <div
-            className="h-full rounded-full bg-[#FFD599] transition-[width] duration-500 ease-[var(--ease-orium)]"
-            style={{ width: `${progress}%` }}
-          />
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-[20px] font-bold tracking-[-0.02em] text-white">Como ele evolui na pele</h2>
+          <p className="mt-1 text-[13.5px] text-[#A9A9A9]">Do borrifo ao fim do dia.</p>
         </div>
-        <div className="relative flex justify-between">
-          {stages.map((s, i) => {
-            const on = i === at;
-            const passed = i <= at;
-            return (
-              <button
-                key={s.key}
-                type="button"
-                role="tab"
-                aria-selected={on}
-                onClick={() => setAt(i)}
-                className={cn(
-                  "press flex flex-col gap-2",
-                  i === 0 ? "items-start" : i === stages.length - 1 ? "items-end" : "items-center",
-                )}
-              >
-                <span
-                  className={cn(
-                    "grid size-[24px] place-items-center rounded-full border-2 transition-all duration-300 ease-[var(--ease-orium)]",
-                    on
-                      ? "scale-110 border-[#FFD599] bg-[#FFD599]"
-                      : passed
-                        ? "border-[#FFD599] bg-[#1A1A1A]"
-                        : "border-white/30 bg-[#1A1A1A]",
-                  )}
-                />
-                <span className={cn("text-[13px] transition-colors", on ? "font-bold text-white" : "font-medium text-[#8C8C8C]")}>
-                  {s.stop}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        <span className="grid size-11 shrink-0 place-items-center rounded-full bg-[#232323] text-[#FFD599]" aria-hidden>
+          <Clock3 className="size-5" />
+        </span>
       </div>
 
-      {/* o que se sente nesse momento */}
-      <div key={stage.key} className="pd-stage mt-6" role="tabpanel">
-        <p className="text-[11px] font-bold tracking-[0.1em] text-[#FFD599] uppercase">{stage.when}</p>
-        <h3 className="mt-1 text-[30px] leading-tight font-bold tracking-[-0.025em] text-white">{stage.title}</h3>
-        <ul className="mt-3 space-y-2">
+      {/* linha do tempo: cada fase é um "story" que enche */}
+      <div className="mt-6 grid gap-2" style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))` }} role="tablist" aria-label="Tempo na pele">
+        {stages.map((s, i) => {
+          const on = i === at;
+          const passed = i < at;
+          return (
+            <button key={s.key} type="button" role="tab" aria-selected={on} onClick={() => pick(i)} className="press group flex flex-col gap-2 text-left">
+              <span className="relative block h-1.5 overflow-hidden rounded-full bg-white/[0.12]">
+                <span
+                  key={`${s.key}-${on}-${auto}`}
+                  className={cn(
+                    "absolute inset-y-0 left-0 rounded-full bg-[#FFD599]",
+                    passed ? "w-full" : on ? (auto && seen ? "skin-fill w-full" : "w-full") : "w-0",
+                  )}
+                  style={on && auto && seen ? ({ "--dwell": `${DWELL}ms` } as React.CSSProperties) : undefined}
+                />
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className={cn("grid size-6 place-items-center rounded-full transition-colors duration-300", on ? "bg-[#FFD599] text-[#15130F]" : "bg-[#232323] text-[#8C8C8C]")}>
+                  {i === 0 ? <SprayCan className="size-3.5" /> : i === stages.length - 1 ? <Moon className="size-3.5" /> : <Sun className="size-3.5" />}
+                </span>
+                <span className={cn("truncate text-[13px] transition-colors", on ? "font-bold text-white" : "font-semibold text-[#8C8C8C] group-hover:text-white")}>
+                  {s.stop}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* o que se sente nesse momento: as notas em foto */}
+      <div key={stage.key} className="skin-stage mt-6" role="tabpanel">
+        <div className="flex items-baseline justify-between gap-3">
+          <h3 className="text-[30px] leading-none font-bold tracking-[-0.03em] text-white">{stage.title}</h3>
+          <span className="text-[12px] font-bold tracking-[0.08em] text-[#FFD599] uppercase">{stage.when}</span>
+        </div>
+        <ul className={cn("mt-5 grid gap-x-3 gap-y-4", stage.notes.length <= 2 ? "grid-cols-2" : "grid-cols-3 sm:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4")}>
           {stage.notes.map((n, i) => (
-            <li
-              key={n}
-              className="pd-note flex items-center gap-3 text-[18px] font-semibold text-white first-letter:uppercase"
-              style={{ "--i": i } as React.CSSProperties}
-            >
-              <span aria-hidden className="h-[2px] w-3.5 shrink-0 rounded-full bg-[#FFD599]" />
-              <span className="first-letter:uppercase">{n}</span>
+            <li key={n.name} className="skin-note flex flex-col items-center gap-2 text-center" style={{ "--i": i } as React.CSSProperties}>
+              <NoteBubble name={n.name} img={n.img} />
+              <span className="line-clamp-2 text-[14px] leading-tight font-semibold text-white first-letter:uppercase">{n.name}</span>
             </li>
           ))}
         </ul>
-        <p className="mt-4 text-[14px] leading-relaxed text-[#A9A9A9]">{stage.about}</p>
+        <p className="mt-5 text-[14px] leading-snug text-[#A9A9A9]">{stage.about}</p>
       </div>
     </section>
+  );
+}
+
+/** Foto redonda da nota (ou a inicial, quando ainda não há foto). */
+function NoteBubble({ name, img }: { name: string; img: string | null }) {
+  const [broken, setBroken] = useState(false);
+  return (
+    <span className="skin-bubble relative grid aspect-square w-full max-w-[96px] place-items-center overflow-hidden rounded-full bg-[#F2F1ED] ring-4 ring-[#232323]">
+      {img && !broken ? (
+        <img src={img} alt="" loading="lazy" className="size-full object-cover" onError={() => setBroken(true)} />
+      ) : (
+        <span className="text-[26px] font-bold text-[#15130F]">{name.charAt(0).toUpperCase()}</span>
+      )}
+    </span>
   );
 }
 
@@ -302,6 +342,7 @@ function ScentProfile({
               className="pd-row flex h-[52px] items-center gap-3 border-t border-white/[0.08]"
               style={{ "--i": i } as React.CSSProperties}
             >
+              <span className="size-2.5 shrink-0 rounded-full" style={{ background: accordColor(a.name) }} aria-hidden />
               <span className="min-w-0 flex-1 truncate text-[16px] font-medium text-white first-letter:uppercase">{a.name}</span>
               <span className={cn("text-[13px] font-semibold", lvl.dots === 4 ? "text-[#FFD599]" : "text-[#A9A9A9]")}>
                 {lvl.label}
@@ -312,9 +353,9 @@ function ScentProfile({
                     key={k}
                     className={cn(
                       "pd-dot h-[5px] w-3 rounded-full",
-                      k < lvl.dots ? "bg-[#FFD599]" : "bg-white/15",
+                      k < lvl.dots ? "" : "bg-white/15",
                     )}
-                    style={{ "--k": k } as React.CSSProperties}
+                    style={{ "--k": k, ...(k < lvl.dots ? { background: accordColor(a.name) } : {}) } as React.CSSProperties}
                   />
                 ))}
               </span>

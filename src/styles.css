@@ -3593,3 +3593,23 @@ body.admin-mode .press:active:not(:disabled) { transform: scale(0.965); transiti
 /* página do perfume em negociação: o botão da oferta chama atenção uma vez */
 .neg-cta-pulse { animation: ord-pulse 1.2s var(--ease-orium) 1200ms 2; }
 @media (prefers-reduced-motion: reduce) { .neg-cta-pulse { animation: none; } }
+
+/* ══ Página do perfume › "Como ele evolui na pele" (visual) ══════════
+ * A barra da fase enche no tempo da fase (stories); as notas entram em
+ * foto, uma de cada vez, com uma mola leve. */
+@keyframes skin-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.skin-fill { transform-origin: left; animation: skin-fill var(--dwell, 3600ms) linear both; }
+.skin-stage { animation: toast-text 420ms var(--ease-orium) backwards; }
+@keyframes skin-pop { from { opacity: 0; transform: translate3d(0, 10px, 0) scale(0.82); } to { opacity: 1; transform: none; } }
+.skin-note { animation: skin-pop 520ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards; animation-delay: calc(var(--i, 0) * 70ms + 60ms); }
+.skin-bubble img { transition: transform 600ms var(--ease-orium); }
+@media (hover: hover) { .skin-note:hover .skin-bubble img { transform: scale(1.08); } }
+/* estúdio olfativo (admin) */
+.fs-ring { transition: stroke-dasharray 700ms var(--ease-orium); }
+@keyframes fs-chip { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: none; } }
+.fs-chip { animation: fs-chip 320ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards; animation-delay: calc(min(var(--i, 0), 10) * 25ms); }
+.fs-acc { animation: fs-chip 320ms var(--ease-orium) backwards; animation-delay: calc(min(var(--i, 0), 10) * 30ms); }
+@media (prefers-reduced-motion: reduce) {
+  .skin-fill, .skin-stage, .skin-note, .fs-chip, .fs-acc { animation: none; }
+  .fs-ring, .skin-bubble img { transition: none; }
+}

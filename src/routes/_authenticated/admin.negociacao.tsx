@@ -882,9 +882,7 @@ function PanelBody({
         </PanelCard>
 
         {draft.productId ? (
-          <section className="min-w-0 rounded-[24px] bg-[#1A1A1A] p-2 sm:p-3">
-            <FragranceEditor productId={draft.productId} defaultOpen allowCopyFromCatalog />
-          </section>
+          <div className="min-w-0"><FragranceEditor productId={draft.productId} defaultOpen allowCopyFromCatalog /></div>
         ) : (
           <PanelCard tone="flat" title="Notas e acordes" hint={draft.source?.hasFragrance ? "Vêm do catálogo assim que você salvar." : "Depois de salvar, abre aqui o mesmo editor do catálogo: Fragrantica, acordes e pirâmide."} />
         )}
