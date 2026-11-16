@@ -401,9 +401,7 @@ function EditBody({
 
         {tab === "olfativo" ? (
           isPerfume ? (
-            <section className="min-w-0 rounded-[24px] bg-[#1A1A1A] p-2 sm:p-3">
-              <FragranceEditor productId={product.id} defaultOpen />
-            </section>
+            <div className="min-w-0"><FragranceEditor productId={product.id} defaultOpen /></div>
           ) : (
             <PanelCard icon={<Sparkles />} title="Só para perfumes" hint="Notas e acordes existem apenas para produtos da categoria Perfume." />
           )
