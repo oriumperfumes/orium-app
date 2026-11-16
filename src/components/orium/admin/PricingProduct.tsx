@@ -2,15 +2,44 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Loader2, RotateCcw, Search, Store, X } from "lucide-react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Button } from "@/components/ui/button";
+import {
+  Calculator,
+  History,
+  Loader2,
+  Receipt,
+  RotateCcw,
+  Search,
+  Store,
+  Tag,
+  TrendingUp,
+  Wallet,
+  X,
+} from "lucide-react";
 import { brl, listDateTime, productTitle } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { getPaymentPricing } from "@/lib/payment-rule";
 import { ItemThumb } from "@/components/orium/admin/OrderItems";
-import { AdminBlock, AdminCard, AdminConfirm, AdminEmpty, AdminRowsSkeleton, AdminStatus } from "@/components/orium/admin/AdminUI";
-import { HelpTip, LadderArrow, LadderStep, MiniMetric, MoneyInput, PriceValue } from "@/components/orium/admin/PriceBits";
+import { AdminConfirm, AdminEmpty } from "@/components/orium/admin/AdminUI";
+import {
+  HelpTip,
+  LadderArrow,
+  LadderStep,
+  MoneyInput,
+  PriceValue,
+} from "@/components/orium/admin/PriceBits";
+import {
+  PxCard,
+  PxCardBody,
+  PxCardHead,
+  PxKpi,
+  PxKpiRow,
+  PxNote,
+  PxPrimary,
+  PxSecondary,
+  PxSheet,
+  PxStat,
+  PxTag,
+} from "@/components/orium/admin/PricingUI";
 import {
   pricingSearch,
   pricingSnapshot,
@@ -29,8 +58,31 @@ import {
 
 const pct = (v: number) => `${v.toFixed(1).replace(".", ",")}%`;
 
-/** Busca grande, com resultado imediato. */
-export function PricingSearch({ onPick }: { onPick: (id: string) => void }) {
+/** Área de trabalho da aba Preços: busca no topo e o perfume escolhido logo abaixo. */
+export function PricingWorkbench() {
+  const [productId, setProductId] = useState<string | null>(null);
+  return (
+    <div className="min-w-0 space-y-4">
+      <PricingSearch onPick={setProductId} picked={productId != null} />
+      {productId ? (
+        <PricingProductPanel
+          key={productId}
+          productId={productId}
+          onClose={() => setProductId(null)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/** Busca grande (como a de Pedidos), com resultado imediato em blocos. */
+export function PricingSearch({
+  onPick,
+  picked,
+}: {
+  onPick: (id: string) => void;
+  picked?: boolean;
+}) {
   const search = useServerFn(pricingSearch);
   const [term, setTerm] = useState("");
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -43,72 +95,96 @@ export function PricingSearch({ onPick }: { onPick: (id: string) => void }) {
   });
 
   const rows = data ?? [];
+  const typing = term.trim().length >= 2;
 
   return (
-    <div className="min-w-0 space-y-3">
-      <div className="flex h-12 min-w-0 items-center gap-2 rounded-2xl border border-border/70 bg-card px-3 focus-within:border-gold/60">
-        <Search className="size-4 shrink-0 text-muted-foreground" />
-        <input
-          ref={inputRef}
-          value={term}
-          onChange={(e) => setTerm(e.target.value)}
-          placeholder="Buscar perfume ou produto"
-          className="min-w-0 flex-1 bg-transparent text-base outline-none"
-          autoComplete="off"
-        />
-        {term ? (
-          <button
-            type="button"
-            onClick={() => {
-              setTerm("");
-              inputRef.current?.focus();
-            }}
-            aria-label="Limpar busca"
-            className="grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground"
-          >
-            <X className="size-4" />
-          </button>
-        ) : isFetching ? (
-          <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
-        ) : null}
-      </div>
+    <PxCard i={7}>
+      <PxCardHead
+        title={picked ? "Consultar outro perfume" : "Consultar um perfume"}
+        sub="Custo, preço, lucro e simulação antes de mexer no catálogo."
+        icon={<Calculator className="size-[18px]" strokeWidth={2.2} />}
+      />
+      <PxCardBody>
+        <label className="flex h-[56px] min-w-0 items-center gap-3 rounded-full bg-[#232323] px-5 focus-within:ring-2 focus-within:ring-[#FFD599]/50">
+          <Search className="size-[18px] shrink-0 text-[#8C8C8C]" strokeWidth={2.2} />
+          <input
+            data-slot="input-group-control"
+            ref={inputRef}
+            value={term}
+            onChange={(e) => setTerm(e.target.value)}
+            placeholder="Nome do perfume ou marca"
+            className="h-full min-w-0 flex-1 bg-transparent text-[16px] outline-none placeholder:text-[#6F6F6F]"
+            autoComplete="off"
+          />
+          {term ? (
+            <button
+              type="button"
+              onClick={() => {
+                setTerm("");
+                inputRef.current?.focus();
+              }}
+              aria-label="Limpar busca"
+              className="press grid size-8 shrink-0 place-items-center rounded-full bg-[#2E2E2E]"
+            >
+              <X className="size-4" />
+            </button>
+          ) : isFetching ? (
+            <Loader2 className="size-[18px] shrink-0 animate-spin text-[#8C8C8C]" />
+          ) : null}
+        </label>
 
-      {term.trim().length >= 2 ? (
-        rows.length === 0 && !isFetching ? (
-          <AdminEmpty>Nenhum produto encontrado.</AdminEmpty>
-        ) : (
-          <ul className="min-w-0 space-y-2">
-            {rows.map((r) => (
-              <li key={r.id}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onPick(r.id);
-                    setTerm("");
-                  }}
-                  className="admin-row-in flex w-full min-w-0 items-center gap-3 rounded-2xl border border-border/60 bg-card p-3 text-left"
-                >
-                  <ItemThumb src={r.image} alt={r.name} size={48} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{productTitle(r.name)}</p>
-                    <p className="truncate text-xs text-muted-foreground">{r.brand ?? "Sem marca"}</p>
-                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                      Custo {brl(r.cost)} · Preço {brl(r.retail)}
-                    </p>
-                  </div>
-                  {r.custom ? <AdminStatus status="personalizado" /> : null}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )
-      ) : null}
-    </div>
+        {typing ? (
+          rows.length === 0 && !isFetching ? (
+            <div className="mt-3">
+              <AdminEmpty>Nenhum produto encontrado.</AdminEmpty>
+            </div>
+          ) : (
+            <ul className="mt-3 grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {rows.map((r, i) => (
+                <li key={r.id} className="ord-in min-w-0" style={{ ["--i" as string]: i }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onPick(r.id);
+                      setTerm("");
+                    }}
+                    className="ord-tile press flex w-full min-w-0 items-center gap-3 !bg-[#232323] p-3 text-left hover:!bg-[#2A2A2A]"
+                  >
+                    <span className="overflow-hidden rounded-[16px]">
+                      <ItemThumb src={r.image} alt={r.name} size={56} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[15px] font-bold">
+                        {productTitle(r.name)}
+                      </span>
+                      <span className="block truncate text-[13px] text-[#8C8C8C]">
+                        {r.brand ?? "Sem marca"}
+                      </span>
+                      <span className="mt-1 flex min-w-0 items-center gap-2 text-[13px] tabular-nums">
+                        <span className="text-[#8C8C8C]">custo {brl(r.cost)}</span>
+                        <span className="font-bold text-[#FFD599]">{brl(r.retail)}</span>
+                      </span>
+                    </span>
+                    {r.custom ? <PxTag>próprio</PxTag> : null}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )
+        ) : null}
+      </PxCardBody>
+    </PxCard>
   );
 }
 
 /** Painel completo do produto: custo, preços, simulação e preview do cliente. */
-export function PricingProductPanel({ productId, onClose }: { productId: string; onClose: () => void }) {
+export function PricingProductPanel({
+  productId,
+  onClose,
+}: {
+  productId: string;
+  onClose: () => void;
+}) {
   const qc = useQueryClient();
   const load = useServerFn(pricingSnapshot);
   const save = useServerFn(setProductPrice);
@@ -129,11 +205,20 @@ export function PricingProductPanel({ productId, onClose }: { productId: string;
   }, [data?.productId, data?.retail]);
 
   const payment = useMemo(
-    () => ({ pixDiscountPercent: data?.pixDiscountPercent ?? 5, active: data?.pixDiscountActive !== false }),
+    () => ({
+      pixDiscountPercent: data?.pixDiscountPercent ?? 5,
+      active: data?.pixDiscountActive !== false,
+    }),
     [data?.pixDiscountPercent, data?.pixDiscountActive],
   );
 
-  if (isPending) return <AdminRowsSkeleton rows={3} height={140} />;
+  if (isPending)
+    return (
+      <div className="grid gap-3 lg:grid-cols-2 lg:gap-4">
+        <div className="admin-skeleton h-[220px] rounded-[28px]" />
+        <div className="admin-skeleton h-[220px] rounded-[28px]" />
+      </div>
+    );
   if (!data) return <AdminEmpty>Produto não encontrado.</AdminEmpty>;
 
   const cost = data.cost;
@@ -142,7 +227,8 @@ export function PricingProductPanel({ productId, onClose }: { productId: string;
   const wholesaleCard = getPaymentPricing(data.wholesale ?? 0, payment);
   const profit = cost != null && retail != null ? Number((retail - cost).toFixed(2)) : null;
   const marginPct = profit != null && retail ? (profit / retail) * 100 : null;
-  const adjust = data.baseRetail != null && retail != null ? Number((data.baseRetail - retail).toFixed(2)) : 0;
+  const adjust =
+    data.baseRetail != null && retail != null ? Number((data.baseRetail - retail).toFixed(2)) : 0;
 
   const simCard = getPaymentPricing(sim ?? 0, payment);
   const simProfit = cost != null && sim != null ? Number((sim - cost).toFixed(2)) : null;
@@ -166,311 +252,389 @@ export function PricingProductPanel({ productId, onClose }: { productId: string;
   };
 
   const origin = data.promotion
-    ? "promoção ativa"
+    ? "Promoção ativa"
     : data.customRetail != null
-      ? "preço personalizado"
-      : "preço automático";
+      ? "Preço personalizado"
+      : "Preço automático";
+  const shownPrice = data.promotion?.price ?? retail;
 
   return (
-    <div className="min-w-0 space-y-4">
+    <div className="ord-slide min-w-0 space-y-4">
       {/* identificação */}
-      <AdminCard className="min-w-0">
-        <div className="flex min-w-0 items-start gap-3">
-          <ItemThumb src={data.image} alt={data.name} size={56} />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-base font-semibold">{productTitle(data.name)}</p>
-            <p className="truncate text-xs text-muted-foreground">
-              {data.brand ?? "Sem marca"}
-              {data.volumeMl ? ` · ${data.volumeMl}ml` : ""}
-              {data.concentration ? ` · ${data.concentration}` : ""}
-            </p>
-            <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
-              <AdminStatus status={origin} />
-              {data.usedOutOfStockCost ? <AdminStatus status="custo sem estoque" /> : null}
+      <PxCard>
+        <div className="flex min-w-0 flex-col gap-4 p-5 sm:flex-row sm:items-center lg:p-6">
+          <div className="flex min-w-0 flex-1 items-center gap-4">
+            <span className="shrink-0 overflow-hidden rounded-[20px] bg-white">
+              <ItemThumb src={data.image} alt={data.name} size={76} />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-[13.5px] font-semibold text-[#8C8C8C]">
+                {data.brand ?? "Sem marca"}
+                {data.volumeMl ? ` · ${data.volumeMl} ml` : ""}
+                {data.concentration ? ` · ${data.concentration}` : ""}
+              </p>
+              <h2 className="mt-0.5 truncate text-[24px] leading-tight font-bold tracking-[-0.03em] lg:text-[28px]">
+                {productTitle(data.name)}
+              </h2>
+              <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+                <PxTag gold={!!data.promotion}>{origin}</PxTag>
+                {data.usedOutOfStockCost ? <PxTag>Custo sem estoque</PxTag> : null}
+              </div>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Fechar produto"
-            className="grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-accent"
-          >
-            <X className="size-4" />
-          </button>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <PxSecondary icon={<Store className="size-4" />} onClick={() => setOffersOpen(true)}>
+              Fornecedores
+            </PxSecondary>
+            <PxSecondary icon={<History className="size-4" />} onClick={() => setHistoryOpen(true)}>
+              Histórico
+            </PxSecondary>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Fechar produto"
+              className="dash-dots press"
+            >
+              <X className="size-[18px]" strokeWidth={2.2} />
+            </button>
+          </div>
         </div>
-
-        <div className="mt-4 grid min-w-0 grid-cols-2 gap-2">
-          <MiniMetric label="Custo" value={<PriceValue value={cost} />} />
-          <MiniMetric label="Preço Pix" value={<PriceValue value={retail} />} tone="gold" />
-          <MiniMetric label="No cartão" value={<PriceValue value={card.active ? card.cardPrice : retail} />} />
-          <MiniMetric label="Atacado" value={<PriceValue value={data.wholesale} />} />
-        </div>
-
-        <div className="mt-3 flex min-w-0 flex-wrap gap-2">
-          <Button variant="outline" size="sm" className="rounded-full" onClick={() => setOffersOpen(true)}>
-            <Store className="size-3.5" /> Ver fornecedores
-          </Button>
-          <Button variant="ghost" size="sm" className="rounded-full" onClick={() => setHistoryOpen(true)}>
-            Ver histórico
-          </Button>
-        </div>
-
-        <p className="mt-3 text-xs text-muted-foreground">
+        <p className="px-5 pb-5 text-[13px] text-[#8C8C8C] lg:px-6 lg:pb-6">
           {data.manualPricing
             ? "Produto de cadastro manual: o preço é definido à mão."
             : `Fornecedor do custo: ${data.supplierName ?? "—"} · atualizado ${listDateTime(data.costUpdatedAt)}`}
         </p>
-      </AdminCard>
+      </PxCard>
 
-      {data.promotion ? (
-        <AdminCard className="min-w-0 border-gold/30 bg-gold/5">
-          <p className="text-[11px] font-semibold tracking-[0.12em] text-gold uppercase">Promoção ativa</p>
-          <p className="mt-1 truncate text-sm font-medium">{data.promotion.name}</p>
-          <div className="mt-2 flex min-w-0 items-baseline gap-2">
-            <span className="text-sm text-muted-foreground line-through tabular-nums">{brl(retail)}</span>
-            <PriceValue value={data.promotion.price} className="text-lg font-semibold text-gold" />
-            <span className="text-xs text-muted-foreground">−{data.promotion.percent}%</span>
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {data.promotion.endsAt ? `Termina em ${listDateTime(data.promotion.endsAt)}` : "Sem data final"}
-          </p>
-        </AdminCard>
-      ) : null}
+      {/* quatro números do perfume */}
+      <PxKpiRow>
+        <PxKpi
+          hero
+          className="col-span-2 xl:col-span-1"
+          label="Preço no Pix"
+          icon={<Wallet className="size-[18px]" strokeWidth={2.2} />}
+          value={<PriceValue value={retail} />}
+          foot={
+            adjust > 0 && data.psych.active
+              ? `ajuste comercial de −${brl(adjust)}`
+              : `custo + ${brl(data.retailMarkup)}`
+          }
+        />
+        <PxKpi
+          label="No cartão"
+          icon={<Receipt className="size-[18px]" strokeWidth={2.2} />}
+          value={<PriceValue value={card.active ? card.cardPrice : retail} />}
+          foot={
+            card.active ? `${data.pixDiscountPercent}% OFF no Pix` : "desconto do Pix desligado"
+          }
+        />
+        <PxKpi
+          label="Atacado"
+          icon={<Tag className="size-[18px]" strokeWidth={2.2} />}
+          value={<PriceValue value={data.wholesale} />}
+          foot={`a partir de ${data.wholesaleMinQuantity} peças`}
+        />
+        <PxKpi
+          label="Lucro bruto"
+          icon={<TrendingUp className="size-[18px]" strokeWidth={2.2} />}
+          value={
+            <span className={cn(profit != null && profit < 0 && "text-[#FF9A8A]")}>
+              <PriceValue value={profit} />
+            </span>
+          }
+          foot={
+            marginPct == null
+              ? "sem custo"
+              : `margem ${pct(marginPct)}${marginPct < 15 ? " · baixa" : ""}`
+          }
+        />
+      </PxKpiRow>
 
-      {/* caminho do preço */}
-      <AdminBlock title="Como este preço é formado">
-        <AdminCard className="min-w-0">
-          <LadderStep label="Custo" value={cost} note={data.supplierName ?? undefined} />
-          <LadderArrow>margem de varejo + {brl(data.retailMarkup)}</LadderArrow>
-          <LadderStep label="Varejo base" value={data.baseRetail} />
-          {data.psych.active ? (
-            <>
-              <LadderArrow>
-                ajuste comercial (final ,90), máximo {brl(data.psych.maxReduction)}
-              </LadderArrow>
-              <LadderStep
-                label="Preço Pix"
-                value={retail}
-                tone="gold"
-                strong
-                note={adjust > 0 ? `ajuste de −${brl(adjust)}` : undefined}
-                help={
-                  <HelpTip title="Ajuste comercial">
-                    Depois da margem, o preço desce até o final ,90 mais próximo, sem passar do limite configurado.
-                  </HelpTip>
-                }
-              />
-            </>
-          ) : (
-            <LadderStep label="Preço Pix" value={retail} tone="gold" strong />
-          )}
-          <LadderArrow>
-            cartão = Pix ÷ (1 − {data.pixDiscountPercent}%)
-          </LadderArrow>
-          <LadderStep
-            label="Preço no cartão"
-            value={card.active ? card.cardPrice : retail}
-            note={card.active ? `${data.pixDiscountPercent}% OFF no Pix` : "desconto do Pix desligado"}
-            help={
-              <HelpTip title="Pix e cartão">
-                O preço cadastrado é o preço no Pix. O valor do cartão é calculado para que o desconto do Pix seja
-                exato.
-              </HelpTip>
-            }
+      <div className="grid min-w-0 gap-3 lg:grid-cols-2 lg:gap-4">
+        {/* caminho do preço */}
+        <PxCard>
+          <PxCardHead
+            title="Como este preço é formado"
+            sub="Do custo do fornecedor ao preço que o cliente paga."
           />
+          <PxCardBody>
+            {data.promotion ? (
+              <div className="mb-3 rounded-[22px] bg-[#FFD599] p-4 text-[#15130F]">
+                <p className="text-[13px] font-bold">Promoção ativa · {data.promotion.name}</p>
+                <p className="mt-1 flex min-w-0 items-baseline gap-2">
+                  <span className="text-[14px] line-through opacity-60 tabular-nums">
+                    {brl(retail)}
+                  </span>
+                  <PriceValue
+                    value={data.promotion.price}
+                    className="text-[24px] font-bold tracking-[-0.02em]"
+                  />
+                  <span className="rounded-full bg-[#15130F] px-2 py-0.5 text-[12px] font-bold text-[#FFD599]">
+                    −{data.promotion.percent}%
+                  </span>
+                </p>
+                <p className="mt-1 text-[12.5px] opacity-70">
+                  {data.promotion.endsAt
+                    ? `Termina em ${listDateTime(data.promotion.endsAt)}`
+                    : "Sem data final"}
+                </p>
+              </div>
+            ) : null}
 
-          <div className="mt-4 border-t border-border/50 pt-3">
+            <LadderStep label="Custo" value={cost} note={data.supplierName ?? undefined} />
+            <LadderArrow>margem de varejo + {brl(data.retailMarkup)}</LadderArrow>
+            <LadderStep label="Varejo base" value={data.baseRetail} />
+            {data.psych.active ? (
+              <>
+                <LadderArrow>
+                  ajuste comercial (final ,90), máximo {brl(data.psych.maxReduction)}
+                </LadderArrow>
+                <LadderStep
+                  label="Preço Pix"
+                  value={retail}
+                  tone="gold"
+                  strong
+                  note={adjust > 0 ? `ajuste de −${brl(adjust)}` : undefined}
+                  help={
+                    <HelpTip title="Ajuste comercial">
+                      Depois da margem, o preço desce até o final ,90 mais próximo, sem passar do
+                      limite configurado.
+                    </HelpTip>
+                  }
+                />
+              </>
+            ) : (
+              <>
+                <LadderArrow>preço cadastrado</LadderArrow>
+                <LadderStep label="Preço Pix" value={retail} tone="gold" strong />
+              </>
+            )}
+            <LadderArrow>cartão = Pix ÷ (1 − {data.pixDiscountPercent}%)</LadderArrow>
             <LadderStep
-              label="Atacado"
-              value={data.wholesale}
-              note={`a partir de ${data.wholesaleMinQuantity} peças · ${brl(wholesaleCard.active ? wholesaleCard.cardPrice : data.wholesale)} no cartão`}
+              label="Preço no cartão"
+              value={card.active ? card.cardPrice : retail}
+              note={
+                card.active ? `${data.pixDiscountPercent}% OFF no Pix` : "desconto do Pix desligado"
+              }
               help={
-                <HelpTip title="Atacado">
-                  Vale com {data.wholesaleMinQuantity} ou mais peças no carrinho, podendo misturar perfumes
-                  diferentes.
+                <HelpTip title="Pix e cartão">
+                  O preço cadastrado é o preço no Pix. O valor do cartão é calculado para que o
+                  desconto do Pix seja exato.
                 </HelpTip>
               }
             />
-          </div>
+            <div className="mt-3">
+              <LadderStep
+                label="Atacado"
+                value={data.wholesale}
+                note={`a partir de ${data.wholesaleMinQuantity} peças · ${brl(wholesaleCard.active ? wholesaleCard.cardPrice : data.wholesale)} no cartão`}
+                help={
+                  <HelpTip title="Atacado">
+                    Vale com {data.wholesaleMinQuantity} ou mais peças no carrinho, podendo misturar
+                    perfumes diferentes.
+                  </HelpTip>
+                }
+              />
+            </div>
+          </PxCardBody>
+        </PxCard>
 
-          <div className="mt-4 grid min-w-0 grid-cols-2 gap-2">
-            <MiniMetric
-              label="Lucro bruto"
-              value={<PriceValue value={profit} />}
-              tone={profit != null && profit < 0 ? "danger" : "gold"}
-            />
-            <MiniMetric
-              label="Margem sobre a venda"
-              value={marginPct == null ? "—" : pct(marginPct)}
-              {...(marginPct != null && marginPct < 15 ? { tone: "warning" as const } : {})}
-            />
-          </div>
-        </AdminCard>
-      </AdminBlock>
+        <div className="min-w-0 space-y-3 lg:space-y-4">
+          {/* simulador */}
+          <PxCard>
+            <PxCardHead title="Simular preço" sub="Nada é salvo enquanto você simula." />
+            <PxCardBody>
+              <MoneyInput
+                id="sim-price"
+                label="Quanto quero vender no Pix"
+                value={sim}
+                onChange={setSim}
+              />
 
-      {/* simulador */}
-      <AdminBlock title="Simular preço">
-        <AdminCard className="min-w-0">
-          <MoneyInput
-            id="sim-price"
-            label="Quanto quero vender (Pix)"
-            value={sim}
-            onChange={setSim}
-            hint="Nada é salvo enquanto você simula."
-          />
+              <div className="mt-3 flex min-w-0 flex-wrap gap-2">
+                {[-10, -5, 5, 10].map((step) => (
+                  <button
+                    key={step}
+                    type="button"
+                    onClick={() =>
+                      setSim(Math.max(0, Number(((sim ?? retail ?? 0) + step).toFixed(2))))
+                    }
+                    className="press h-10 shrink-0 rounded-full bg-[#232323] px-4 text-[14px] font-bold tabular-nums transition-colors hover:bg-[#2C2C2C]"
+                  >
+                    {step > 0 ? `+ R$ ${step}` : `− R$ ${Math.abs(step)}`}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setSim(retail ?? null)}
+                  className="press h-10 shrink-0 rounded-full px-4 text-[14px] font-bold text-[#A9A9A9] transition-colors hover:text-white"
+                >
+                  Preço atual
+                </button>
+              </div>
 
-          <div className="mt-3 flex min-w-0 flex-wrap gap-2">
-            {[-10, -5, 5, 10].map((step) => (
-              <button
-                key={step}
-                type="button"
-                onClick={() => setSim(Math.max(0, Number(((sim ?? retail ?? 0) + step).toFixed(2))))}
-                className="press h-9 shrink-0 rounded-full border border-border/70 px-3 text-sm tabular-nums"
-              >
-                {step > 0 ? `+ R$${step}` : `− R$${Math.abs(step)}`}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => setSim(retail ?? null)}
-              className="press h-9 shrink-0 rounded-full border border-border/70 px-3 text-sm"
-            >
-              Preço atual
-            </button>
-          </div>
+              <div className="mt-4 grid min-w-0 grid-cols-2 gap-2">
+                <PxStat
+                  label="Lucro bruto"
+                  value={<PriceValue value={simProfit} />}
+                  tone={belowCost ? "danger" : "gold"}
+                />
+                <PxStat label="Margem" value={simMargin == null ? "—" : pct(simMargin)} />
+                <PxStat
+                  label="No cartão"
+                  value={<PriceValue value={simCard.active ? simCard.cardPrice : sim} />}
+                />
+                <PxStat
+                  label="Contra o atual"
+                  value={
+                    simDiff == null
+                      ? "—"
+                      : `${simDiff > 0 ? "+" : simDiff < 0 ? "−" : ""}${brl(Math.abs(simDiff))}`
+                  }
+                  tone={
+                    simDiff != null && simDiff > 0
+                      ? "good"
+                      : simDiff != null && simDiff < 0
+                        ? "warning"
+                        : undefined
+                  }
+                />
+              </div>
 
-          <div className="mt-4 grid min-w-0 grid-cols-2 gap-2">
-            <MiniMetric label="Lucro bruto" value={<PriceValue value={simProfit} />} tone={belowCost ? "danger" : "gold"} />
-            <MiniMetric label="Margem sobre a venda" value={simMargin == null ? "—" : pct(simMargin)} />
-            <MiniMetric label="No cartão" value={<PriceValue value={simCard.active ? simCard.cardPrice : sim} />} />
-            <MiniMetric
-              label="Contra o preço atual"
-              value={simDiff == null ? "—" : `${simDiff > 0 ? "+" : simDiff < 0 ? "−" : ""}${brl(Math.abs(simDiff))}`}
-            />
-          </div>
+              {belowCost ? (
+                <div className="mt-3">
+                  <PxNote tone="danger">
+                    Atenção: este preço está abaixo do custo de {brl(cost)}.
+                  </PxNote>
+                </div>
+              ) : null}
 
-          {belowCost ? (
-            <p className="mt-3 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              Atenção: este preço está abaixo do custo de {brl(cost)}.
-            </p>
-          ) : null}
+              <div className="mt-4 flex min-w-0 flex-wrap gap-2">
+                <PxPrimary
+                  className="min-w-0 flex-1"
+                  loading={busy}
+                  disabled={sim == null || sim <= 0 || (retail != null && sim === retail)}
+                  onClick={() => setConfirm(true)}
+                >
+                  Aplicar preço
+                </PxPrimary>
+                {data.customRetail != null && !data.manualPricing ? (
+                  <PxSecondary
+                    className="h-[54px]"
+                    disabled={busy}
+                    icon={<RotateCcw className="size-4" />}
+                    onClick={() => setResetConfirm(true)}
+                  >
+                    Voltar ao automático
+                  </PxSecondary>
+                ) : null}
+              </div>
+            </PxCardBody>
+          </PxCard>
 
-          <div className="mt-4 flex min-w-0 flex-wrap gap-2">
-            <Button
-              className="press h-11 min-w-0 flex-1 rounded-full"
-              disabled={busy || sim == null || sim <= 0 || (retail != null && sim === retail)}
-              onClick={() => setConfirm(true)}
-            >
-              {busy ? <Loader2 className="size-4 animate-spin" /> : "Aplicar preço"}
-            </Button>
-            {data.customRetail != null && !data.manualPricing ? (
-              <Button
-                variant="outline"
-                className="press h-11 rounded-full"
-                disabled={busy}
-                onClick={() => setResetConfirm(true)}
-              >
-                <RotateCcw className="size-4" /> Voltar ao automático
-              </Button>
-            ) : null}
-          </div>
-        </AdminCard>
-      </AdminBlock>
-
-      {/* preview do cliente */}
-      <AdminBlock title="Como o cliente verá">
-        <AdminCard className="min-w-0">
-          <p className="truncate text-sm font-medium">{productTitle(data.name)}</p>
-          <p className="mt-1 flex min-w-0 flex-wrap items-baseline gap-2">
-            <PriceValue value={data.promotion?.price ?? retail} className="text-2xl font-semibold text-gold" />
-            <span className="text-xs text-muted-foreground">no Pix</span>
-          </p>
-          {card.active ? (
-            <p className="text-xs text-muted-foreground">
-              {brl(getPaymentPricing(data.promotion?.price ?? retail ?? 0, payment).cardPrice)} no cartão
-            </p>
-          ) : null}
-          {data.wholesale != null ? (
-            <p className="mt-1 text-xs text-muted-foreground">
-              A partir de {data.wholesaleMinQuantity} peças: {brl(data.wholesale)}
-            </p>
-          ) : null}
-          <div className="mt-3 flex min-w-0 flex-wrap gap-2 text-xs text-muted-foreground">
-            {data.decants.map((d) => (
-              <span key={d.ml} className="rounded-full border border-border/60 px-2.5 py-1">
-                {d.ml}ml {brl(d.price)}
-                {d.custom ? " · próprio" : ""}
-              </span>
-            ))}
-          </div>
-        </AdminCard>
-      </AdminBlock>
+          {/* preview do cliente */}
+          <PxCard>
+            <PxCardHead title="Como o cliente vê" />
+            <PxCardBody>
+              <div className="rounded-[22px] bg-[#232323] p-4">
+                <p className="truncate text-[13px] font-semibold text-[#8C8C8C]">
+                  {data.brand ?? ""}
+                </p>
+                <p className="truncate text-[16px] font-bold">{productTitle(data.name)}</p>
+                <p className="mt-2 flex min-w-0 flex-wrap items-baseline gap-2">
+                  <PriceValue
+                    value={shownPrice}
+                    className="text-[28px] font-bold tracking-[-0.03em] text-[#FFD599]"
+                  />
+                  <span className="text-[13px] text-[#8C8C8C]">no Pix</span>
+                </p>
+                {card.active ? (
+                  <p className="text-[13px] text-[#A9A9A9]">
+                    {brl(getPaymentPricing(shownPrice ?? 0, payment).cardPrice)} no cartão
+                  </p>
+                ) : null}
+                {data.wholesale != null ? (
+                  <p className="mt-1 text-[13px] text-[#A9A9A9]">
+                    A partir de {data.wholesaleMinQuantity} peças: {brl(data.wholesale)}
+                  </p>
+                ) : null}
+                {data.decants.length ? (
+                  <div className="mt-3 flex min-w-0 flex-wrap gap-1.5">
+                    {data.decants.map((d) => (
+                      <PxTag key={d.ml}>
+                        {d.ml} ml · {brl(d.price)}
+                        {d.custom ? " · próprio" : ""}
+                      </PxTag>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </PxCardBody>
+          </PxCard>
+        </div>
+      </div>
 
       {/* fornecedores */}
-      <Sheet open={offersOpen} onOpenChange={setOffersOpen}>
-        <SheetContent
-          side="bottom"
-          className="max-h-[85vh] overflow-y-auto rounded-t-[24px] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]"
-        >
-          <SheetHeader className="px-0 text-left">
-            <SheetTitle className="text-base">Fornecedores</SheetTitle>
-          </SheetHeader>
-          {data.offers.length === 0 ? (
-            <AdminEmpty>Sem ofertas de fornecedor para este produto.</AdminEmpty>
-          ) : (
-            <ul className="mt-2 space-y-2">
-              {data.offers.map((o, i) => (
-                <li
-                  key={`${o.supplierName}-${i}`}
-                  className={cn(
-                    "flex min-w-0 items-center justify-between gap-3 rounded-2xl border p-3",
-                    o.best ? "border-gold/40 bg-gold/5" : "border-border/60",
-                  )}
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{o.supplierName}</p>
-                    <p className="text-xs text-muted-foreground">{o.inStock ? "Disponível" : "Indisponível"}</p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className="text-sm font-semibold tabular-nums">{brl(o.price)}</p>
-                    {o.best ? <p className="text-[11px] text-gold">Melhor custo</p> : null}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </SheetContent>
-      </Sheet>
+      <PxSheet
+        open={offersOpen}
+        onClose={() => setOffersOpen(false)}
+        title="Fornecedores"
+        description={productTitle(data.name)}
+      >
+        {data.offers.length === 0 ? (
+          <AdminEmpty>Sem ofertas de fornecedor para este produto.</AdminEmpty>
+        ) : (
+          <ul className="space-y-2">
+            {data.offers.map((o, i) => (
+              <li
+                key={`${o.supplierName}-${i}`}
+                className={cn(
+                  "flex min-w-0 items-center justify-between gap-3 rounded-[20px] p-4",
+                  o.best ? "bg-[#FFD599] text-[#15130F]" : "bg-[#1A1A1A]",
+                )}
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-[15px] font-bold">{o.supplierName}</p>
+                  <p className={cn("text-[13px]", o.best ? "text-[#15130F]/65" : "text-[#8C8C8C]")}>
+                    {o.inStock ? "Disponível" : "Indisponível"}
+                    {o.best ? " · melhor custo" : ""}
+                  </p>
+                </div>
+                <p className="shrink-0 text-[18px] font-bold tabular-nums">{brl(o.price)}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </PxSheet>
 
       {/* histórico */}
-      <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
-        <SheetContent
-          side="bottom"
-          className="max-h-[85vh] overflow-y-auto rounded-t-[24px] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]"
-        >
-          <SheetHeader className="px-0 text-left">
-            <SheetTitle className="text-base">Histórico de custo</SheetTitle>
-          </SheetHeader>
-          {data.costHistory.length === 0 ? (
-            <AdminEmpty>Sem variação de custo registrada.</AdminEmpty>
-          ) : (
-            <ul className="mt-2 divide-y divide-border/50">
-              {data.costHistory.map((h, i) => (
-                <li key={i} className="flex min-w-0 items-center justify-between gap-3 py-2.5">
-                  <span className="min-w-0 truncate text-sm">{h.supplierName}</span>
-                  <span className="shrink-0 text-right text-sm tabular-nums">
-                    {brl(h.price)}
-                    <span className="ml-2 text-xs text-muted-foreground">{listDateTime(h.at)}</span>
+      <PxSheet
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        title="Histórico de custo"
+        description="O custo do fornecedor ao longo do tempo. O preço de venda acompanha conforme a regra em vigor."
+      >
+        {data.costHistory.length === 0 ? (
+          <AdminEmpty>Sem variação de custo registrada.</AdminEmpty>
+        ) : (
+          <ul className="space-y-1.5">
+            {data.costHistory.map((h, i) => (
+              <li
+                key={i}
+                className="flex min-w-0 items-center justify-between gap-3 rounded-[18px] bg-[#1A1A1A] px-4 py-3"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-[14.5px] font-semibold">
+                    {h.supplierName}
                   </span>
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className="mt-3 text-xs text-muted-foreground">
-            Aqui aparece o custo do fornecedor. O preço de venda muda junto conforme a regra em vigor.
-          </p>
-        </SheetContent>
-      </Sheet>
+                  <span className="block text-[12.5px] text-[#8C8C8C]">{listDateTime(h.at)}</span>
+                </span>
+                <span className="shrink-0 text-[16px] font-bold tabular-nums">{brl(h.price)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </PxSheet>
 
       <AdminConfirm
         open={confirm}
