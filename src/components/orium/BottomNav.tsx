@@ -18,7 +18,7 @@ import { brl } from "@/lib/format";
 const CartDrawer = lazyUI(() => import("@/components/orium/CartSheet").then((m) => ({ default: m.CartDrawer })));
 
 /** Rotas com barra própria (compra, negociação, painel) e o login: a navegação não aparece. */
-const NO_NAV = ["/admin", "/perfume", "/negociacao", "/auth"];
+const NO_NAV = ["/admin", "/perfume", "/negociacao/", "/auth"];
 /** Quanto tempo o aviso "Adicionado" fica na tela. */
 const TOAST_MS = 2800;
 

@@ -7,6 +7,7 @@ import {
   negotiationLevel,
   negotiationPhoto,
   useNegotiationAccords,
+  useNegotiationCount,
   useNegotiationItems,
   type NegotiationItem,
 } from "@/lib/negotiation";
@@ -39,6 +40,7 @@ export function useHasNegotiation() {
 
 export function NegotiationShowcase() {
   const { items } = useNegotiationItems(12);
+  const total = Math.max(useNegotiationCount().data ?? 0, items.length);
   const accords = useNegotiationAccords(items.map((i) => i.product_id ?? ""));
   const { ref, seen } = useRevealOnce<HTMLElement>();
   const [contact, setContact] = useState<NegotiationItem | null>(null);
@@ -61,19 +63,31 @@ export function NegotiationShowcase() {
 
   return (
     <section ref={ref} aria-label="Negociação" className={cn("neg-show relative z-10 mt-5", seen ? "is-in" : "is-pre")}>
-      <header className="neg-rise mb-5 flex items-end gap-4" style={{ "--nd": "0ms" } as CSSProperties}>
+      <header className="neg-rise mb-5 flex flex-col gap-4 tab:flex-row tab:items-end" style={{ "--nd": "0ms" } as CSSProperties}>
         <div className="min-w-0">
           <p className="flex items-center gap-2 text-[13px] font-semibold tracking-[0.14em] text-[#FFD599] uppercase">
             <span className="relative size-2 rounded-full bg-[#FFD599] ui-beacon" aria-hidden />
-            {items.length > 1 ? `${items.length} peças únicas · ao vivo` : "Peça única · ao vivo"}
+            {total > 1 ? `${total} peças únicas · ao vivo` : "Peça única · ao vivo"}
           </p>
           <h2 className="home-title mt-2">Negociação</h2>
           <p className="home-subtitle max-w-[620px]">
             Perfumes da coleção Orium, deslacrados e quase cheios. Só existe um de cada — quem chama primeiro leva.
           </p>
         </div>
+        <div className="flex shrink-0 items-center gap-2 tab:ml-auto">
+          {total > 1 ? (
+            <Link
+              to="/negociacao"
+              preload="intent"
+              onClick={() => track("discovery_clicked", { meta: { card: "negociacao_ver_todas", where: "titulo" } })}
+              className="press group inline-flex h-11 items-center gap-1.5 rounded-full bg-[#1F1F1F] pr-3.5 pl-4 text-[14px] font-semibold whitespace-nowrap text-white transition-colors hover:bg-[#2A2A2A]"
+            >
+              Ver todas
+              <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-0.5" strokeWidth={2.4} />
+            </Link>
+          ) : null}
         {items.length > 3 ? (
-          <div className="ml-auto hidden shrink-0 gap-2 tab:flex">
+          <div className="hidden shrink-0 gap-2 tab:flex">
             <Arrow label="Anterior" onClick={() => nudge(-1)}>
               <ChevronLeft className="size-5" />
             </Arrow>
@@ -82,13 +96,14 @@ export function NegotiationShowcase() {
             </Arrow>
           </div>
         ) : null}
+        </div>
       </header>
 
       {/* um perfume: destaque grande. Vários: uma fileira só, que desliza — a altura nunca cresce */}
       {rest.length === 0 ? (
         <FeatureCard item={first!} notes={notesOf(first!)} onOffer={() => offer(first!, "destaque")} />
       ) : (
-        <PiecesRow scrollerRef={scroller} items={items} notesOf={notesOf} onOffer={(it) => offer(it, "fileira")} />
+        <PiecesRow scrollerRef={scroller} items={items} total={total} notesOf={notesOf} onOffer={(it) => offer(it, "fileira")} />
       )}
 
       <MountWhen when={!!contact}>
@@ -234,11 +249,13 @@ function FeatureCard({ item, notes, onOffer }: { item: NegotiationItem; notes: s
 function PiecesRow({
   scrollerRef,
   items,
+  total,
   notesOf,
   onOffer,
 }: {
   scrollerRef: React.MutableRefObject<HTMLDivElement | null>;
   items: NegotiationItem[];
+  total: number;
   notesOf: (it: NegotiationItem) => string[];
   onOffer: (it: NegotiationItem) => void;
 }) {
@@ -251,8 +268,35 @@ function PiecesRow({
             <NegotiationPiece item={it} notes={notesOf(it)} onOffer={() => onOffer(it)} delay={i} priority={i < 2} />
           </div>
         ))}
+        <div className={slot}>
+          <SeeAllTile total={total} delay={items.length} />
+        </div>
       </HCarousel>
     </div>
+  );
+}
+
+/** Último cartão da fileira: leva para a página com todas as peças, uma embaixo da outra. */
+function SeeAllTile({ total, delay }: { total: number; delay: number }) {
+  return (
+    <Link
+      to="/negociacao"
+      preload="intent"
+      onClick={() => track("discovery_clicked", { meta: { card: "negociacao_ver_todas", where: "fim_da_fileira" } })}
+      className="neg-piece press group flex h-full min-h-[320px] w-full flex-col justify-between rounded-[28px] bg-[#FFD599] p-6 text-[#15130F]"
+      style={{ "--nd": `${Math.min(delay, 6) * 70 + 260}ms` } as CSSProperties}
+    >
+      <Gem className="size-7" strokeWidth={1.8} />
+      <span>
+        <span className="block text-[44px] leading-none font-bold tracking-[-0.04em] tabular-nums">{total}</span>
+        <span className="mt-2 block text-[24px] leading-[1.1] font-bold tracking-[-0.03em]">peças únicas na Negociação</span>
+        <span className="mt-2 block text-[14.5px] leading-snug text-[#15130F]/70">Veja todas, uma embaixo da outra, e escolha a sua.</span>
+      </span>
+      <span className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-[#15130F] text-[15px] font-bold text-[#FFD599]">
+        Ver todas
+        <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-1" strokeWidth={2.6} />
+      </span>
+    </Link>
   );
 }
 
@@ -266,10 +310,13 @@ export function NegotiationPiece({
   onOffer,
   delay = 0,
   priority = false,
+  compact = false,
 }: {
   item: NegotiationItem;
   notes?: string[];
   onOffer?: () => void;
+  /** grade de 2 colunas no celular (página "Ver todas") */
+  compact?: boolean;
   delay?: number;
   priority?: boolean;
 }) {
@@ -307,9 +354,9 @@ export function NegotiationPiece({
             </span>
           ) : null}
         </span>
-        <span className="flex flex-1 flex-col px-4 pt-4">
+        <span className={cn("flex flex-1 flex-col", compact ? "px-3 pt-3 tab:px-4 tab:pt-4" : "px-4 pt-4")}>
           <span className="truncate text-[11.5px] font-semibold tracking-[0.14em] text-[#8C8C8C] uppercase">{item.brand ?? "Orium"}</span>
-          <span className="mt-1 line-clamp-2 text-[19px] leading-[1.15] font-bold tracking-[-0.02em] text-white">{productTitle(item.name)}</span>
+          <span className={cn("mt-1 line-clamp-2 leading-[1.15] font-bold tracking-[-0.02em] text-white", compact ? "text-[16px] tab:text-[19px]" : "text-[19px]")}>{productTitle(item.name)}</span>
           {fill != null ? (
             <span className="mt-3 block">
               <span className="flex items-baseline justify-between text-[12.5px] text-[#A9A9A9]">
@@ -321,15 +368,15 @@ export function NegotiationPiece({
           ) : (
             <span className="mt-2 text-[13px] text-[#A9A9A9]">{lvl.label}</span>
           )}
-          {notes.length ? <span className="mt-3 line-clamp-1 text-[13px] text-[#8C8C8C] capitalize">{notes.slice(0, 3).join(" · ")}</span> : null}
+          {notes.length ? <span className={cn("mt-3 line-clamp-1 text-[13px] text-[#8C8C8C] capitalize", compact && "max-tab:hidden")}>{notes.slice(0, 3).join(" · ")}</span> : null}
         </span>
       </Link>
-      <div className="px-4 pt-4 pb-4">
+      <div className={compact ? "px-3 pt-3 pb-3 tab:px-4 tab:pt-4 tab:pb-4" : "px-4 pt-4 pb-4"}>
         {onOffer ? (
           <button
             type="button"
             onClick={onOffer}
-            className="press group flex h-12 w-full items-center justify-center gap-1.5 rounded-full bg-[#FFD599] text-[15px] font-bold text-[#15130F] transition-colors hover:bg-[#FFDDAA]"
+            className={cn("press group flex w-full items-center justify-center gap-1.5 rounded-full bg-[#FFD599] font-bold text-[#15130F] transition-colors hover:bg-[#FFDDAA]", compact ? "h-11 text-[13.5px] tab:h-12 tab:text-[15px]" : "h-12 text-[15px]")}
           >
             {cta}
           </button>
@@ -338,7 +385,7 @@ export function NegotiationPiece({
             to="/negociacao/$id"
             params={{ id: item.id }}
             preload="intent"
-            className="press group flex h-12 w-full items-center justify-center gap-1.5 rounded-full bg-[#FFD599] text-[15px] font-bold text-[#15130F] transition-colors hover:bg-[#FFDDAA]"
+            className={cn("press group flex w-full items-center justify-center gap-1.5 rounded-full bg-[#FFD599] font-bold text-[#15130F] transition-colors hover:bg-[#FFDDAA]", compact ? "h-11 text-[13.5px] tab:h-12 tab:text-[15px]" : "h-12 text-[15px]")}
           >
             {cta}
           </Link>
