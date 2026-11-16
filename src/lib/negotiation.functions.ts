@@ -82,6 +82,8 @@ export type NegotiationInput = {
   name: string;
   brand?: string | null;
   volumeMl?: number | null;
+  /** ml que ainda restam no frasco */
+  remainingMl?: number | null;
   description?: string | null;
   conditionNote?: string | null;
   status?: "AVAILABLE" | "NEGOTIATING" | "SOLD" | "HIDDEN";
@@ -167,6 +169,8 @@ export const saveNegotiationItem = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: NegotiationInput) => {
     if (!data.name?.trim()) throw new Error("Informe o nome do perfume.");
+    if (data.remainingMl != null && data.volumeMl && data.remainingMl > data.volumeMl)
+      throw new Error("O que resta não pode passar do tamanho do frasco.");
     return data;
   })
   .handler(async ({ data, context }) => {
@@ -178,6 +182,7 @@ export const saveNegotiationItem = createServerFn({ method: "POST" })
       name: data.name.trim(),
       brand: data.brand?.trim() || null,
       volume_ml: data.volumeMl && data.volumeMl > 0 ? Math.round(data.volumeMl) : null,
+      remaining_ml: data.remainingMl != null && data.remainingMl >= 0 ? Math.round(data.remainingMl) : null,
       description: data.description?.trim() || null,
       condition_note: data.conditionNote?.trim() || "Praticamente cheio",
       status: data.status ?? "AVAILABLE",

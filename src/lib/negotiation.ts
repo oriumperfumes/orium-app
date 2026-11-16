@@ -33,6 +33,8 @@ export type NegotiationItem = {
   name: string;
   brand: string | null;
   volume_ml: number | null;
+  /** quantos ml ainda restam no frasco (o estado mostrado sai disto) */
+  remaining_ml: number | null;
   description: string | null;
   condition_note: string;
   status: NegotiationStatus;
@@ -48,7 +50,7 @@ export type NegotiationItem = {
 };
 
 const COLUMNS =
-  "id, product_id, name, brand, volume_ml, description, condition_note, status, show_when_negotiating, image_url, fragrantica_url, olfactory_family, accords, notes, priority, created_at, updated_at";
+  "id, product_id, name, brand, volume_ml, remaining_ml, description, condition_note, status, show_when_negotiating, image_url, fragrantica_url, olfactory_family, accords, notes, priority, created_at, updated_at";
 
 const parse = (row: Record<string, unknown>): NegotiationItem => ({
   ...(row as unknown as NegotiationItem),
@@ -171,4 +173,31 @@ export function useNegotiationAccords(productIds: string[]) {
       return map;
     },
   });
+}
+
+/** Estado do frasco a partir dos ml que restam: 98 de 100 → "Praticamente cheio". */
+export function conditionFromMl(remaining: number, volume: number): string {
+  if (remaining >= volume) return "Cheio";
+  const pct = (remaining / volume) * 100;
+  if (pct >= 90) return "Praticamente cheio";
+  if (pct >= 60) return "Mais da metade";
+  if (pct >= 40) return "Metade";
+  if (pct >= 15) return "Menos da metade";
+  return "No finalzinho";
+}
+
+/**
+ * Quanto tem no frasco, para a vitrine: com os ml cadastrados mostra "98 ml"
+ * (barra = 98 de 100); itens antigos, só com o texto, caem na estimativa.
+ */
+export function negotiationLevel(
+  item: Partial<Pick<NegotiationItem, "remaining_ml" | "volume_ml" | "condition_note">>,
+): { ml: number | null; pct: number | null; label: string } {
+  const rem = item.remaining_ml ?? null;
+  const vol = item.volume_ml ?? null;
+  if (rem != null && vol && vol > 0) {
+    const ml = Math.min(rem, vol);
+    return { ml, pct: Math.max(2, Math.round((ml / vol) * 100)), label: conditionFromMl(ml, vol) };
+  }
+  return { ml: null, pct: negotiationFill(item.condition_note), label: item.condition_note ?? "" };
 }

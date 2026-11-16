@@ -3098,6 +3098,7 @@ export type Database = {
           notes: Json
           olfactory_family: string | null
           priority: number
+          remaining_ml: number | null
           product_id: string | null
           show_when_negotiating: boolean
           status: string
@@ -3118,6 +3119,7 @@ export type Database = {
           notes?: Json
           olfactory_family?: string | null
           priority?: number
+          remaining_ml?: number | null
           product_id?: string | null
           show_when_negotiating?: boolean
           status?: string
@@ -3138,6 +3140,7 @@ export type Database = {
           notes?: Json
           olfactory_family?: string | null
           priority?: number
+          remaining_ml?: number | null
           product_id?: string | null
           show_when_negotiating?: boolean
           status?: string

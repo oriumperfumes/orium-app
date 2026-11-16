@@ -42,7 +42,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  conditionFromMl,
   NEGOTIATION_STATUS_LABEL,
+  negotiationLevel,
   negotiationPhoto,
   type NegotiationItem,
   type NegotiationStatus,
@@ -73,7 +75,6 @@ import {
   PanelHeader,
   PanelScroll,
   PhotoField,
-  QuickChips,
   SoftButton,
   StatusDot,
   TextArea,
@@ -106,7 +107,6 @@ const STATUS_META: Record<NegotiationStatus, { tone: "ok" | "gold" | "off" | "co
   HIDDEN: { tone: "off", icon: <EyeOff />, hint: "Só você vê" },
 };
 const STATUSES: NegotiationStatus[] = ["AVAILABLE", "NEGOTIATING", "SOLD", "HIDDEN"];
-const CONDITIONS = ["Lacrado", "Praticamente cheio", "Mais da metade", "Metade", "Usado poucas vezes"];
 /** prioridade usada pelo "Fixar no começo" (a ordem é a maior primeiro) */
 const PINNED = 10;
 
@@ -116,6 +116,8 @@ type Draft = {
   name: string;
   brand: string;
   volume: string;
+  /** ml que ainda restam no frasco */
+  remaining: string;
   description: string;
   conditionNote: string;
   status: NegotiationStatus;
@@ -132,6 +134,7 @@ const emptyDraft = (): Draft => ({
   name: "",
   brand: "",
   volume: "",
+  remaining: "",
   description: "",
   conditionNote: "Praticamente cheio",
   status: "AVAILABLE",
@@ -147,6 +150,7 @@ const toDraft = (item: NegotiationItem): Draft => ({
   name: item.name,
   brand: item.brand ?? "",
   volume: item.volume_ml ? String(item.volume_ml) : "",
+  remaining: item.remaining_ml != null ? String(item.remaining_ml) : "",
   description: item.description ?? "",
   conditionNote: item.condition_note,
   status: item.status,
@@ -161,8 +165,10 @@ const draftPayload = (d: Draft) => ({
   name: d.name,
   brand: d.brand,
   volumeMl: d.volume ? Number(d.volume) : null,
+  remainingMl: d.remaining ? Number(d.remaining) : null,
   description: d.description,
-  conditionNote: d.conditionNote,
+  // com os ml preenchidos, o estado é calculado (98 de 100 → "Praticamente cheio")
+  conditionNote: d.remaining && d.volume && Number(d.volume) > 0 ? conditionFromMl(Math.min(Number(d.remaining), Number(d.volume)), Number(d.volume)) : d.conditionNote,
   status: d.status,
   showWhenNegotiating: d.showWhenNegotiating,
   imageUrl: d.imagePath,
@@ -575,7 +581,10 @@ function ShowcaseTile({
       <div className="min-w-0 px-2 pt-3 pb-2">
         <p className="truncate text-[11.5px] font-semibold tracking-[0.06em] text-[#8C8C8C] uppercase">{item.brand ?? "Orium"}</p>
         <p className="mt-0.5 truncate text-[15.5px] leading-tight font-bold tracking-[-0.01em]">{item.name}</p>
-        <p className="mt-1 truncate text-[12.5px] text-[#8C8C8C]">{[item.volume_ml ? `${item.volume_ml} ml` : null, item.condition_note].filter(Boolean).join(" · ")}</p>
+        <p className="mt-1 truncate text-[12.5px] text-[#8C8C8C]">{(() => {
+            const lvl = negotiationLevel(item);
+            return [lvl.ml != null ? `${lvl.ml} de ${item.volume_ml} ml` : item.volume_ml ? `${item.volume_ml} ml` : null, lvl.label].filter(Boolean).join(" · ");
+          })()}</p>
         <StatusDot tone={meta.tone} className="mt-2.5">
           {NEGOTIATION_STATUS_LABEL[item.status]}
         </StatusDot>
@@ -828,23 +837,17 @@ function PanelBody({
               <Field label="Marca">
                 <TextInput value={draft.brand} onChange={(e) => set({ brand: e.target.value })} placeholder="Ex.: Lattafa" />
               </Field>
-              <Field label="Volume do frasco">
-                <TextInput
-                  inputMode="numeric"
-                  suffix="ml"
-                  value={draft.volume}
-                  onChange={(e) => set({ volume: e.target.value.replace(/\D/g, "") })}
-                  placeholder="100"
-                />
-              </Field>
             </div>
           </div>
         </PanelCard>
 
-        <PanelCard title="Como está o frasco" hint="Aparece no cartão da loja, embaixo do nome.">
-          <QuickChips options={CONDITIONS} value={draft.conditionNote} onPick={(v) => set({ conditionNote: v })} />
-          <TextInput className="mt-3" value={draft.conditionNote} onChange={(e) => set({ conditionNote: e.target.value })} placeholder="Ou escreva do seu jeito" />
-        </PanelCard>
+        <RemainingCard
+          volume={draft.volume}
+          remaining={draft.remaining}
+          legacy={draft.conditionNote}
+          onVolume={(v) => set({ volume: v })}
+          onRemaining={(v) => set({ remaining: v })}
+        />
 
         <PanelCard title="Situação">
           <ChoiceCards
@@ -898,12 +901,75 @@ function PanelBody({
             Concluir
           </SoftButton>
         ) : (
-          <GoldButton className="flex-1" loading={busy === "save"} disabled={!draft.name.trim() || busy === "photo"} onClick={() => void submit()}>
+          <GoldButton
+            className="flex-1"
+            loading={busy === "save"}
+            disabled={!draft.name.trim() || busy === "photo" || (!!draft.remaining && !!draft.volume && Number(draft.remaining) > Number(draft.volume))} onClick={() => void submit()}>
             {draft.id ? "Salvar alterações" : "Colocar na vitrine"}
           </GoldButton>
         )}
       </PanelFooter>
     </>
+  );
+}
+
+/* ─────────────── quanto tem no frasco ─────────────── */
+
+/**
+ * Tamanho do frasco + quantos ml restam. O estado ("Praticamente cheio",
+ * "Metade"...) e a barra saem sozinhos — é o mesmo que a loja mostra.
+ */
+function RemainingCard({
+  volume,
+  remaining,
+  legacy,
+  onVolume,
+  onRemaining,
+}: {
+  volume: string;
+  remaining: string;
+  legacy: string;
+  onVolume: (v: string) => void;
+  onRemaining: (v: string) => void;
+}) {
+  const vol = Number(volume) || 0;
+  const rem = remaining === "" ? null : Number(remaining);
+  const over = rem != null && vol > 0 && rem > vol;
+  const ok = rem != null && vol > 0 && !over;
+  const pct = ok ? Math.max(2, Math.round((rem! / vol) * 100)) : 0;
+  const label = ok ? conditionFromMl(rem!, vol) : null;
+  return (
+    <PanelCard title="Quanto tem no frasco" hint="Digite os ml que ainda restam. O estado aparece sozinho na loja.">
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Frasco de">
+          <TextInput inputMode="numeric" suffix="ml" value={volume} onChange={(e) => onVolume(e.target.value.replace(/\D/g, ""))} placeholder="100" />
+        </Field>
+        <Field label="Ainda tem">
+          <TextInput
+            inputMode="numeric"
+            suffix="ml"
+            value={remaining}
+            onChange={(e) => onRemaining(e.target.value.replace(/\D/g, ""))}
+            placeholder={vol ? String(Math.round(vol * 0.95)) : "95"}
+          />
+        </Field>
+      </div>
+      <div className="mt-4 rounded-[18px] bg-[#232323] p-4">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className={cn("text-[15px] font-bold", over ? "text-[#FF9A8A]" : label ? "text-white" : "text-[#6F6F6F]")}>
+            {over ? "Passou do tamanho do frasco" : (label ?? (legacy ? `Hoje: ${legacy}` : "Preencha os dois campos"))}
+          </span>
+          {ok ? (
+            <span className="text-[14px] text-[#A9A9A9] tabular-nums">
+              <b className="text-[17px] text-white">{rem} ml</b> de {vol} ml
+            </span>
+          ) : null}
+        </div>
+        <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-[#2E2E2E]">
+          <div className="h-full rounded-full bg-[#FFD599] transition-[width] duration-500 ease-[var(--ease-orium)]" style={{ width: `${pct}%` }} />
+        </div>
+      </div>
+    </PanelCard>
   );
 }
 

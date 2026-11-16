@@ -3,6 +3,7 @@ import { Check, CheckCheck, Gem, MessageCircle } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 import { productTitle } from "@/lib/format";
 import {
+  negotiationLevel,
   negotiationMessage,
   negotiationPhoto,
   negotiationWhatsappLink,
@@ -31,7 +32,7 @@ export function NegotiationContactSheet({
   open,
   onOpenChange,
 }: {
-  item: Pick<NegotiationItem, "id" | "name"> & Partial<Pick<NegotiationItem, "brand" | "image_url" | "condition_note" | "volume_ml">>;
+  item: Pick<NegotiationItem, "id" | "name"> & Partial<Pick<NegotiationItem, "brand" | "image_url" | "condition_note" | "volume_ml" | "remaining_ml">>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -114,7 +115,11 @@ export function NegotiationContactSheet({
                 <span className="block truncate text-[11.5px] font-semibold tracking-[0.14em] text-[#8C8C8C] uppercase">{item.brand ?? "Orium"}</span>
                 <span className="mt-0.5 block truncate text-[17px] leading-tight font-bold">{productTitle(item.name)}</span>
                 <span className="mt-1 inline-flex items-center gap-1 text-[12.5px] font-semibold text-[#FFD599]">
-                  <Gem className="size-3" /> Peça única{item.condition_note ? ` · ${item.condition_note}` : ""}
+                  <Gem className="size-3" /> Peça única
+                  {(() => {
+                    const lvl = negotiationLevel(item);
+                    return lvl.ml != null ? ` · ${lvl.ml} ml` : lvl.label ? ` · ${lvl.label}` : "";
+                  })()}
                 </span>
               </span>
             </div>
