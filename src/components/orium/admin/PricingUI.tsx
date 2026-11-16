@@ -514,6 +514,7 @@ export function PxDialog({
   preview,
   children,
   footer,
+  wide,
 }: {
   open: boolean;
   onClose: () => void;
@@ -523,10 +524,17 @@ export function PxDialog({
   preview?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
+  /** janela larga (várias regras lado a lado) */
+  wide?: boolean;
 }) {
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="flex max-h-[calc(100svh-2rem)] max-w-[540px] flex-col gap-0 overflow-hidden rounded-[32px] border-0 bg-[#121212] p-0 text-white sm:p-0 [&>button:last-child]:top-6 [&>button:last-child]:right-6 [&>button:last-child]:grid [&>button:last-child]:size-10 [&>button:last-child]:place-items-center [&>button:last-child]:rounded-full [&>button:last-child]:bg-[#232323] [&>button:last-child]:opacity-100">
+      <DialogContent
+        className={cn(
+          "flex max-h-[calc(100svh-2rem)] flex-col gap-0 overflow-hidden rounded-[32px] border-0 bg-[#121212] p-0 text-white sm:p-0 [&>button:last-child]:top-6 [&>button:last-child]:right-6 [&>button:last-child]:grid [&>button:last-child]:size-10 [&>button:last-child]:place-items-center [&>button:last-child]:rounded-full [&>button:last-child]:bg-[#232323] [&>button:last-child]:opacity-100",
+          wide ? "max-w-[920px]" : "max-w-[540px]",
+        )}
+      >
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="flex min-w-0 items-center gap-3 px-6 pt-6 pr-20">
             {icon ? <span className="dash-ico">{icon}</span> : null}

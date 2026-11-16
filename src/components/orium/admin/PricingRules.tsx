@@ -2,7 +2,17 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Boxes, Droplet, Loader2, MessageCircle, Minus, Percent, Plus, Store } from "lucide-react";
+import {
+  Boxes,
+  Droplet,
+  Loader2,
+  MessageCircle,
+  Minus,
+  Percent,
+  Plus,
+  SlidersHorizontal,
+  Store,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Switch } from "@/components/ui/switch";
 import { brl, productTitle } from "@/lib/format";
@@ -184,12 +194,14 @@ export function PricesOnRequestCard() {
  * Cada número abre a sua própria janela de edição: Varejo, Atacado, Pix ou Decants.
  */
 type RuleSection = "varejo" | "atacado" | "pix" | "decants";
+/** "todas": o botão "Editar regras" do topo abre as quatro numa janela só */
+type RuleView = RuleSection | "todas";
 
 export function PricingRulesBoard({
   editing,
   onEditingChange,
 }: {
-  /** botão "Editar regras" do topo: abre o Varejo */
+  /** botão "Editar regras" do topo: abre as quatro regras juntas */
   editing: boolean;
   onEditingChange: (v: boolean) => void;
 }) {
@@ -207,7 +219,7 @@ export function PricingRulesBoard({
     maxReduction: Number(settings?.psych_max_reduction ?? 0),
   });
   const card300 = getPaymentPricing(300, { pixDiscountPercent: pix, active: pixOn }).cardPrice;
-  const current: RuleSection | null = section ?? (editing ? "varejo" : null);
+  const current: RuleView | null = section ?? (editing ? "todas" : null);
   const close = () => {
     setSection(null);
     onEditingChange(false);
@@ -268,7 +280,13 @@ export function PricingRulesBoard({
   );
 }
 
-const SECTION_META: Record<RuleSection, { title: string; description: string; icon: ReactNode }> = {
+const SECTION_META: Record<RuleView, { title: string; description: string; icon: ReactNode }> = {
+  todas: {
+    title: "Regras de preço",
+    description:
+      "As quatro regras do catálogo numa tela só. Cada uma mostra o resultado enquanto você digita.",
+    icon: <SlidersHorizontal className="size-[18px]" strokeWidth={2.2} />,
+  },
   varejo: {
     title: "Varejo",
     description: "Quanto a Orium soma ao custo do fornecedor para chegar ao preço de venda.",
@@ -296,7 +314,7 @@ const SECTION_META: Record<RuleSection, { title: string; description: string; ic
  * mandando as outras como estão; mudanças que alteram o preço de varejo do
  * catálogo (margem ou ajuste comercial) mostram o impacto antes de aplicar.
  */
-function RuleEditor({ section, onClose }: { section: RuleSection; onClose: () => void }) {
+function RuleEditor({ section, onClose }: { section: RuleView; onClose: () => void }) {
   const qc = useQueryClient();
   const { settings, decants } = usePricingRules();
   const saveRules = useServerFn(updatePricingRules);
@@ -400,7 +418,11 @@ function RuleEditor({ section, onClose }: { section: RuleSection; onClose: () =>
           decant_10: Number(form.d10),
         },
       });
-      toast.success(`${SECTION_META[section].title} atualizado.`);
+      toast.success(
+        section === "todas"
+          ? "Regras de preço atualizadas."
+          : `${SECTION_META[section].title} atualizado.`,
+      );
       qc.invalidateQueries();
       onClose();
     } catch (e) {
@@ -450,7 +472,7 @@ function RuleEditor({ section, onClose }: { section: RuleSection; onClose: () =>
           : "nenhum preço muda"
       }
     />
-  ) : section === "varejo" ? (
+  ) : section === "todas" ? null : section === "varejo" ? (
     <PxPreview
       label="Perfume com custo de R$ 200"
       value={brl(form.psychActive ? exampleFinal : exampleBase)}
@@ -495,9 +517,113 @@ function RuleEditor({ section, onClose }: { section: RuleSection; onClose: () =>
     </div>
   );
 
+  // campos de cada regra (usados sozinhos ou os quatro juntos)
+  const fields = (sec: RuleSection) =>
+    sec === "varejo" ? (
+      <>
+        <MoneyInput
+          id="rule-retail"
+          label="Margem somada ao custo"
+          value={form.retail}
+          onChange={(v) => set("retail", v)}
+        />
+        <PxSwitchRow
+          title="Ajuste comercial (final ,90)"
+          hint="Depois da margem, o preço desce até o final ,90 mais próximo."
+          checked={form.psychActive}
+          onChange={(v) => set("psychActive", v)}
+        />
+        {form.psychActive ? (
+          <MoneyInput
+            id="rule-psych"
+            label="Ajuste máximo para baixo"
+            value={form.psychMax}
+            onChange={(v) => set("psychMax", v)}
+          />
+        ) : null}
+      </>
+    ) : sec === "atacado" ? (
+      <>
+        <MoneyInput
+          id="rule-wholesale"
+          label="Margem somada ao custo"
+          value={form.wholesale}
+          onChange={(v) => set("wholesale", v)}
+        />
+        <div className="min-w-0 space-y-2">
+          <p className="text-[14px] font-semibold text-[#D4D4D4]">Vale a partir de</p>
+          <div className="flex h-[56px] items-center justify-between rounded-full bg-[#232323] px-1.5">
+            <button
+              type="button"
+              aria-label="Uma peça a menos"
+              disabled={(form.minQty ?? 6) <= 2}
+              onClick={() => set("minQty", Math.max(2, (form.minQty ?? 6) - 1))}
+              className="press grid size-11 place-items-center rounded-full bg-[#2E2E2E] text-white disabled:opacity-40"
+            >
+              <Minus className="size-4" />
+            </button>
+            <span className="text-[18px] font-bold tabular-nums">{form.minQty ?? 6} peças</span>
+            <button
+              type="button"
+              aria-label="Uma peça a mais"
+              disabled={(form.minQty ?? 6) >= 50}
+              onClick={() => set("minQty", Math.min(50, (form.minQty ?? 6) + 1))}
+              className="press grid size-11 place-items-center rounded-full bg-[#2E2E2E] text-white disabled:opacity-40"
+            >
+              <Plus className="size-4" />
+            </button>
+          </div>
+        </div>
+      </>
+    ) : sec === "pix" ? (
+      <>
+        <PercentInput
+          id="rule-pix"
+          label="Desconto no Pix"
+          value={form.pixPercent}
+          onChange={(v) => set("pixPercent", v)}
+        />
+        <PxSwitchRow
+          title={`Mostrar “${Number(form.pixPercent) || 0}% OFF no Pix” na loja`}
+          hint="Desligado: Pix e cartão pelo mesmo preço."
+          checked={form.pixActive}
+          onChange={(v) => set("pixActive", v)}
+        />
+      </>
+    ) : (
+      <>
+        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3">
+          <MoneyInput id="rule-d2" label="2 ml" value={form.d2} onChange={(v) => set("d2", v)} />
+          <MoneyInput id="rule-d5" label="5 ml" value={form.d5} onChange={(v) => set("d5", v)} />
+          <MoneyInput
+            id="rule-d10"
+            label="10 ml"
+            value={form.d10}
+            onChange={(v) => set("d10", v)}
+          />
+        </div>
+        <PxNote>
+          Um perfume pode ter preço próprio de decant na tela dele; esse preço continua valendo.
+        </PxNote>
+      </>
+    );
+
+  // resultado em uma linha, para os cartões da janela com as quatro regras
+  const result = (sec: RuleSection) =>
+    sec === "varejo"
+      ? `Custo R$ 200 → ${brl(form.psychActive ? exampleFinal : exampleBase)}`
+      : sec === "atacado"
+        ? `R$ 200 → ${brl(exampleCost + (Number(form.wholesale) || 0))} com ${form.minQty ?? 6}+ peças`
+        : sec === "pix"
+          ? form.pixActive
+            ? `R$ 300 no Pix → ${brl(pixPreview.cardPrice)} no cartão`
+            : "Pix e cartão pelo mesmo preço"
+          : `${brl(form.d2)} · ${brl(form.d5)} · ${brl(form.d10)}`;
+
   return (
     <PxDialog
       open
+      wide={section === "todas" && !impact}
       onClose={onClose}
       icon={meta.icon}
       title={impact ? "Confira antes de aplicar" : meta.title}
@@ -526,93 +652,25 @@ function RuleEditor({ section, onClose }: { section: RuleSection; onClose: () =>
             ))}
           </ul>
         )
-      ) : section === "varejo" ? (
-        <>
-          <MoneyInput
-            id="rule-retail"
-            label="Margem somada ao custo"
-            value={form.retail}
-            onChange={(v) => set("retail", v)}
-          />
-          <PxSwitchRow
-            title="Ajuste comercial (final ,90)"
-            hint="Depois da margem, o preço desce até o final ,90 mais próximo."
-            checked={form.psychActive}
-            onChange={(v) => set("psychActive", v)}
-          />
-          {form.psychActive ? (
-            <MoneyInput
-              id="rule-psych"
-              label="Ajuste máximo para baixo"
-              value={form.psychMax}
-              onChange={(v) => set("psychMax", v)}
-            />
-          ) : null}
-        </>
-      ) : section === "atacado" ? (
-        <>
-          <MoneyInput
-            id="rule-wholesale"
-            label="Margem somada ao custo"
-            value={form.wholesale}
-            onChange={(v) => set("wholesale", v)}
-          />
-          <div className="min-w-0 space-y-2">
-            <p className="text-[14px] font-semibold text-[#D4D4D4]">Vale a partir de</p>
-            <div className="flex h-[56px] items-center justify-between rounded-full bg-[#232323] px-1.5">
-              <button
-                type="button"
-                aria-label="Uma peça a menos"
-                disabled={(form.minQty ?? 6) <= 2}
-                onClick={() => set("minQty", Math.max(2, (form.minQty ?? 6) - 1))}
-                className="press grid size-11 place-items-center rounded-full bg-[#2E2E2E] text-white disabled:opacity-40"
-              >
-                <Minus className="size-4" />
-              </button>
-              <span className="text-[18px] font-bold tabular-nums">{form.minQty ?? 6} peças</span>
-              <button
-                type="button"
-                aria-label="Uma peça a mais"
-                disabled={(form.minQty ?? 6) >= 50}
-                onClick={() => set("minQty", Math.min(50, (form.minQty ?? 6) + 1))}
-                className="press grid size-11 place-items-center rounded-full bg-[#2E2E2E] text-white disabled:opacity-40"
-              >
-                <Plus className="size-4" />
-              </button>
-            </div>
-          </div>
-        </>
-      ) : section === "pix" ? (
-        <>
-          <PercentInput
-            id="rule-pix"
-            label="Desconto no Pix"
-            value={form.pixPercent}
-            onChange={(v) => set("pixPercent", v)}
-          />
-          <PxSwitchRow
-            title={`Mostrar “${Number(form.pixPercent) || 0}% OFF no Pix” na loja`}
-            hint="Desligado: Pix e cartão pelo mesmo preço."
-            checked={form.pixActive}
-            onChange={(v) => set("pixActive", v)}
-          />
-        </>
+      ) : section === "todas" ? (
+        <div className="grid min-w-0 gap-3 md:grid-cols-2">
+          {(["varejo", "atacado", "pix", "decants"] as const).map((sec) => (
+            <section key={sec} className="min-w-0 space-y-4 rounded-[24px] bg-[#1A1A1A] p-5">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="dash-ico">{SECTION_META[sec].icon}</span>
+                <div className="min-w-0">
+                  <h3 className="text-[17px] font-bold tracking-[-0.01em]">
+                    {SECTION_META[sec].title}
+                  </h3>
+                  <p className="truncate text-[13px] font-semibold text-[#FFD599]">{result(sec)}</p>
+                </div>
+              </div>
+              {fields(sec)}
+            </section>
+          ))}
+        </div>
       ) : (
-        <>
-          <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3">
-            <MoneyInput id="rule-d2" label="2 ml" value={form.d2} onChange={(v) => set("d2", v)} />
-            <MoneyInput id="rule-d5" label="5 ml" value={form.d5} onChange={(v) => set("d5", v)} />
-            <MoneyInput
-              id="rule-d10"
-              label="10 ml"
-              value={form.d10}
-              onChange={(v) => set("d10", v)}
-            />
-          </div>
-          <PxNote>
-            Um perfume pode ter preço próprio de decant na tela dele; esse preço continua valendo.
-          </PxNote>
-        </>
+        fields(section)
       )}
     </PxDialog>
   );
