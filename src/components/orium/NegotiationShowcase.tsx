@@ -210,7 +210,7 @@ function FeatureCard({ item, notes, onOffer }: { item: NegotiationItem; notes: s
         <div className="neg-line mt-auto pt-7" style={{ "--nd": "580ms" } as CSSProperties}>
           {negotiating ? (
             <p className="mb-3 rounded-[16px] bg-[#2A2014] px-4 py-3 text-[14px] leading-snug text-[#F2C46D]">
-              Alguém já está conversando sobre este. Ainda dá tempo de mandar a sua oferta.
+              Alguém já está conversando sobre este. Ainda dá tempo de consultar o valor.
             </p>
           ) : null}
           <button
@@ -219,10 +219,10 @@ function FeatureCard({ item, notes, onOffer }: { item: NegotiationItem; notes: s
             className="neg-cta press group flex h-[58px] w-full items-center justify-center gap-2.5 rounded-full bg-[#FFD599] text-[17px] font-bold text-[#15130F] transition-colors hover:bg-[#FFDDAA]"
           >
             <MessageCircle className="size-5" strokeWidth={2.4} />
-            Fazer minha oferta
+            Consultar valor
             <ArrowRight className="size-5 transition-transform duration-300 group-hover:translate-x-1" strokeWidth={2.4} />
           </button>
-          <p className="mt-3 text-center text-[13px] text-[#8C8C8C]">Você fala direto com a Orium no WhatsApp. Sem compromisso.</p>
+          <p className="mt-3 text-center text-[13px] text-[#8C8C8C]">A Orium te passa o valor no WhatsApp. Sem compromisso.</p>
         </div>
       </div>
     </article>
@@ -263,8 +263,8 @@ function PiecesRow({
 function HowItWorks({ delay }: { delay: number }) {
   const steps = [
     { n: 1, t: "Escolha a peça", d: "Cada frasco é único, com foto real." },
-    { n: 2, t: "Faça sua oferta", d: "Você fala direto com a Orium no WhatsApp." },
-    { n: 3, t: "Combine a entrega", d: "Retirada ou entrega, do jeito que for melhor." },
+    { n: 2, t: "Consulte o valor", d: "Chame no WhatsApp e a Orium te diz quanto está saindo." },
+    { n: 3, t: "Negocie e combine", d: "Dependendo da peça, dá para baixar o valor. Depois é só combinar a entrega." },
   ];
   return (
     <div
@@ -312,7 +312,7 @@ export function NegotiationPiece({
   const negotiating = item.status === "NEGOTIATING";
   const cta = (
     <>
-      Fazer oferta <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-0.5" strokeWidth={2.6} />
+      Consultar valor <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-0.5" strokeWidth={2.6} />
     </>
   );
   return (
