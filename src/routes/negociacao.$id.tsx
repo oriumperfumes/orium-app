@@ -3,7 +3,9 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { BackLink } from '@/components/orium/BackLink';
 import { Gem, MessageCircle } from "lucide-react";
 import { productTitle } from "@/lib/format";
-import { NEGOTIATION_TAGLINE, negotiationPhoto, useNegotiationItem } from "@/lib/negotiation";
+import { NEGOTIATION_TAGLINE, negotiationPhoto, useNegotiationItem,
+  negotiationLevel,
+} from "@/lib/negotiation";
 import { FragranceStory } from "@/components/orium/FragranceStory";
 import { OtherNegotiations } from "@/components/orium/OtherNegotiations";
 import { PhotoFade } from "@/components/orium/PhotoFade";
@@ -91,8 +93,12 @@ function NegotiationDetail() {
           </p>
           <h1 className="display text-2xl leading-tight tab:text-3xl">{productTitle(item.name)}</h1>
           <p className="mt-1.5 text-sm text-muted-foreground">
-            Deslacrado · {item.condition_note}
-            {item.volume_ml ? ` · ${item.volume_ml}ml` : ""}
+            Deslacrado · {negotiationLevel(item).label}
+            {item.remaining_ml != null && item.volume_ml
+              ? ` · ainda tem ${Math.min(item.remaining_ml, item.volume_ml)} ml de ${item.volume_ml} ml`
+              : item.volume_ml
+                ? ` · ${item.volume_ml}ml`
+                : ""}
           </p>
           <p className="mt-2 text-sm text-muted-foreground">{NEGOTIATION_TAGLINE}</p>
         </div>

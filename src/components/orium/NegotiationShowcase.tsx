@@ -4,7 +4,7 @@ import { ArrowRight, Camera, ChevronLeft, ChevronRight, Gem, MessageCircle, Shie
 import { productTitle } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
-  negotiationFill,
+  negotiationLevel,
   negotiationPhoto,
   useNegotiationAccords,
   useNegotiationItems,
@@ -102,7 +102,8 @@ export function NegotiationShowcase() {
 
 function FeatureCard({ item, notes, onOffer }: { item: NegotiationItem; notes: string[]; onOffer: () => void }) {
   const photo = negotiationPhoto(item.image_url);
-  const fill = negotiationFill(item.condition_note);
+  const lvl = negotiationLevel(item);
+  const fill = lvl.pct;
   const negotiating = item.status === "NEGOTIATING";
   return (
     <article
@@ -153,14 +154,22 @@ function FeatureCard({ item, notes, onOffer }: { item: NegotiationItem; notes: s
           <div className="neg-line mt-7" style={{ "--nd": "400ms" } as CSSProperties}>
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-[14px] font-semibold text-[#D4D4D4]">Quanto ainda tem</span>
-              <b className="text-[18px] font-bold text-white tabular-nums">~{fill}%</b>
+              <span className="text-[14px] text-[#A9A9A9] tabular-nums">
+                {lvl.ml != null ? (
+                  <>
+                    <b className="text-[18px] font-bold text-white">{lvl.ml} ml</b> de {item.volume_ml} ml
+                  </>
+                ) : (
+                  <b className="text-[18px] font-bold text-white">~{fill}%</b>
+                )}
+              </span>
             </div>
             <FillBar value={fill} big />
-            <p className="mt-2 text-[13.5px] text-[#A9A9A9]">{item.condition_note}</p>
+            <p className="mt-2 text-[13.5px] text-[#A9A9A9]">{lvl.label}</p>
           </div>
         ) : (
           <p className="neg-line mt-6 text-[15px] text-[#D4D4D4]" style={{ "--nd": "400ms" } as CSSProperties}>
-            {item.condition_note}
+            {lvl.label}
           </p>
         )}
 
@@ -298,7 +307,8 @@ export function NegotiationPiece({
   priority?: boolean;
 }) {
   const photo = negotiationPhoto(item.image_url, "card");
-  const fill = negotiationFill(item.condition_note);
+  const lvl = negotiationLevel(item);
+  const fill = lvl.pct;
   const negotiating = item.status === "NEGOTIATING";
   const cta = (
     <>
@@ -336,13 +346,13 @@ export function NegotiationPiece({
           {fill != null ? (
             <span className="mt-3 block">
               <span className="flex items-baseline justify-between text-[12.5px] text-[#A9A9A9]">
-                <span>{item.condition_note}</span>
-                <b className="font-bold text-white tabular-nums">~{fill}%</b>
+                <span>{lvl.label}</span>
+                <b className="font-bold text-white tabular-nums">{lvl.ml != null ? `${lvl.ml} ml` : `~${fill}%`}</b>
               </span>
               <FillBar value={fill} />
             </span>
           ) : (
-            <span className="mt-2 text-[13px] text-[#A9A9A9]">{item.condition_note}</span>
+            <span className="mt-2 text-[13px] text-[#A9A9A9]">{lvl.label}</span>
           )}
           {notes.length ? <span className="mt-3 line-clamp-1 text-[13px] text-[#8C8C8C] capitalize">{notes.slice(0, 3).join(" · ")}</span> : null}
         </span>
