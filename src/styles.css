@@ -3590,3 +3590,6 @@ body.admin-mode .press:active:not(:disabled) { transform: scale(0.965); transiti
  * altura) vira área rolável vazia quando a própria gaveta rola. Nessas,
  * ele sai — a rolagem para no fim do conteúdo. */
 [data-vaul-drawer]:is(.overflow-y-auto, .overflow-auto)::after { display: none; }
+/* página do perfume em negociação: o botão da oferta chama atenção uma vez */
+.neg-cta-pulse { animation: ord-pulse 1.2s var(--ease-orium) 1200ms 2; }
+@media (prefers-reduced-motion: reduce) { .neg-cta-pulse { animation: none; } }

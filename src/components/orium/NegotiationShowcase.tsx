@@ -382,7 +382,7 @@ export function NegotiationPiece({
 }
 
 /** Barra "quanto ainda tem": enche da esquerda quando a vitrine aparece. */
-function FillBar({ value, big }: { value: number; big?: boolean }) {
+export function FillBar({ value, big }: { value: number; big?: boolean }) {
   const [shown, setShown] = useState(false);
   const el = useRef<HTMLSpanElement>(null);
   useEffect(() => {
