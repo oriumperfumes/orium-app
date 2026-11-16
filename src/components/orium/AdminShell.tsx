@@ -9,6 +9,7 @@ import {
 } from "react";
 import { navigatingFromLayer, useBackToClose } from "@/hooks/use-back-to-close";
 import {
+  ArrowLeft,
   ArrowUpRight,
   BadgePercent,
   Boxes,
@@ -148,11 +149,12 @@ function AdminChromeInner({ children }: { children: ReactNode }) {
           {/* barra de cima (celular e tablet) */}
           <header className="adm-bar sticky top-0 z-40 lg:hidden" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
             <div className="page-x relative flex h-14 items-center justify-between">
-              {/* logo branca, sem fundo: volta para a loja */}
-              <Link to="/" preload="intent" aria-label="Voltar para a loja" className="press -ml-1 grid size-11 place-items-center">
-                <img src={symbolLight.url} alt="Orium" className="size-7 object-contain" />
-              </Link>
+              <AdminAvatar className="size-9 text-[13px]" />
+              {/* logo branca no meio (vira o título da página ao rolar) */}
               <div className="pointer-events-none absolute inset-x-16 flex h-full items-center justify-center">
+                <span className={cn("adm-bar-mark absolute", scrolled && title ? "is-off" : "is-on")} aria-hidden>
+                  <img src={symbolLight.url} alt="" className="size-7 object-contain" />
+                </span>
                 <span
                   className={cn(
                     "adm-bar-title absolute max-w-full truncate text-[16px] font-bold tracking-[-0.01em]",
@@ -162,13 +164,14 @@ function AdminChromeInner({ children }: { children: ReactNode }) {
                   {title}
                 </span>
               </div>
+              {/* seta: volta para a loja */}
               <Link
                 to="/"
                 preload="intent"
                 aria-label="Voltar para a loja"
-                className="press -mr-1 grid size-11 place-items-center rounded-full bg-[#1A1A1A] text-white transition-colors hover:bg-[#232323]"
+                className="press -mr-2 grid size-11 place-items-center rounded-full text-white"
               >
-                <House className="size-[19px]" strokeWidth={2.1} />
+                <ArrowLeft className="size-6" strokeWidth={2.2} />
               </Link>
             </div>
           </header>
