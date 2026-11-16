@@ -251,40 +251,7 @@ function PiecesRow({
             <NegotiationPiece item={it} notes={notesOf(it)} onOffer={() => onOffer(it)} delay={i} priority={i < 2} />
           </div>
         ))}
-        <div className={slot}>
-          <HowItWorks delay={items.length} />
-        </div>
       </HCarousel>
-    </div>
-  );
-}
-
-/** Último cartão da fileira: tira a dúvida de quem nunca negociou. */
-function HowItWorks({ delay }: { delay: number }) {
-  const steps = [
-    { n: 1, t: "Escolha a peça", d: "Cada frasco é único, com foto real." },
-    { n: 2, t: "Consulte o valor", d: "Chame no WhatsApp e a Orium te diz quanto está saindo." },
-    { n: 3, t: "Negocie e combine", d: "Dependendo da peça, dá para baixar o valor. Depois é só combinar a entrega." },
-  ];
-  return (
-    <div
-      className="neg-piece flex h-full w-full flex-col rounded-[28px] bg-[#F2F1ED] p-6 text-[#15130F]"
-      style={{ "--nd": `${Math.min(delay, 6) * 70 + 260}ms` } as CSSProperties}
-    >
-      <Gem className="size-6 text-[#B8862E]" />
-      <p className="mt-4 text-[26px] leading-[1.05] font-bold tracking-[-0.03em]">Como funciona</p>
-      <ol className="mt-6 space-y-5">
-        {steps.map((s) => (
-          <li key={s.n} className="flex gap-3">
-            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[#15130F] text-[14px] font-bold text-[#FFD599]">{s.n}</span>
-            <span>
-              <span className="block text-[16px] font-bold">{s.t}</span>
-              <span className="mt-0.5 block text-[14px] leading-snug text-[#5F5A53]">{s.d}</span>
-            </span>
-          </li>
-        ))}
-      </ol>
-      <p className="mt-auto pt-6 text-[13px] text-[#5F5A53]">Sem compromisso. Se não fechar, tudo bem.</p>
     </div>
   );
 }
