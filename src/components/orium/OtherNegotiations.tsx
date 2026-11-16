@@ -21,10 +21,8 @@ export function OtherNegotiations({ currentId }: { currentId: string }) {
   return (
     <section className="mt-12">
       <Reveal>
-        <h2 className="display text-xl leading-tight">Outros perfumes em negociação</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Outras oportunidades deslacradas que você também pode negociar.
-        </p>
+        <h2 className="text-[26px] leading-tight font-bold tracking-[-0.03em] text-white tab:text-[30px]">Mais peças únicas</h2>
+        <p className="mt-1 text-[15px] text-[#A9A9A9]">Outros perfumes da coleção Orium esperando dono.</p>
       </Reveal>
 
       <HCarousel
