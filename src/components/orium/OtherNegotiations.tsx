@@ -1,6 +1,6 @@
 import { Reveal } from "@/components/orium/Reveal";
 import { HCarousel } from "@/components/orium/HCarousel";
-import { NegotiationCard } from "@/components/orium/NegotiationRow";
+import { NegotiationPiece } from "@/components/orium/NegotiationShowcase";
 import { useNegotiationItems } from "@/lib/negotiation";
 
 /**
@@ -37,7 +37,7 @@ export function OtherNegotiations({ currentId }: { currentId: string }) {
             delay={60 + i * 40}
             className="flex w-[62%] shrink-0 snap-start tab:w-[38%] md:w-[31%] lg:w-full lg:shrink [&>*]:w-full"
           >
-            <NegotiationCard item={item} />
+            <NegotiationPiece item={item} />
           </Reveal>
         ))}
       </HCarousel>

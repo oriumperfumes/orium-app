@@ -72,14 +72,18 @@ export function negotiationPhoto(
 }
 
 
+/** Texto que abre a conversa no WhatsApp (o mesmo da prévia na janela do nome). */
+export function negotiationMessage(item: Pick<NegotiationItem, "name">, customerName?: string | null) {
+  const name = (customerName ?? "").trim();
+  const hello = name ? `Olá! Meu nome é ${name}.` : "Olá!";
+  return `${hello} Vi o ${productTitle(item.name)} na área de Negociação da Orium e queria saber se ele ainda está disponível e qual valor conseguimos negociar.`;
+}
+
 export function negotiationWhatsappLink(
   item: Pick<NegotiationItem, "id" | "name">,
   customerName?: string | null,
 ) {
-  const name = (customerName ?? "").trim();
-  const hello = name ? `Olá! Meu nome é ${name}.` : "Olá!";
-  const text = `${hello} Vi o ${productTitle(item.name)} na área de Negociação da Orium e queria saber se ele ainda está disponível e qual valor conseguimos negociar.`;
-  return `https://wa.me/${NEGOTIATION_WHATSAPP}?text=${encodeURIComponent(text)}`;
+  return `https://wa.me/${NEGOTIATION_WHATSAPP}?text=${encodeURIComponent(negotiationMessage(item, customerName))}`;
 }
 
 export const NOTE_LEVEL_LABEL: Record<NegotiationNote["level"], string> = {
@@ -104,7 +108,8 @@ export function useNegotiationItems(limit = 12) {
         .order("created_at", { ascending: false })
         .limit(limit);
       if (error) throw error;
-      return (data ?? []).map((r) => parse(r as Record<string, unknown>));
+      const out = (data ?? []).map((r) => parse(r as Record<string, unknown>));
+      return out;
     },
   });
   return { items: query.data ?? [], isLoading: query.isLoading };
@@ -123,6 +128,47 @@ export function useNegotiationItem(id: string) {
         .maybeSingle();
       if (error) throw error;
       return data ? parse(data as Record<string, unknown>) : null;
+    },
+  });
+}
+
+/**
+ * Quanto ainda tem no frasco, a partir do texto livre do estado
+ * ("Praticamente cheio", "Mais da metade", "90%"...). `null` quando o texto
+ * não diz — aí a vitrine não mostra a barra, em vez de inventar um número.
+ */
+export function negotiationFill(note: string | null | undefined): number | null {
+  const t = (note ?? "").toLowerCase();
+  const pct = t.match(/(\d{1,3})\s?%/);
+  if (pct) return Math.max(5, Math.min(100, Number(pct[1])));
+  if (/lacrad|fechad|nunca usad/.test(t)) return 100;
+  if (/praticamente cheio|quase cheio|poucas vezes|usado pouco|cheio/.test(t)) return 95;
+  if (/mais da metade|mais de meio/.test(t)) return 70;
+  if (/menos da metade|menos de meio/.test(t)) return 35;
+  if (/metade|meio/.test(t)) return 50;
+  return null;
+}
+
+/** Acordes principais dos itens (ficha olfativa interna de cada um). */
+export function useNegotiationAccords(productIds: string[]) {
+  const ids = productIds.filter(Boolean);
+  return useQuery({
+    queryKey: ["negotiation-accords", ids.join(",")],
+    enabled: ids.length > 0,
+    staleTime: 5 * 60_000,
+    retry: false,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("fragrance_accords")
+        .select("product_id, accord_name, position")
+        .in("product_id", ids)
+        .order("position");
+      if (error) return new Map<string, string[]>();
+      const map = new Map<string, string[]>();
+      for (const r of (data ?? []) as Array<{ product_id: string; accord_name: string }>) {
+        map.set(r.product_id, [...(map.get(r.product_id) ?? []), r.accord_name]);
+      }
+      return map;
     },
   });
 }
