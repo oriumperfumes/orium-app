@@ -3585,3 +3585,8 @@ body.admin-mode .press:active:not(:disabled) { transform: scale(0.965); transiti
   .ncs .ncs-in, .ncs-bubble, .ncs-ready, .ncs-done svg, .ncs-pop { animation: none; }
   .ncs-ring, .ncs-tick { animation: none; stroke-dashoffset: 0; }
 }
+
+/* Gavetas (vaul): o ::after que cobre o vão ao puxar para cima (200% de
+ * altura) vira área rolável vazia quando a própria gaveta rola. Nessas,
+ * ele sai — a rolagem para no fim do conteúdo. */
+[data-vaul-drawer]:is(.overflow-y-auto, .overflow-auto)::after { display: none; }

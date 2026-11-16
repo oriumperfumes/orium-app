@@ -84,7 +84,7 @@ export function NegotiationContactSheet({
   return (
     <Drawer open={open} onOpenChange={onOpenChange} repositionInputs={false}>
       <DrawerContent
-        className="ncs max-h-[92dvh] overflow-y-auto rounded-t-[32px] border-0 bg-[#121212] px-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] text-white transition-[padding-bottom] duration-200 ease-out sm:mx-auto sm:max-w-[460px]"
+        className="ncs max-h-[92dvh] overflow-y-auto overscroll-contain rounded-t-[32px] border-0 bg-[#121212] px-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] text-white transition-[padding-bottom] duration-200 ease-out sm:mx-auto sm:max-w-[460px]"
         style={{
           paddingBottom: keyboardOffset ? `calc(1.5rem + env(safe-area-inset-bottom) + ${keyboardOffset}px)` : undefined,
           maxHeight: vv.isKeyboardOpen && vv.height ? `${vv.height - 24}px` : undefined,
