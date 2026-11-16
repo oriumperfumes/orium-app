@@ -201,3 +201,20 @@ export function negotiationLevel(
   }
   return { ml: null, pct: negotiationFill(item.condition_note), label: item.condition_note ?? "" };
 }
+
+/** Quantas peças estão na vitrine agora (disponíveis + em negociação). */
+export function useNegotiationCount() {
+  return useQuery({
+    queryKey: ["negotiation-public-count"],
+    staleTime: 60_000,
+    retry: false,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("negotiation_items")
+        .select("id", { count: "exact", head: true })
+        .in("status", ["AVAILABLE", "NEGOTIATING"]);
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
+}

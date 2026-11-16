@@ -7,10 +7,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
-import { useEdgeSwipeDrawer } from "@/hooks/use-edge-swipe";
 import { navigatingFromLayer, useBackToClose } from "@/hooks/use-back-to-close";
 import {
+  ArrowLeft,
   ArrowUpRight,
   BadgePercent,
   Boxes,
@@ -35,6 +34,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { OriumLogo } from "@/components/orium/OriumLogo";
+import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
+import symbolLight from "@/assets/orium-symbol-light.png.asset.json";
 import { CopilotProvider, useCopilot } from "@/components/orium/copilot/CopilotPanel";
 import { AdminTopBar, CommandPalette } from "@/components/orium/admin/AdminTopBar";
 
@@ -115,16 +116,8 @@ function AdminChromeInner({ children }: { children: ReactNode }) {
   const { open: copilotOpen, setOpen: setCopilotOpen } = useCopilot();
   const [title, setTitle] = useState("");
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const [drawerWidth, setDrawerWidth] = useState(300);
   const scrolled = useScrolledPast(56);
   const orders = usePaidOrders().data ?? 0;
-
-  useEffect(() => {
-    const read = () => setDrawerWidth(Math.min(320, Math.round(window.innerWidth * 0.86)));
-    read();
-    window.addEventListener("resize", read);
-    return () => window.removeEventListener("resize", read);
-  }, []);
 
   // No celular o menu tem prioridade: abrir o menu fecha o Copilot.
   const openDrawer = useCallback(() => {
@@ -139,33 +132,6 @@ function AdminChromeInner({ children }: { children: ReactNode }) {
     navigatingFromLayer();
     setOpen(false);
   }, []);
-
-  const { drag, dragging } = useEdgeSwipeDrawer({
-    width: drawerWidth,
-    open,
-    onOpen: openDrawer,
-    onClose: closeDrawer,
-  });
-
-  // Painel montado durante o arraste e a saída; posição final no quadro seguinte.
-  const [mounted, setMounted] = useState(false);
-  const [settled, setSettled] = useState(false);
-  useEffect(() => {
-    if (open || dragging) {
-      setMounted(true);
-      const frame = requestAnimationFrame(() => setSettled(true));
-      return () => cancelAnimationFrame(frame);
-    }
-    setSettled(false);
-    const timer = setTimeout(() => setMounted(false), 300);
-    return () => clearTimeout(timer);
-  }, [open, dragging]);
-
-  const visible = mounted || open || dragging;
-  useBodyScrollLock(open || dragging);
-
-  const offset = dragging ? (drag ?? 0) : open && settled ? drawerWidth : 0;
-  const progress = drawerWidth > 0 ? Math.min(1, Math.max(0, offset / drawerWidth)) : 0;
 
   return (
     <TitleContext.Provider value={setTitle}>
@@ -183,17 +149,11 @@ function AdminChromeInner({ children }: { children: ReactNode }) {
           {/* barra de cima (celular e tablet) */}
           <header className="adm-bar sticky top-0 z-40 lg:hidden" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
             <div className="page-x relative flex h-14 items-center justify-between">
-              <button
-                type="button"
-                className="press -ml-2 grid size-11 place-items-center rounded-full text-white"
-                onClick={openDrawer}
-                aria-label="Abrir menu"
-              >
-                <MenuGlyph />
-              </button>
+              <AdminAvatar className="size-9 text-[13px]" />
+              {/* logo branca no meio (vira o título da página ao rolar) */}
               <div className="pointer-events-none absolute inset-x-16 flex h-full items-center justify-center">
                 <span className={cn("adm-bar-mark absolute", scrolled && title ? "is-off" : "is-on")} aria-hidden>
-                  <OriumLogo size="sm" className="size-7" />
+                  <img src={symbolLight.url} alt="" className="size-7 object-contain" />
                 </span>
                 <span
                   className={cn(
@@ -204,42 +164,28 @@ function AdminChromeInner({ children }: { children: ReactNode }) {
                   {title}
                 </span>
               </div>
-              <AdminAvatar className="size-9 text-[13px]" />
+              {/* seta: volta para a loja */}
+              <Link
+                to="/"
+                preload="intent"
+                aria-label="Voltar para a loja"
+                className="press -mr-2 grid size-11 place-items-center rounded-full text-white"
+              >
+                <ArrowLeft className="size-6" strokeWidth={2.2} />
+              </Link>
             </div>
           </header>
 
-          {/* menu do celular: o mesmo da lateral, deslizando da esquerda */}
-          {visible && (
-            <div className="fixed inset-0 z-50 lg:hidden">
-              <div
-                className="absolute inset-0 touch-none bg-black/60"
-                style={{
-                  opacity: progress,
-                  transition: dragging ? "none" : "opacity 260ms var(--ease-orium)",
-                }}
-                onClick={closeDrawer}
-              />
-              <div
-                role="dialog"
-                aria-label="Menu do admin"
-                className="adm-rail absolute top-0 left-0 flex h-full flex-col overflow-hidden rounded-r-[28px]"
-                style={{
-                  width: drawerWidth,
-                  paddingTop: "env(safe-area-inset-top, 0px)",
-                  paddingBottom: "env(safe-area-inset-bottom, 0px)",
-                  transform: `translate3d(${offset - drawerWidth}px,0,0)`,
-                  transition: dragging ? "none" : "transform 300ms var(--ease-orium)",
-                  willChange: "transform",
-                }}
-              >
-                <Brand />
-                <div className="adm-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-4">
-                  <AdminNav pathname={pathname} orders={orders} onNavigate={leaveDrawer} />
-                </div>
-                <RailFooter onNavigate={leaveDrawer} />
+          {/* menu do celular: folha que sobe de baixo (sem painel lateral) */}
+          <Drawer open={open} onOpenChange={(v) => (v ? openDrawer() : closeDrawer())}>
+            <DrawerContent className="max-h-[88dvh] border-0 bg-[#0E0E0E] px-0 pb-[env(safe-area-inset-bottom,0px)] text-white lg:hidden">
+              <DrawerTitle className="px-6 pt-3 pb-2 text-[22px] font-bold tracking-[-0.02em]">Menu</DrawerTitle>
+              <div className="adm-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-3">
+                <AdminNav pathname={pathname} orders={orders} onNavigate={leaveDrawer} />
               </div>
-            </div>
-          )}
+              <RailFooter onNavigate={leaveDrawer} />
+            </DrawerContent>
+          </Drawer>
 
           <main className="page-x min-w-0 flex-1 pt-5 pb-[calc(6.5rem+env(safe-area-inset-bottom))] lg:px-10 lg:pt-8 lg:pb-16 wide:px-14">
             {children}
@@ -249,27 +195,6 @@ function AdminChromeInner({ children }: { children: ReactNode }) {
         </div>
       </div>
     </TitleContext.Provider>
-  );
-}
-
-/** Ícone de menu: dois traços, o de baixo mais curto (desenho da casa). */
-function MenuGlyph() {
-  return (
-    <svg viewBox="0 0 24 24" className="size-6" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden>
-      <path d="M4 8.5h16M4 15.5h10" />
-    </svg>
-  );
-}
-
-function Brand() {
-  return (
-    <div className="flex items-center gap-3 px-6 pt-7 pb-6">
-      <OriumLogo size="sm" className="size-8" />
-      <div className="min-w-0 leading-none">
-        <p className="text-[17px] font-bold tracking-[-0.02em] text-white">Orium</p>
-        <p className="mt-1 text-[12px] font-medium text-[#8C8C8C]">Painel da equipe</p>
-      </div>
-    </div>
   );
 }
 

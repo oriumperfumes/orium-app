@@ -19,6 +19,7 @@ import { Route as TermosRouteImport } from './routes/termos'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as ApiCopilotRouteImport } from './routes/api/copilot'
 import { Route as ApiCopilotVoiceRouteImport } from './routes/api/copilot-voice'
+import { Route as NegociacaoIndexRouteImport } from './routes/negociacao.index'
 import { Route as NegociacaoIdRouteImport } from './routes/negociacao.$id'
 import { Route as PerfumeSlugRouteImport } from './routes/perfume.$slug'
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
@@ -101,6 +102,11 @@ const ApiCopilotRoute = ApiCopilotRouteImport.update({
 const ApiCopilotVoiceRoute = ApiCopilotVoiceRouteImport.update({
   id: '/api/copilot-voice',
   path: '/api/copilot-voice',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NegociacaoIndexRoute = NegociacaoIndexRouteImport.update({
+  id: '/negociacao/',
+  path: '/negociacao/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const NegociacaoIdRoute = NegociacaoIdRouteImport.update({
@@ -312,6 +318,7 @@ export interface FileRoutesByFullPath {
   '/api/copilot-voice': typeof ApiCopilotVoiceRoute
   '/negociacao/$id': typeof NegociacaoIdRoute
   '/perfume/$slug': typeof PerfumeSlugRoute
+  '/negociacao/': typeof NegociacaoIndexRoute
   '/admin/aovivo': typeof AuthenticatedAdminAovivoRoute
   '/admin/atendimento': typeof AuthenticatedAdminAtendimentoRoute
   '/admin/clientes': typeof AuthenticatedAdminClientesRoute
@@ -356,6 +363,7 @@ export interface FileRoutesByTo {
   '/api/copilot-voice': typeof ApiCopilotVoiceRoute
   '/negociacao/$id': typeof NegociacaoIdRoute
   '/perfume/$slug': typeof PerfumeSlugRoute
+  '/negociacao': typeof NegociacaoIndexRoute
   '/admin/aovivo': typeof AuthenticatedAdminAovivoRoute
   '/admin/atendimento': typeof AuthenticatedAdminAtendimentoRoute
   '/admin/clientes': typeof AuthenticatedAdminClientesRoute
@@ -403,6 +411,7 @@ export interface FileRoutesById {
   '/api/copilot-voice': typeof ApiCopilotVoiceRoute
   '/negociacao/$id': typeof NegociacaoIdRoute
   '/perfume/$slug': typeof PerfumeSlugRoute
+  '/negociacao/': typeof NegociacaoIndexRoute
   '/_authenticated/admin/aovivo': typeof AuthenticatedAdminAovivoRoute
   '/_authenticated/admin/atendimento': typeof AuthenticatedAdminAtendimentoRoute
   '/_authenticated/admin/clientes': typeof AuthenticatedAdminClientesRoute
@@ -450,6 +459,7 @@ export interface FileRouteTypes {
     | '/api/copilot-voice'
     | '/negociacao/$id'
     | '/perfume/$slug'
+    | '/negociacao/'
     | '/admin/aovivo'
     | '/admin/atendimento'
     | '/admin/clientes'
@@ -494,6 +504,7 @@ export interface FileRouteTypes {
     | '/api/copilot-voice'
     | '/negociacao/$id'
     | '/perfume/$slug'
+    | '/negociacao'
     | '/admin/aovivo'
     | '/admin/atendimento'
     | '/admin/clientes'
@@ -540,6 +551,7 @@ export interface FileRouteTypes {
     | '/api/copilot-voice'
     | '/negociacao/$id'
     | '/perfume/$slug'
+    | '/negociacao/'
     | '/_authenticated/admin/aovivo'
     | '/_authenticated/admin/atendimento'
     | '/_authenticated/admin/clientes'
@@ -586,6 +598,7 @@ export interface RootRouteChildren {
   ApiCopilotVoiceRoute: typeof ApiCopilotVoiceRoute
   NegociacaoIdRoute: typeof NegociacaoIdRoute
   PerfumeSlugRoute: typeof PerfumeSlugRoute
+  NegociacaoIndexRoute: typeof NegociacaoIndexRoute
   ApiPublicAgendaRoute: typeof ApiPublicAgendaRoute
   ApiPublicNegociacaoFotoRoute: typeof ApiPublicNegociacaoFotoRoute
   ApiPublicProdutoFotoRoute: typeof ApiPublicProdutoFotoRoute
@@ -667,6 +680,13 @@ declare module '@tanstack/react-router' {
       path: '/api/copilot-voice'
       fullPath: '/api/copilot-voice'
       preLoaderRoute: typeof ApiCopilotVoiceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/negociacao/': {
+      id: '/negociacao/'
+      path: '/negociacao'
+      fullPath: '/negociacao/'
+      preLoaderRoute: typeof NegociacaoIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/negociacao/$id': {
@@ -1002,6 +1022,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiCopilotVoiceRoute: ApiCopilotVoiceRoute,
   NegociacaoIdRoute: NegociacaoIdRoute,
   PerfumeSlugRoute: PerfumeSlugRoute,
+  NegociacaoIndexRoute: NegociacaoIndexRoute,
   ApiPublicAgendaRoute: ApiPublicAgendaRoute,
   ApiPublicNegociacaoFotoRoute: ApiPublicNegociacaoFotoRoute,
   ApiPublicProdutoFotoRoute: ApiPublicProdutoFotoRoute,

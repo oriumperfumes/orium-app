@@ -11,7 +11,7 @@ import { createPortal } from "react-dom";
 import { ArrowUpRight, ChevronDown, CornerDownLeft, Plus, Search, ShoppingBag, Store, type LucideIcon } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import symbolDark from "@/assets/orium-symbol-dark.png.asset.json";
+import symbolLight from "@/assets/orium-symbol-light.png.asset.json";
 import { AdminAvatar, NAV_GROUPS, displayName, isActive, type NavItem } from "@/components/orium/AdminShell";
 
 const PRIMARY = ["/admin", "/admin/pedidos", "/admin/produtos", "/admin/estoque", "/admin/clientes"];
@@ -31,12 +31,13 @@ export function AdminTopBar({ pathname, orders }: { pathname: string; orders: nu
     <header className="adm-top sticky top-0 z-40 hidden lg:block">
       <div className="flex h-[84px] items-center gap-3 px-10 wide:px-14">
         <Link
-          to="/admin"
+          to="/"
           preload="intent"
-          aria-label="Início do painel"
-          className="press grid size-12 shrink-0 place-items-center rounded-full bg-[#FFD599]"
+          aria-label="Voltar para a loja"
+          title="Voltar para a loja"
+          className="press grid size-12 shrink-0 place-items-center rounded-full transition-colors hover:bg-white/[0.06]"
         >
-          <img src={symbolDark.url} alt="" className="size-7 object-contain" />
+          <img src={symbolLight.url} alt="Orium" className="size-8 object-contain" />
         </Link>
 
         <nav aria-label="Seções do admin" className="ml-6 flex min-w-0 items-center gap-1.5">

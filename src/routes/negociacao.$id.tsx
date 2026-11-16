@@ -23,7 +23,7 @@ export const Route = createFileRoute("/negociacao/$id")({
         content: "Perfume deslacrado da coleção Orium, peça única, para negociar direto pelo WhatsApp.",
       },
       { property: "og:title", content: "Negociação · Orium Perfumes" },
-      { property: "og:description", content: "Peça única da coleção Orium. Faça sua oferta pelo WhatsApp." },
+      { property: "og:description", content: "Peça única da coleção Orium. Consulte o valor pelo WhatsApp." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -176,11 +176,11 @@ function NegotiationDetail() {
                 </span>
               </div>
               <p className="mt-2 text-[14.5px] leading-snug text-[#A9A9A9]">
-                Faça sua oferta pelo WhatsApp. A Orium responde e vocês combinam o valor e a entrega.
+                Chame no WhatsApp e a Orium te passa o valor desta peça. Dependendo dela, dá para negociar um preço mais baixo.
               </p>
               {negotiating ? (
                 <p className="mt-4 rounded-[16px] bg-[#2A2014] px-4 py-3 text-[14px] leading-snug text-[#F2C46D]">
-                  Alguém já está conversando sobre este. Ainda dá tempo de mandar a sua oferta.
+                  Alguém já está conversando sobre este. Ainda dá tempo de consultar o valor.
                 </p>
               ) : (
                 <p className="mt-4 rounded-[16px] bg-[#232323] px-4 py-3 text-[14px] leading-snug text-[#D4D4D4]">
@@ -194,7 +194,7 @@ function NegotiationDetail() {
                 className="neg-cta-pulse press group mt-4 flex h-[58px] w-full items-center justify-center gap-2.5 rounded-full bg-[#FFD599] text-[17px] font-bold text-[#15130F] transition-colors hover:bg-[#FFDDAA]"
               >
                 <MessageCircle className="size-5" strokeWidth={2.4} />
-                Fazer minha oferta
+                Consultar valor
                 <ArrowRight className="size-5 transition-transform duration-300 group-hover:translate-x-1" strokeWidth={2.4} />
               </button>
               <p className="mt-3 text-center text-[13px] text-[#8C8C8C]">Sem cadastro · sem compromisso</p>
@@ -227,8 +227,8 @@ function NegotiationDetail() {
               <p className="text-[16px] font-bold text-white">Como funciona</p>
               <ol className="mt-4 space-y-4">
                 {[
-                  { icon: <MessageCircle />, t: "Faça sua oferta", d: "Seu nome e pronto: a conversa abre no WhatsApp." },
-                  { icon: <Handshake />, t: "Combine o valor", d: "A Orium responde e vocês fecham o preço." },
+                  { icon: <MessageCircle />, t: "Consulte o valor", d: "Seu nome e pronto: a Orium te diz no WhatsApp quanto está saindo." },
+                  { icon: <Handshake />, t: "Negocie", d: "Dependendo da peça, dá para baixar o valor. Vocês fecham o preço juntos." },
                   { icon: <Truck />, t: "Receba ou retire", d: "Entrega combinada ou retirada na loja em Itaguaí." },
                 ].map((s, i) => (
                   <li key={s.t} className="flex gap-3">
@@ -266,7 +266,7 @@ function NegotiationDetail() {
           onClick={() => offer("barra")}
           className="press mx-auto flex h-14 w-full max-w-lg items-center gap-3 rounded-full bg-[#FFD599] pr-2 pl-5 text-[#15130F] shadow-[0_18px_40px_-12px_rgba(0,0,0,0.8)]"
         >
-          <span className="min-w-0 flex-1 truncate text-left text-[15px] font-bold">Fazer oferta · {title}</span>
+          <span className="min-w-0 flex-1 truncate text-left text-[15px] font-bold">Consultar valor · {title}</span>
           <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#15130F] text-[#FFD599]">
             <MessageCircle className="size-[18px]" />
           </span>

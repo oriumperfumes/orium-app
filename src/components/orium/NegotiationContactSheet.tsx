@@ -101,7 +101,7 @@ export function NegotiationContactSheet({
               Pronto{first ? `, ${first}` : ""}!
             </DrawerTitle>
             <p className="ncs-pop mt-2 max-w-[300px] text-[15px] leading-snug text-[#A9A9A9]" style={{ animationDelay: "120ms" }}>
-              Abrimos o WhatsApp com a sua mensagem. É só enviar e fazer a sua oferta.
+              Abrimos o WhatsApp com a sua mensagem. É só enviar que a Orium te passa o valor.
             </p>
           </div>
         ) : (
