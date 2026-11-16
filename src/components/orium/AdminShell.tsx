@@ -149,7 +149,15 @@ function AdminChromeInner({ children }: { children: ReactNode }) {
           {/* barra de cima (celular e tablet) */}
           <header className="adm-bar sticky top-0 z-40 lg:hidden" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
             <div className="page-x relative flex h-14 items-center justify-between">
-              <AdminAvatar className="size-9 text-[13px]" />
+              {/* seta: volta para a loja */}
+              <Link
+                to="/"
+                preload="intent"
+                aria-label="Voltar para a loja"
+                className="press -ml-2 grid size-11 place-items-center rounded-full text-white"
+              >
+                <ArrowLeft className="size-6" strokeWidth={2.2} />
+              </Link>
               {/* logo branca no meio (vira o título da página ao rolar) */}
               <div className="pointer-events-none absolute inset-x-16 flex h-full items-center justify-center">
                 <span className={cn("adm-bar-mark absolute", scrolled && title ? "is-off" : "is-on")} aria-hidden>
@@ -164,15 +172,8 @@ function AdminChromeInner({ children }: { children: ReactNode }) {
                   {title}
                 </span>
               </div>
-              {/* seta: volta para a loja */}
-              <Link
-                to="/"
-                preload="intent"
-                aria-label="Voltar para a loja"
-                className="press -mr-2 grid size-11 place-items-center rounded-full text-white"
-              >
-                <ArrowLeft className="size-6" strokeWidth={2.2} />
-              </Link>
+              {/* foto real do perfil (iniciais quando não há foto) */}
+              <AdminAvatar className="size-9 text-[13px]" />
             </div>
           </header>
 
@@ -279,12 +280,19 @@ export function AdminAvatar({ className }: { className?: string }) {
       .slice(0, 2)
       .map((w) => w[0]!.toUpperCase())
       .join("") || "O";
+  const meta = (session?.user.user_metadata ?? {}) as Record<string, unknown>;
+  const photo = String(meta["avatar_url"] ?? meta["picture"] ?? "").trim() || null;
+  const [broken, setBroken] = useState(false);
   return (
     <span
       aria-label="Administrador"
-      className={cn("grid shrink-0 place-items-center rounded-full bg-[#232323] font-bold text-[#FFD599]", className)}
+      className={cn("grid shrink-0 place-items-center overflow-hidden rounded-full bg-[#232323] font-bold text-[#FFD599]", className)}
     >
-      {initials}
+      {photo && !broken ? (
+        <img src={photo} alt="" referrerPolicy="no-referrer" className="size-full object-cover" onError={() => setBroken(true)} />
+      ) : (
+        initials
+      )}
     </span>
   );
 }
