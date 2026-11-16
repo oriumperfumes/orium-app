@@ -1,23 +1,56 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { Search, Plus } from "lucide-react";
+import {
+  AlertTriangle,
+  BadgeDollarSign,
+  Ban,
+  Boxes,
+  CheckCircle2,
+  CircleCheck,
+  CircleSlash,
+  ClipboardEdit,
+  Eye,
+  EyeOff,
+  FileSearch,
+  ImagePlus,
+  LayoutGrid,
+  List,
+  MoreHorizontal,
+  Package,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Search,
+  SlidersHorizontal,
+  Sparkles,
+  Stethoscope,
+  ToggleRight,
+  Trash2,
+  X,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { AdminShell } from "@/components/orium/AdminShell";
 import { optimizeExistingProductImages } from "@/lib/image-pipeline";
 import { listImagesToOptimize } from "@/lib/image-pipeline.functions";
-import { AdminEmpty, AdminMore, AdminRowsSkeleton, type AdminAction } from "@/components/orium/admin/AdminUI";
+import { AdminMore } from "@/components/orium/admin/AdminUI";
 import {
   ActiveFilterChips,
   BulkBar,
   ProductFiltersSheet,
-  ProductListCard,
   type ProductFilterState,
   type ProductOrder,
 } from "@/components/orium/admin/ProductBits";
-import { ProductEditSheet, type EditableProduct } from "@/components/orium/admin/ProductEditSheet";
+import { ProductEditSheet, type EditableProduct, type EditTab } from "@/components/orium/admin/ProductEditSheet";
+import { ProductRow, ProductTile, TONE_DOT, stockState } from "@/components/orium/admin/ProductCards";
+import { ItemMenuZone, useItemMenu, type ItemMenuSpec, type MenuPos } from "@/components/orium/admin/ItemMenu";
+import { GoldButton, SoftButton } from "@/components/orium/admin/PanelKit";
+import { AnimatedNumber, PillTrack, ViewSwap } from "@/components/orium/admin/motion";
+import { imgVariant } from "@/lib/product-img";
+import { brl } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
@@ -221,8 +254,25 @@ function CatalogMaintenance() {
   const [filters, setFilters] = useState<ProductFilterState>(EMPTY_FILTERS);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
-  const [editing, setEditing] = useState<Product | null>(null);
-  const [editTab, setEditTab] = useState<"Geral" | "Olfativo">("Geral");
+  const [editing, setEditing] = useState<{ product: Product; origin: HTMLElement | null; tab: EditTab } | null>(null);
+  const [deleteOne, setDeleteOne] = useState<Product | null>(null);
+  const menu = useItemMenu();
+  const [layout, setLayoutState] = useState<"grade" | "lista">("grade");
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("orium-admin-produtos-vista") === "lista") setLayoutState("lista");
+    } catch {
+      /* sem armazenamento: fica a grade */
+    }
+  }, []);
+  const setLayout = (v: "grade" | "lista") => {
+    setLayoutState(v);
+    try {
+      localStorage.setItem("orium-admin-produtos-vista", v);
+    } catch {
+      /* ignora */
+    }
+  };
   const [manualOpen, setManualOpen] = useState(false);
   const [manualId, setManualId] = useState<string | null>(null);
   const [brandBulkOpen, setBrandBulkOpen] = useState(false);
@@ -509,38 +559,79 @@ function CatalogMaintenance() {
     [],
   );
 
-  const rowActions = useCallback(
-    (p: Product): AdminAction[] => {
+  const openEditor = (p: Product, origin: HTMLElement | null, tab: EditTab) => setEditing({ product: p, origin, tab });
+  const byId = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
+
+  /** Menu do perfume ("⋯", botão direito ou segurar o dedo). */
+  const openMenu = useCallback(
+    (p: Product, pos: MenuPos) => {
       const published = p.active && p.catalog_eligible;
-      return [
-        { label: "Editar", onSelect: () => { setEditTab("Geral"); setEditing(p); } },
-        ...(p.source === "manual"
-          ? [{ label: "Editar cadastro manual", onSelect: () => { setManualId(p.id); setManualOpen(true); } }]
-          : []),
-        ...(p.product_type === "PERFUME"
-          ? [{ label: "Informações olfativas", onSelect: () => { setEditTab("Olfativo"); setEditing(p); } }]
-          : []),
-        { label: "Ajustar estoque", onSelect: () => setQuick({ id: p.id, name: p.canonical_name, kind: "stock" }) },
-        { label: "Alterar disponibilidade", onSelect: () => setQuick({ id: p.id, name: p.canonical_name, kind: "availability" }) },
-        { label: "Alterar preço", onSelect: () => setQuick({ id: p.id, name: p.canonical_name, kind: "price" }) },
-        { label: "Informações internas", href: `/admin/produtos/${p.id}` },
-        {
-          label: published ? "Ocultar do catálogo" : "Publicar no catálogo",
-          onSelect: () => run(p.id, () => visibility({ data: { productId: p.id, visible: !published } }), published ? "Produto ocultado do catálogo." : "Produto publicado."),
-        },
-        {
-          label: "Excluir definitivamente",
-          danger: true,
-          separated: true,
-          onSelect: () => {
-            if (!confirm(`Excluir "${p.canonical_name}" definitivamente? A sincronização não vai trazê-lo de volta.`)) return;
-            void run(p.id, () => remove({ data: { productId: p.id, permanent: true } }), "Produto excluído.");
+      const st = stockState(p, { source: p.availability_source, localStock: p.local_stock ?? 0, manual: p.availability_override !== "none" });
+      const { price } = priceOf(p);
+      const origin = () => document.querySelector<HTMLElement>(`[data-item-id="${CSS.escape(p.id)}"]`);
+      const spec: ItemMenuSpec = {
+        image: imgVariant(p.image_url, "thumb"),
+        title: p.canonical_name,
+        subtitle: (
+          <>
+            <span className="shrink-0 font-semibold text-[#D4D4D4] tabular-nums">{price != null ? brl(price) : "Sem preço"}</span>
+            <span className="text-[#3A3A3A]">·</span>
+            <span className="size-1.5 shrink-0 rounded-full" style={{ background: TONE_DOT[st.tone] }} />
+            <span className="truncate">{st.label}</span>
+          </>
+        ),
+        quick: [
+          { key: "edit", label: "Editar", icon: <Pencil />, onSelect: () => openEditor(p, origin(), "perfume") },
+          { key: "price", label: "Preço", icon: <BadgeDollarSign />, onSelect: () => setQuick({ id: p.id, name: p.canonical_name, kind: "price" }) },
+          { key: "stock", label: "Estoque", icon: <Boxes />, onSelect: () => setQuick({ id: p.id, name: p.canonical_name, kind: "stock" }) },
+          { key: "avail", label: "Venda", icon: <ToggleRight />, onSelect: () => setQuick({ id: p.id, name: p.canonical_name, kind: "availability" }) },
+        ],
+        main: [
+          ...(p.product_type === "PERFUME"
+            ? [{ key: "olf", label: "Notas e acordes", icon: <Sparkles />, onSelect: () => openEditor(p, origin(), "olfativo") }]
+            : []),
+          ...(p.source === "manual"
+            ? [{ key: "manual", label: "Cadastro completo", icon: <ClipboardEdit />, onSelect: () => (setManualId(p.id), setManualOpen(true)) }]
+            : []),
+          { key: "internal", label: "Informações internas", icon: <FileSearch />, href: `/admin/produtos/${p.id}` },
+          {
+            key: "vis",
+            label: published ? "Ocultar do site" : "Publicar no site",
+            icon: published ? <EyeOff /> : <Eye />,
+            onSelect: () =>
+              void run(p.id, () => visibility({ data: { productId: p.id, visible: !published } }), published ? "Produto ocultado do site." : "Produto publicado."),
           },
-        },
-      ];
+          {
+            key: "sel",
+            label: selected.includes(p.id) ? "Tirar da seleção" : "Selecionar",
+            icon: <CheckCircle2 />,
+            onSelect: () => onCheck(p.id, !selected.includes(p.id)),
+          },
+        ],
+        danger: [{ key: "del", label: "Excluir definitivamente", icon: <Trash2 />, danger: true, onSelect: () => setDeleteOne(p) }],
+      };
+      menu.open(pos, spec, p.id);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [visibility, remove],
+    [priceOf, selected, visibility],
+  );
+
+  /** Tocar no cartão: abre o perfume (ou marca/desmarca, se já há seleção). */
+  const openCard = useCallback(
+    (id: string, el: HTMLElement) => {
+      const p = byId.get(id);
+      if (!p) return;
+      if (selected.length) return onCheck(id, !selected.includes(id));
+      setEditing({ product: p, origin: el, tab: "perfume" });
+    },
+    [byId, selected, onCheck],
+  );
+  const menuById = useCallback(
+    (id: string, pos: MenuPos) => {
+      const p = byId.get(id);
+      if (p) openMenu(p, pos);
+    },
+    [byId, openMenu],
   );
 
   const chips = [
@@ -570,27 +661,60 @@ function CatalogMaintenance() {
     ...(reason !== "todos" ? [{ label: FILTERS[reason], onRemove: () => setReason("todos") }] : []),
   ];
 
+  const selecting = selected.length > 0;
+  const VIEWS: Array<{ key: Vista; label: string; value: number; icon: ReactNode; tone?: "warn" }> = [
+    { key: "todos", label: "Todos", value: counts.total, icon: <Package className="size-[18px]" strokeWidth={2.2} /> },
+    { key: "disponiveis", label: "À venda", value: counts.available, icon: <CircleCheck className="size-[18px]" strokeWidth={2.2} /> },
+    { key: "indisponiveis", label: "Indisponíveis", value: counts.unavailable, icon: <CircleSlash className="size-[18px]" strokeWidth={2.2} /> },
+    { key: "revisar", label: "Para revisar", value: counts.review, icon: <AlertTriangle className="size-[18px]" strokeWidth={2.2} />, tone: "warn" },
+  ];
+
+  const cardProps = (p: Product, i: number) => {
+    const { price, from } = priceOf(p);
+    return {
+      product: p,
+      issues: issuesById.get(p.id) ?? [],
+      price,
+      promoFrom: from,
+      customPrice: customPriceIds.has(p.id),
+      ops: { source: p.availability_source, localStock: p.local_stock ?? 0, manual: p.availability_override !== "none" },
+      checked: selected.includes(p.id),
+      busy: busyId === p.id,
+      i,
+      onCheck,
+      onOpen: openCard,
+      onMenu: menuById,
+    };
+  };
+
   return (
     <AdminShell
       title="Produtos"
-      description={isLoading ? "carregando…" : `${counts.total} produtos`}
+      description={isLoading ? "Carregando o catálogo…" : `${counts.total} perfumes e produtos no catálogo.`}
       action={
-        <div className="flex items-center gap-1">
-          <Button
-            className="press h-11 rounded-full px-5 text-sm font-semibold"
+        <div className="flex items-center gap-2">
+          <GoldButton
+            icon={<Plus className="size-[18px]" strokeWidth={2.6} />}
+            className="h-12"
             onClick={() => {
               setManualId(null);
               setManualOpen(true);
             }}
           >
-            <Plus className="size-4" /> Adicionar
-          </Button>
+            Adicionar produto
+          </GoldButton>
           <AdminMore
             label="Ferramentas do catálogo"
+            trigger={
+              <button type="button" aria-label="Ferramentas do catálogo" className="press grid size-12 place-items-center rounded-full bg-[#1F1F1F] text-white transition-colors hover:bg-[#2A2A2A]">
+                <MoreHorizontal className="size-5" />
+              </button>
+            }
             actions={[
-              { label: "Diagnóstico do catálogo", onSelect: () => setDiagOpen(true) },
+              { label: "Diagnóstico do catálogo", icon: <Stethoscope className="size-4" />, onSelect: () => setDiagOpen(true) },
               {
                 label: "Otimizar fotos existentes",
+                icon: <ImagePlus className="size-4" />,
                 onSelect: async () => {
                   const t = toast.loading("Procurando fotos pesadas…");
                   try {
@@ -599,9 +723,7 @@ function CatalogMaintenance() {
                       (d, total, f) => toast.loading(`Otimizando fotos… ${d}/${total}${f ? ` · ${f} com erro` : ""}`, { id: t }),
                     );
                     toast.success(
-                      r.total
-                        ? `✓ ${r.total - r.failed} fotos otimizadas${r.failed ? ` · ${r.failed} para reprocessar` : ""}`
-                        : "Todas as fotos já estão otimizadas.",
+                      r.total ? `✓ ${r.total - r.failed} fotos otimizadas${r.failed ? ` · ${r.failed} para reprocessar` : ""}` : "Todas as fotos já estão otimizadas.",
                       { id: t },
                     );
                     await qc.invalidateQueries();
@@ -610,9 +732,10 @@ function CatalogMaintenance() {
                   }
                 },
               },
-              { label: "Bloqueios permanentes", onSelect: () => setBlocklistOpen(true) },
+              { label: "Bloqueios permanentes", icon: <Ban className="size-4" />, onSelect: () => setBlocklistOpen(true) },
               {
                 label: "Reprocessar Fragrantica",
+                icon: <RefreshCw className="size-4" />,
                 onSelect: async () => {
                   try {
                     const r = await reprocess({ data: { scope: "accords-without-pyramid", limit: 5 } });
@@ -628,138 +751,192 @@ function CatalogMaintenance() {
         </div>
       }
     >
-      <div className={"min-w-0 space-y-4 " + (selected.length ? "pb-32" : "")}>
-        <div className="relative min-w-0">
-          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={term}
-            onChange={(e) => setTerm(e.target.value)}
-            placeholder="Buscar produto ou marca"
-            aria-label="Buscar produto ou marca"
-            className="h-12 rounded-2xl pl-9 text-base"
-          />
-        </div>
-
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          {(
-            [
-              ["todos", "Todos"],
-              ["disponiveis", "Disponíveis"],
-              ["indisponiveis", "Indisponíveis"],
-              ["revisar", "Revisar"],
-            ] as Array<[Vista, string]>
-          ).map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setVista(key)}
-              className={
-                "press min-h-10 rounded-full border px-4 text-sm transition-colors " +
-                (vista === key ? "border-foreground bg-foreground text-background" : "border-border/60 text-muted-foreground")
-              }
-            >
-              {label}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => setFiltersOpen(true)}
-            className="press min-h-10 rounded-full border border-border/60 px-4 text-sm text-muted-foreground"
-          >
-            Filtros{chips.length ? ` (${chips.length})` : ""}
-          </button>
-        </div>
-
-        <p className="min-w-0 text-xs text-muted-foreground">
-          Disponíveis <span className="font-medium text-foreground tabular-nums">{counts.available}</span> · Indisponíveis{" "}
-          <span className="font-medium text-foreground tabular-nums">{counts.unavailable}</span> · Revisar{" "}
-          <span className="font-medium text-foreground tabular-nums">{counts.review}</span>
-        </p>
-
-        <ActiveFilterChips chips={chips} onClear={clearAll} />
-
-        {vista === "revisar" ? (
-          <div className="min-w-0 space-y-3">
-            <div className="-mx-4 min-w-0 overflow-x-auto px-4">
-              <div className="flex w-max gap-2">
-                <ReasonPill active={reason === "todos"} onClick={() => setReason("todos")} label="Todos os motivos" count={counts.review} />
-                {REVIEW_REASONS.filter((r) => (counts.byReason.get(r) ?? 0) > 0).map((r) => (
-                  <ReasonPill
-                    key={r}
-                    active={reason === r}
-                    onClick={() => setReason(r)}
-                    label={FILTERS[r]}
-                    count={counts.byReason.get(r) ?? 0}
-                  />
-                ))}
-              </div>
-            </div>
-            {reason === "duplicados" ? <CatalogHygienePanel /> : null}
-            {reason === "identidade-pendente" ? <IdentityReviewPanel /> : null}
-          </div>
-        ) : null}
-
-        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">
-            {isLoading ? "Carregando…" : `${filtered.length} encontrado${filtered.length === 1 ? "" : "s"}`}
-          </p>
-          {filtered.length > 0 ? (
-            <Button
-              size="sm"
-              variant="outline"
-              className="press h-10 rounded-full px-4 text-xs"
-              onClick={() => setSelected(allSelected ? [] : filtered.map((p) => p.id))}
-            >
-              {allSelected ? "Limpar seleção" : `Selecionar os ${filtered.length} encontrados`}
-            </Button>
-          ) : null}
-        </div>
-
-        {isLoading ? (
-          <AdminRowsSkeleton rows={5} height={132} />
-        ) : rows.length === 0 ? (
-          <div className="space-y-3">
-            <AdminEmpty>Nenhum produto encontrado.</AdminEmpty>
-            <Button variant="outline" className="press h-11 w-full rounded-full text-sm" onClick={clearAll}>
-              Limpar filtros
-            </Button>
-          </div>
-        ) : (
-          <div className="min-w-0 space-y-3">
-            {rows.map((p) => {
-              const { price, from } = priceOf(p);
-              return (
-                <ProductListCard
-                  key={p.id}
-                  product={p}
-                  issues={issuesById.get(p.id) ?? []}
-                  price={price}
-                  promoFrom={from}
-                  customPrice={customPriceIds.has(p.id)}
-                  ops={{ source: p.availability_source, localStock: p.local_stock ?? 0, manual: p.availability_override !== "none" }}
-                  checked={selected.includes(p.id)}
-                  busy={busyId === p.id}
-                  onCheck={(v) => onCheck(p.id, v)}
-                  onEdit={() => {
-                    setEditTab("Geral");
-                    setEditing(p);
-                  }}
-                  actions={rowActions(p)}
-                />
-              );
-            })}
-            {filtered.length > rows.length ? (
-              <Button
-                variant="outline"
-                className="press h-12 w-full rounded-full text-sm"
-                onClick={() => setLimit((l) => l + 60)}
+      <div className={cn("min-w-0", selecting && "pb-36")}>
+        {/* 1 · quatro números que também são as visões */}
+        <section className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4" aria-label="Visões do catálogo">
+          {VIEWS.map((v, i) => {
+            const on = vista === v.key;
+            return (
+              <button
+                key={v.key}
+                type="button"
+                aria-pressed={on}
+                onClick={() => setVista(v.key)}
+                className={cn(
+                  "pk-stat adm-rise press flex min-h-[112px] flex-col rounded-[28px] p-5 text-left",
+                  on ? "bg-white text-[#15130F]" : "dash-card hover:bg-[#202020]",
+                )}
+                style={{ ["--i" as string]: i }}
               >
-                Mostrar mais ({filtered.length - rows.length})
-              </Button>
+                <span className="flex w-full items-start justify-between gap-2">
+                  <span className={cn("text-[15px]", on ? "font-semibold opacity-70" : "text-[#A9A9A9]")}>{v.label}</span>
+                  <span
+                    className={cn(
+                      "dash-ico",
+                      on && "!bg-[#15130F]/[0.08] !text-[#15130F]",
+                      !on && v.tone === "warn" && v.value > 0 && "!bg-[#2A2414] !text-[#F2C46D]",
+                    )}
+                  >
+                    {v.icon}
+                  </span>
+                </span>
+                <span className="mt-auto text-[32px] leading-none font-bold tracking-[-0.045em]">
+                  {isLoading ? "—" : <AnimatedNumber value={v.value} />}
+                </span>
+              </button>
+            );
+          })}
+        </section>
+
+        {/* 2 · busca, filtros e jeito de ver */}
+        <div className="adm-rise sticky top-0 z-20 -mx-1 mt-4 bg-[#101010] px-1 py-2" style={{ ["--i" as string]: 4 }}>
+          <div className="flex min-w-0 items-center gap-2">
+            <label className="flex h-12 min-w-0 flex-1 items-center gap-3 rounded-full bg-[#1A1A1A] px-5 transition-colors focus-within:bg-[#222] hover:bg-[#1E1E1E]">
+              <Search className="size-[18px] shrink-0 text-[#8C8C8C]" />
+              <input
+                value={term}
+                onChange={(e) => setTerm(e.target.value)}
+                placeholder="Buscar por nome, marca, código…"
+                aria-label="Buscar produto"
+                className="pk-field h-full min-w-0 flex-1 bg-transparent text-[16px] text-white outline-none placeholder:text-[#6F6F6F]"
+              />
+              {term ? (
+                <button type="button" onClick={() => setTerm("")} aria-label="Limpar busca" className="press -mr-2 grid size-8 place-items-center rounded-full text-[#8C8C8C] hover:bg-white/[0.06] hover:text-white">
+                  <X className="size-4" />
+                </button>
+              ) : null}
+            </label>
+            <button
+              type="button"
+              onClick={() => setFiltersOpen(true)}
+              className={cn(
+                "press inline-flex h-12 shrink-0 items-center gap-2 rounded-full px-4 text-[14px] font-semibold transition-colors",
+                chips.length ? "bg-white text-[#15130F]" : "bg-[#1A1A1A] text-white hover:bg-[#222]",
+              )}
+            >
+              <SlidersHorizontal className="size-[18px]" />
+              <span className="max-sm:hidden">Filtros</span>
+              {chips.length ? <span className="grid size-5 place-items-center rounded-full bg-[#15130F] text-[11px] font-bold text-[#FFD599]">{chips.length}</span> : null}
+            </button>
+            <PillTrack activeKey={layout} label="Jeito de ver" className="flex shrink-0 gap-1 rounded-full bg-[#1A1A1A] p-1">
+              {(
+                [
+                  ["grade", <LayoutGrid key="g" className="size-[18px]" />, "Ver em grade"],
+                  ["lista", <List key="l" className="size-[18px]" />, "Ver em lista"],
+                ] as const
+              ).map(([k, icon, label]) => (
+                <button
+                  key={k}
+                  type="button"
+                  aria-pressed={layout === k}
+                  aria-label={label}
+                  title={label}
+                  onClick={() => setLayout(k)}
+                  className={cn("press grid size-10 place-items-center rounded-full transition-colors duration-200", layout === k ? "text-[#15130F]" : "text-[#A9A9A9] hover:text-white")}
+                >
+                  {icon}
+                </button>
+              ))}
+            </PillTrack>
+          </div>
+        </div>
+
+        <div className="mt-2 space-y-3">
+          <ActiveFilterChips chips={chips} onClear={clearAll} />
+
+          {vista === "revisar" ? (
+            <div className="min-w-0 space-y-3">
+              <div className="-mx-4 min-w-0 overflow-x-auto px-4 [scrollbar-width:none]">
+                <div className="flex w-max gap-1.5">
+                  <ReasonPill active={reason === "todos"} onClick={() => setReason("todos")} label="Todos os motivos" count={counts.review} />
+                  {REVIEW_REASONS.filter((r) => (counts.byReason.get(r) ?? 0) > 0).map((r) => (
+                    <ReasonPill key={r} active={reason === r} onClick={() => setReason(r)} label={FILTERS[r]} count={counts.byReason.get(r) ?? 0} />
+                  ))}
+                </div>
+              </div>
+              {reason === "duplicados" ? <CatalogHygienePanel /> : null}
+              {reason === "identidade-pendente" ? <IdentityReviewPanel /> : null}
+            </div>
+          ) : null}
+
+          <div className="flex min-w-0 items-center justify-between gap-3">
+            <p className="text-[14px] text-[#8C8C8C]">
+              {isLoading ? (
+                "Carregando…"
+              ) : (
+                <>
+                  <span className="font-semibold text-white tabular-nums">{filtered.length}</span> encontrado{filtered.length === 1 ? "" : "s"}
+                </>
+              )}
+            </p>
+            {filtered.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setSelected(allSelected ? [] : filtered.map((p) => p.id))}
+                className="press inline-flex h-9 items-center gap-1.5 rounded-full bg-[#1A1A1A] px-3.5 text-[13px] font-semibold text-[#D4D4D4] transition-colors hover:bg-[#222] hover:text-white"
+              >
+                <CheckCircle2 className="size-4" />
+                {allSelected ? "Limpar seleção" : `Selecionar ${filtered.length}`}
+              </button>
             ) : null}
           </div>
-        )}
+        </div>
+
+        {/* 3 · produtos */}
+        <div className="mt-3">
+          {isLoading ? (
+            layout === "grade" ? (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:gap-4 xl:grid-cols-4 2xl:grid-cols-5">
+                {Array.from({ length: 10 }).map((_, i) => (
+                  <div key={i} className="admin-skeleton aspect-[4/5.4] rounded-[26px]" />
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="admin-skeleton h-[76px] rounded-[22px]" />
+                ))}
+              </div>
+            )
+          ) : rows.length === 0 ? (
+            <div className="dash-card flex flex-col items-center px-6 py-12 text-center">
+              <span className="grid size-14 place-items-center rounded-full bg-[#232323] text-[#A9A9A9]">
+                <Search className="size-6" />
+              </span>
+              <p className="mt-4 text-[18px] font-bold">Nenhum produto encontrado</p>
+              <p className="mt-1 text-[14px] text-[#8C8C8C]">Tente outro nome ou tire alguns filtros.</p>
+              <SoftButton className="mt-5 h-11" onClick={clearAll}>
+                Limpar filtros
+              </SoftButton>
+            </div>
+          ) : (
+            <ItemMenuZone onOpen={menuById} className={cn(selecting && "pk-selecting")}>
+              <ViewSwap id={layout}>
+                {layout === "grade" ? (
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:gap-4 xl:grid-cols-4 2xl:grid-cols-5">
+                    {rows.map((p, i) => (
+                      <ProductTile key={p.id} {...cardProps(p, i)} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {rows.map((p, i) => (
+                      <ProductRow key={p.id} {...cardProps(p, i)} />
+                    ))}
+                  </div>
+                )}
+              </ViewSwap>
+            </ItemMenuZone>
+          )}
+          {!isLoading && filtered.length > rows.length ? (
+            <SoftButton className="mt-4 w-full" onClick={() => setLimit((l) => l + 60)}>
+              Mostrar mais {Math.min(60, filtered.length - rows.length)} de {filtered.length - rows.length}
+            </SoftButton>
+          ) : null}
+        </div>
       </div>
+
+      {menu.node}
 
       <ProductFiltersSheet
         open={filtersOpen}
@@ -772,18 +949,17 @@ function CatalogMaintenance() {
         onClear={() => setFilters(EMPTY_FILTERS)}
       />
 
-      {editing ? (
-        <ProductEditSheet
-          product={editing}
-          brands={brands}
-          startTab={editTab}
-          onClose={() => setEditing(null)}
-          onManualEdit={() => {
-            setManualId(editing.id);
-            setManualOpen(true);
-          }}
-        />
-      ) : null}
+      <ProductEditSheet
+        product={editing?.product ?? null}
+        originEl={editing?.origin ?? null}
+        brands={brands}
+        startTab={editing?.tab ?? "perfume"}
+        onClose={() => setEditing(null)}
+        onManualEdit={(id) => {
+          setManualId(id);
+          setManualOpen(true);
+        }}
+      />
 
       {selected.length > 0 ? (
         <BulkBar
@@ -913,6 +1089,33 @@ function CatalogMaintenance() {
 
       <BlocklistDialog open={blocklistOpen} onOpenChange={setBlocklistOpen} />
 
+      <Dialog open={deleteOne !== null} onOpenChange={(o) => !o && setDeleteOne(null)}>
+        <DialogContent className="w-[calc(100vw-32px)] max-w-sm rounded-[28px]">
+          <DialogHeader className="text-left">
+            <DialogTitle className="text-base">Excluir “{deleteOne?.canonical_name}” definitivamente?</DialogTitle>
+            <DialogDescription className="text-left">
+              Ele sai da Orium e a sincronização não o traz de volta. Pedidos antigos continuam intactos.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-row gap-2">
+            <Button variant="outline" className="h-12 flex-1 rounded-full" onClick={() => setDeleteOne(null)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              className="h-12 flex-1 rounded-full"
+              onClick={() => {
+                const p = deleteOne;
+                setDeleteOne(null);
+                if (p) void run(p.id, () => remove({ data: { productId: p.id, permanent: true } }), "Produto excluído.");
+              }}
+            >
+              Excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Drawer open={diagOpen} onOpenChange={setDiagOpen}>
         <DrawerContent className="max-h-[92vh] border-border/60">
           <DrawerTitle className="px-5 pt-3 text-lg">Diagnóstico do catálogo</DrawerTitle>
@@ -952,11 +1155,12 @@ function ReasonPill({
       type="button"
       onClick={onClick}
       className={
-        "press min-h-9 shrink-0 rounded-full border px-3.5 text-xs transition-colors " +
-        (active ? "border-foreground bg-foreground text-background" : "border-border/60 text-muted-foreground")
+        "press inline-flex h-10 shrink-0 items-center gap-2 rounded-full px-4 text-[13.5px] font-semibold transition-colors duration-200 " +
+        (active ? "bg-white text-[#15130F]" : "bg-[#1A1A1A] text-[#A9A9A9] hover:bg-[#222] hover:text-white")
       }
     >
-      {label} <span className="tabular-nums opacity-70">{count}</span>
+      {label}
+      <span className={"rounded-full px-1.5 text-[11.5px] font-bold tabular-nums " + (active ? "bg-[#15130F] text-[#FFD599]" : "bg-[#2A2414] text-[#F2C46D]")}>{count}</span>
     </button>
   );
 }

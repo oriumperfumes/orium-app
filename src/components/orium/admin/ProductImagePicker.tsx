@@ -4,7 +4,6 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { AlertTriangle, Check, ImagePlus, Loader2, RotateCcw, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { checkProductImage, productImageOptions, setProductImage } from "@/lib/product-image.functions";
 import { uploadProductPhoto } from "@/lib/manual-product.functions";
@@ -87,9 +86,9 @@ export function ProductImagePicker({ productId, name }: { productId: string; nam
 
   return (
     <div>
-      <Label className="text-sm">Imagem principal</Label>
-      <div className="mt-2 flex items-center gap-3">
-        <div className="size-24 shrink-0 overflow-hidden rounded-2xl border border-border/60 bg-surface-3">
+      <p className="text-[16px] font-bold">Foto</p>
+      <div className="mt-3 flex items-center gap-4">
+        <div className="size-28 shrink-0 overflow-hidden rounded-[20px] bg-[#232323]">
           {cur?.url ? (
             <img src={cur.url} alt={name} className="size-full object-contain" />
           ) : (
@@ -99,8 +98,8 @@ export function ProductImagePicker({ productId, name }: { productId: string; nam
           )}
         </div>
         <div className="flex min-w-0 flex-col gap-2">
-          <p className="text-xs text-muted-foreground">
-            Fonte: <span className="font-medium text-foreground">{sourceLabel}</span>
+          <p className="text-[13px] text-[#8C8C8C]">
+            Fonte: <span className="font-semibold text-white">{sourceLabel}</span>
           </p>
           {cur?.broken ? (
             <p className="flex items-center gap-1.5 text-xs text-destructive">
@@ -108,7 +107,7 @@ export function ProductImagePicker({ productId, name }: { productId: string; nam
             </p>
           ) : null}
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" className="press h-10 rounded-full px-4 text-xs" onClick={() => setOpen(true)}>
+            <Button type="button" variant="ghost" className="press h-11 rounded-full bg-[#232323] px-5 text-[13.5px] font-semibold text-white hover:bg-[#2C2C2C] hover:text-white" onClick={() => setOpen(true)}>
               Trocar imagem
             </Button>
             {cur && cur.mode !== "auto" ? (
@@ -125,7 +124,7 @@ export function ProductImagePicker({ productId, name }: { productId: string; nam
           </div>
         </div>
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">A escolha manual continua valendo em todas as sincronizações.</p>
+      <p className="mt-3 text-[12.5px] text-[#6F6F6F]">A foto escolhida à mão continua valendo em todas as sincronizações.</p>
 
       <Dialog open={open} onOpenChange={(v) => (setOpen(v), v ? null : setChoice(null))}>
         <DialogContent className="max-h-[92dvh] w-[calc(100vw-2rem)] max-w-lg overflow-y-auto rounded-[24px] p-4 sm:p-5">

@@ -1,24 +1,36 @@
-import { useMemo, useRef, useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Gem, ImagePlus, Loader2, MoreHorizontal, Pencil, Plus, Trash2, User, X } from "lucide-react";
-import { AdminShell } from "@/components/orium/AdminShell";
-import { AdminEmpty, AdminMore, AdminStatus } from "@/components/orium/admin/AdminUI";
-import { CustomerSheet } from "@/components/orium/CustomerSheet";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  ArrowLeft,
+  ArrowRight,
+  BadgeCheck,
+  CircleCheck,
+  ExternalLink,
+  EyeOff,
+  Gem,
+  Handshake,
+  ImagePlus,
+  Link2,
+  Loader2,
+  PenLine,
+  Pencil,
+  Pin,
+  PinOff,
+  Plus,
+  Search,
+  Sparkles,
+  Trash2,
+  User,
+  Users,
+  X,
+} from "lucide-react";
+import { AdminShell } from "@/components/orium/AdminShell";
+import { AdminConfirm, AdminMore } from "@/components/orium/admin/AdminUI";
+import { CustomerSheet } from "@/components/orium/CustomerSheet";
 import { crmCustomerDelete } from "@/lib/crm.functions";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,23 +53,65 @@ import {
   listNegotiationInterests,
   removeNegotiationPhoto,
   saveNegotiationItem,
+  searchCatalogForNegotiation,
   setNegotiationPhoto,
   uploadNegotiationPhoto,
+  type NegotiationCatalogHit,
 } from "@/lib/negotiation.functions";
+import { copyFragranceFrom } from "@/lib/fragrance.functions";
 import { optimizePhoto } from "@/lib/image-optimize";
+import { imgVariant } from "@/lib/product-img";
 import { FragranceEditor } from "@/components/orium/FragranceEditor";
-import { useVisualViewport } from "@/hooks/use-visual-viewport";
+import { SidePanel } from "@/components/orium/admin/orders/model";
+import { ItemMenuButton, ItemMenuZone, useItemMenu, type ItemMenuSpec, type MenuPos } from "@/components/orium/admin/ItemMenu";
+import {
+  ChoiceCards,
+  Field,
+  GoldButton,
+  PanelCard,
+  PanelFooter,
+  PanelHeader,
+  PanelScroll,
+  PhotoField,
+  QuickChips,
+  SoftButton,
+  StatusDot,
+  TextArea,
+  TextInput,
+  ToggleRow,
+} from "@/components/orium/admin/PanelKit";
+import { AnimatedNumber } from "@/components/orium/admin/motion";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/admin/negociacao")({
+  head: () => ({ meta: [{ title: "Negociação — Orium Admin" }, { name: "robots", content: "noindex" }] }),
   component: AdminNegotiation,
 });
 
+/* ------------------------------------------------------------------ *
+ * NEGOCIAÇÃO — perfumes da própria Orium, deslacrados, negociados um a um.
+ *  1. Quatro números que também filtram (disponíveis, negociando, vendidos,
+ *     interessados).
+ *  2. Vitrine em cartões com foto grande; tocar abre o perfume, "⋯" / botão
+ *     direito / segurar abre o menu (trocar situação sem abrir nada).
+ *  3. Interesses recebidos, já ligados ao CRM.
+ * "Adicionar" começa pelo catálogo (nome, marca, foto e ficha olfativa vêm
+ * prontos) ou do zero. Nada aqui toca catálogo, estoque ou preço.
+ * ------------------------------------------------------------------ */
+
+const STATUS_META: Record<NegotiationStatus, { tone: "ok" | "gold" | "off" | "coral"; icon: ReactNode; hint: string }> = {
+  AVAILABLE: { tone: "ok", icon: <CircleCheck />, hint: "Aparece na loja" },
+  NEGOTIATING: { tone: "gold", icon: <Handshake />, hint: "Alguém está conversando" },
+  SOLD: { tone: "coral", icon: <BadgeCheck />, hint: "Sai da vitrine" },
+  HIDDEN: { tone: "off", icon: <EyeOff />, hint: "Só você vê" },
+};
 const STATUSES: NegotiationStatus[] = ["AVAILABLE", "NEGOTIATING", "SOLD", "HIDDEN"];
+const CONDITIONS = ["Lacrado", "Praticamente cheio", "Mais da metade", "Metade", "Usado poucas vezes"];
+/** prioridade usada pelo "Fixar no começo" (a ordem é a maior primeiro) */
+const PINNED = 10;
 
 type Draft = {
   id: string | null;
-  /** Ficha olfativa interna (mesmo sistema do catálogo). */
   productId: string | null;
   name: string;
   brand: string;
@@ -67,7 +121,9 @@ type Draft = {
   status: NegotiationStatus;
   showWhenNegotiating: boolean;
   imagePath: string | null;
-  priority: string;
+  priority: number;
+  /** perfume do catálogo de onde veio (para copiar a ficha olfativa ao salvar) */
+  source: NegotiationCatalogHit | null;
 };
 
 const emptyDraft = (): Draft => ({
@@ -81,7 +137,8 @@ const emptyDraft = (): Draft => ({
   status: "AVAILABLE",
   showWhenNegotiating: true,
   imagePath: null,
-  priority: "0",
+  priority: 0,
+  source: null,
 });
 
 const toDraft = (item: NegotiationItem): Draft => ({
@@ -95,45 +152,102 @@ const toDraft = (item: NegotiationItem): Draft => ({
   status: item.status,
   showWhenNegotiating: item.show_when_negotiating,
   imagePath: item.image_url,
-  priority: String(item.priority ?? 0),
+  priority: item.priority ?? 0,
+  source: null,
 });
+
+const draftPayload = (d: Draft) => ({
+  id: d.id,
+  name: d.name,
+  brand: d.brand,
+  volumeMl: d.volume ? Number(d.volume) : null,
+  description: d.description,
+  conditionNote: d.conditionNote,
+  status: d.status,
+  showWhenNegotiating: d.showWhenNegotiating,
+  imageUrl: d.imagePath,
+  priority: d.priority,
+});
+
+type Filter = "ALL" | NegotiationStatus | "INTEREST";
 
 function AdminNegotiation() {
   const qc = useQueryClient();
   const list = useServerFn(listNegotiationAdmin);
+  const loadInterests = useServerFn(listNegotiationInterests);
   const remove = useServerFn(deleteNegotiationItem);
+  const save = useServerFn(saveNegotiationItem);
   const uploadPhoto = useServerFn(uploadNegotiationPhoto);
   const swapPhoto = useServerFn(setNegotiationPhoto);
   const [optimizing, setOptimizing] = useState(false);
 
-  const [draft, setDraft] = useState<Draft | null>(null);
-  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [panel, setPanel] = useState<{ draft: Draft; origin: HTMLElement | null; startAt: "pick" | "form" } | null>(null);
+  const [confirm, setConfirm] = useState<NegotiationItem | null>(null);
+  const [filter, setFilter] = useState<Filter>("ALL");
+  const menu = useItemMenu();
+
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: ["negotiation-admin"] });
+    void qc.invalidateQueries({ queryKey: ["negotiation-public"] });
+  };
 
   const { data, isLoading } = useQuery({
     queryKey: ["negotiation-admin"],
     retry: false,
     queryFn: async () => await list(),
   });
+  const items = useMemo(() => (data?.items ?? []) as unknown as NegotiationItem[], [data]);
 
-  const items = useMemo(
-    () => ((data?.items ?? []) as unknown as NegotiationItem[]),
-    [data],
+  const interests = useQuery({
+    queryKey: ["negotiation-interests"],
+    retry: false,
+    queryFn: async () => await loadInterests(),
+  });
+  const interestByItem = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of interests.data?.interests ?? []) {
+      if (r.negotiation_item_id) m.set(r.negotiation_item_id, (m.get(r.negotiation_item_id) ?? 0) + 1);
+    }
+    return m;
+  }, [interests.data]);
+  const people = useMemo(
+    () => new Set((interests.data?.interests ?? []).map((r) => r.customer_id ?? r.id)).size,
+    [interests.data],
   );
+
+  const counts = useMemo(() => {
+    const c: Record<NegotiationStatus, number> = { AVAILABLE: 0, NEGOTIATING: 0, SOLD: 0, HIDDEN: 0 };
+    for (const i of items) c[i.status] += 1;
+    return c;
+  }, [items]);
+
+  const shown = useMemo(() => {
+    if (filter === "ALL") return items;
+    if (filter === "INTEREST") return items.filter((i) => (interestByItem.get(i.id) ?? 0) > 0);
+    return items.filter((i) => i.status === filter);
+  }, [items, filter, interestByItem]);
 
   const removeMutation = useMutation({
     mutationFn: async (id: string) => await remove({ data: { id } }),
     onSuccess: () => {
-      toast.success("Item removido da Negociação.");
-      void qc.invalidateQueries({ queryKey: ["negotiation-admin"] });
-      void qc.invalidateQueries({ queryKey: ["negotiation-public"] });
+      toast.success("Perfume removido da Negociação.");
+      refresh();
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
-  /**
-   * Fotos que ainda não estão otimizadas: formatos antigos (JPG/PNG) e também
-   * WebP sem a versão leve do card — o servidor avisa qual versão entregou.
-   */
+  /** troca rápida (situação, fixar) sem abrir o perfume */
+  const quickSave = async (item: NegotiationItem, patch: Partial<Draft>, ok: string) => {
+    try {
+      await save({ data: draftPayload({ ...toDraft(item), ...patch }) });
+      toast.success(ok);
+      refresh();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+
+  /* fotos antigas (JPG/PNG ou WebP sem a versão do card) — mesma regra de antes */
   const withPhoto = items.filter((i) => i.image_url);
   const { data: needsFix } = useQuery({
     queryKey: ["negotiation-photo-variants", withPhoto.map((i) => i.image_url).join("|")],
@@ -171,9 +285,7 @@ function AdminNegotiation() {
         if (!res.ok) continue;
         const blob = await res.blob();
         const optimized = await optimizePhoto(blob);
-        const up = await uploadPhoto({
-          data: { base64: optimized.main, contentType: "image/webp", cardBase64: optimized.card },
-        });
+        const up = await uploadPhoto({ data: { base64: optimized.main, contentType: "image/webp", cardBase64: optimized.card } });
         await swapPhoto({ data: { id: item.id, path: up.path } });
         done += 1;
         saved += Math.max(0, optimized.originalBytes - optimized.mainBytes - optimized.cardBytes);
@@ -183,8 +295,7 @@ function AdminNegotiation() {
           ? "Nenhuma foto antiga para converter."
           : `${done} foto${done === 1 ? "" : "s"} convertida${done === 1 ? "" : "s"} para WebP · -${Math.round(saved / 1024)} KB`,
       );
-      void qc.invalidateQueries({ queryKey: ["negotiation-admin"] });
-      void qc.invalidateQueries({ queryKey: ["negotiation-public"] });
+      refresh();
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -192,14 +303,80 @@ function AdminNegotiation() {
     }
   };
 
+  const openItem = (item: NegotiationItem, origin: HTMLElement | null) => setPanel({ draft: toDraft(item), origin, startAt: "form" });
+  const openNew = (origin: HTMLElement | null, startAt: "pick" | "form" = "pick") => setPanel({ draft: emptyDraft(), origin, startAt });
+
+  const itemMenu = (item: NegotiationItem, pos: MenuPos) => {
+    const n = interestByItem.get(item.id) ?? 0;
+    const pinned = (item.priority ?? 0) > 0;
+    const spec: ItemMenuSpec = {
+      image: negotiationPhoto(item.image_url, "card"),
+      title: item.name,
+      subtitle: (
+        <>
+          <span className="truncate">{item.brand ?? "Orium"}</span>
+          {n ? (
+            <>
+              <span className="text-[#3A3A3A]">·</span>
+              <span className="shrink-0 font-semibold text-[#FFD599]">
+                {n} interessado{n === 1 ? "" : "s"}
+              </span>
+            </>
+          ) : null}
+        </>
+      ),
+      quick: [
+        { key: "edit", label: "Editar", icon: <Pencil />, onSelect: () => openItem(item, document.querySelector(`[data-item-id="${item.id}"]`)) },
+        { key: "view", label: "Ver na loja", icon: <ExternalLink />, href: `/negociacao/${item.id}`, disabled: item.status === "HIDDEN" },
+        {
+          key: "copy",
+          label: "Copiar link",
+          icon: <Link2 />,
+          onSelect: () => {
+            void navigator.clipboard
+              ?.writeText(`${window.location.origin}/negociacao/${item.id}`)
+              .then(() => toast.success("Link copiado."))
+              .catch(() => toast.error("Não foi possível copiar."));
+          },
+        },
+      ],
+      choicesLabel: "Situação",
+      choices: STATUSES.map((s) => ({
+        key: s,
+        label: NEGOTIATION_STATUS_LABEL[s],
+        icon: STATUS_META[s].icon,
+        active: item.status === s,
+        onSelect: () => void quickSave(item, { status: s }, `${item.name}: ${NEGOTIATION_STATUS_LABEL[s].toLowerCase()}.`),
+      })),
+      main: [
+        {
+          key: "pin",
+          label: pinned ? "Tirar do começo da vitrine" : "Fixar no começo da vitrine",
+          icon: pinned ? <PinOff /> : <Pin />,
+          onSelect: () => void quickSave(item, { priority: pinned ? 0 : PINNED }, pinned ? "Voltou para a ordem normal." : "Fixado no começo da vitrine."),
+        },
+      ],
+      danger: [{ key: "del", label: "Remover da Negociação", icon: <Trash2 />, danger: true, onSelect: () => setConfirm(item) }],
+    };
+    menu.open(pos, spec, item.id);
+  };
+
+  const tiles: Array<{ key: Filter; label: string; value: number; icon: ReactNode }> = [
+    { key: "AVAILABLE", label: "Disponíveis", value: counts.AVAILABLE, icon: <CircleCheck className="size-[18px]" strokeWidth={2.2} /> },
+    { key: "NEGOTIATING", label: "Negociando", value: counts.NEGOTIATING, icon: <Handshake className="size-[18px]" strokeWidth={2.2} /> },
+    { key: "SOLD", label: "Vendidos", value: counts.SOLD, icon: <BadgeCheck className="size-[18px]" strokeWidth={2.2} /> },
+    { key: "INTEREST", label: people === 1 ? "Interessado" : "Interessados", value: people, icon: <Users className="size-[18px]" strokeWidth={2.2} /> },
+  ];
+
   return (
     <AdminShell
       title="Negociação"
+      description="Perfumes da Orium, deslacrados, negociados um a um pelo WhatsApp."
       action={
         <div className="flex items-center gap-2">
-          <Button className="press h-11 rounded-full px-5" onClick={() => setDraft(emptyDraft())}>
-            <Plus className="size-4" /> Adicionar perfume
-          </Button>
+          <GoldButton icon={<Plus className="size-[18px]" strokeWidth={2.6} />} className="h-12" onClick={(e) => openNew(e.currentTarget)}>
+            Adicionar perfume
+          </GoldButton>
           {pending.length > 0 ? (
             <AdminMore
               label="Mais ações"
@@ -215,96 +392,121 @@ function AdminNegotiation() {
         </div>
       }
     >
-      {isLoading ? (
-        <div className="space-y-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-24 animate-pulse rounded-2xl bg-surface-3" />
-          ))}
+      {/* 1 · números que filtram */}
+      <section className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4" aria-label="Resumo">
+        {tiles.map((t, i) => {
+          const on = filter === t.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              aria-pressed={on}
+              onClick={() => setFilter(on ? "ALL" : t.key)}
+              className={cn(
+                "pk-stat adm-rise press flex min-h-[118px] flex-col rounded-[28px] p-5 text-left",
+                on ? "bg-white text-[#15130F]" : t.key === "INTEREST" && t.value > 0 ? "dash-hero" : "dash-card hover:bg-[#202020]",
+              )}
+              style={{ ["--i" as string]: i }}
+            >
+              <span className="flex w-full items-start justify-between gap-2">
+                <span className={cn("text-[15px]", on || (t.key === "INTEREST" && t.value > 0) ? "font-semibold opacity-75" : "text-[#A9A9A9]")}>{t.label}</span>
+                <span className={cn("dash-ico", on && "!bg-[#15130F]/[0.08] !text-[#15130F]")}>{t.icon}</span>
+              </span>
+              <span className="mt-auto text-[34px] leading-none font-bold tracking-[-0.045em]">
+                {isLoading ? "—" : <AnimatedNumber value={t.value} />}
+              </span>
+            </button>
+          );
+        })}
+      </section>
+
+      {filter !== "ALL" ? (
+        <div className="adm-fade mt-4 flex items-center gap-2 text-[14px] text-[#A9A9A9]">
+          Mostrando <span className="font-semibold text-white">{shown.length}</span>
+          {filter === "INTEREST" ? "com interessados" : NEGOTIATION_STATUS_LABEL[filter as NegotiationStatus].toLowerCase()}
+          <button type="button" onClick={() => setFilter("ALL")} className="press ml-1 inline-flex h-8 items-center gap-1 rounded-full bg-[#1F1F1F] px-3 text-[13px] font-semibold text-white hover:bg-[#2A2A2A]">
+            <X className="size-3.5" /> Ver todos
+          </button>
         </div>
-      ) : items.length === 0 ? (
-        <AdminEmpty>Nenhum perfume na Negociação.</AdminEmpty>
-      ) : (
-        <div className="space-y-3">
-          {items.map((item) => {
-            const photo = negotiationPhoto(item.image_url, "card");
-            return (
-              <div
-                key={item.id}
-                className="flex gap-3 rounded-2xl border border-border/60 bg-surface-2 p-3"
+      ) : null}
+
+      {/* 2 · vitrine */}
+      <div className="mt-4">
+        {isLoading ? (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:gap-4 xl:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="admin-skeleton aspect-[4/5.6] rounded-[26px]" />
+            ))}
+          </div>
+        ) : items.length === 0 ? (
+          <EmptyShowcase onCatalog={(el) => openNew(el, "pick")} onBlank={(el) => openNew(el, "form")} />
+        ) : shown.length === 0 ? (
+          <div className="dash-card p-8 text-center text-[15px] text-[#A9A9A9]">Nada por aqui com esse filtro.</div>
+        ) : (
+          <ItemMenuZone
+            onOpen={(id, pos) => {
+              const it = items.find((x) => x.id === id);
+              if (it) itemMenu(it, pos);
+            }}
+          >
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:gap-4 xl:grid-cols-4">
+              {shown.map((item, i) => (
+                <ShowcaseTile
+                  key={item.id}
+                  item={item}
+                  i={i}
+                  interested={interestByItem.get(item.id) ?? 0}
+                  onOpen={(el) => openItem(item, el)}
+                  onMenu={(pos) => itemMenu(item, pos)}
+                />
+              ))}
+              <button
+                type="button"
+                onClick={(e) => openNew(e.currentTarget)}
+                className="pk-tile pk-in press flex min-h-[220px] flex-col items-center justify-center gap-3 border-2 border-dashed border-white/[0.08] !bg-transparent p-4 text-center text-[#8C8C8C] hover:!bg-[#161616] hover:text-white"
+                style={{ ["--i" as string]: shown.length }}
               >
-                <div className="size-20 shrink-0 overflow-hidden rounded-xl bg-surface-3">
-                  {photo ? (
-                    <img src={photo} alt={item.name} className="size-full object-cover" />
-                  ) : (
-                    <div className="grid size-full place-items-center text-muted-foreground">
-                      <Gem className="size-5" />
-                    </div>
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[10.5px] tracking-wide text-muted-foreground uppercase">
-                    {item.brand ?? "Orium"}
-                  </p>
-                  <p className="truncate text-sm font-medium">{item.name}</p>
-                  <div className="mt-1.5">
-                    <AdminStatus status={NEGOTIATION_STATUS_LABEL[item.status].toLowerCase()} />
-                  </div>
-                  <div className="mt-3 flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      className="press h-9 rounded-full px-3 text-xs"
-                      onClick={() => setDraft(toDraft(item))}
-                    >
-                      <Pencil className="size-3.5" /> Editar
-                    </Button>
-                    <AdminMore
-                      actions={[
-                        { label: "Editar", icon: <Pencil className="size-4" />, onSelect: () => setDraft(toDraft(item)) },
-                        {
-                          label: "Remover",
-                          icon: <Trash2 className="size-4" />,
-                          danger: true,
-                          separated: true,
-                          onSelect: () => setConfirmId(item.id),
-                        },
-                      ]}
-                    />
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+                <span className="grid size-12 place-items-center rounded-full bg-[#1F1F1F] text-white">
+                  <Plus className="size-5" />
+                </span>
+                <span className="text-[14px] font-semibold">Adicionar perfume</span>
+              </button>
+            </div>
+          </ItemMenuZone>
+        )}
+      </div>
 
-      <InterestList />
+      {/* 3 · interesses */}
+      <InterestList data={interests.data?.interests} loading={interests.isLoading} items={items} onOpenItem={(it) => openItem(it, null)} />
 
-      <NegotiationDrawer
-        draft={draft}
-        setDraft={setDraft as (d: Draft) => void}
-        close={() => setDraft(null)}
-        refresh={() => {
-          void qc.invalidateQueries({ queryKey: ["negotiation-admin"] });
-          void qc.invalidateQueries({ queryKey: ["negotiation-public"] });
+      <NegotiationPanel
+        state={panel}
+        onClose={() => setPanel(null)}
+        onSaved={refresh}
+        onDelete={(id) => {
+          const it = items.find((x) => x.id === id);
+          if (it) setConfirm(it);
         }}
       />
 
+      {menu.node}
 
-      <AlertDialog open={confirmId !== null} onOpenChange={(o) => !o && setConfirmId(null)}>
-        <AlertDialogContent>
+      <AlertDialog open={confirm !== null} onOpenChange={(o) => !o && setConfirm(null)}>
+        <AlertDialogContent className="max-w-[min(92vw,26rem)] rounded-[28px]">
           <AlertDialogHeader>
-            <AlertDialogTitle>Remover este perfume da Negociação?</AlertDialogTitle>
+            <AlertDialogTitle>Remover “{confirm?.name}” da Negociação?</AlertDialogTitle>
             <AlertDialogDescription>
-              Somente este item de Negociação será apagado. Nada do catálogo é afetado.
+              Só este item sai da vitrine de Negociação. Nada do catálogo é afetado e os interesses continuam no CRM.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-full">Cancelar</AlertDialogCancel>
+            <AlertDialogCancel className="h-11 rounded-full">Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              className="rounded-full"
+              className="h-11 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => {
-                if (confirmId) removeMutation.mutate(confirmId);
-                setConfirmId(null);
+                if (confirm) removeMutation.mutate(confirm.id);
+                if (confirm && panel?.draft.id === confirm.id) setPanel(null);
+                setConfirm(null);
               }}
             >
               Remover
@@ -316,166 +518,657 @@ function AdminNegotiation() {
   );
 }
 
+/* ─────────────── vitrine ─────────────── */
+
+function ShowcaseTile({
+  item,
+  i,
+  interested,
+  onOpen,
+  onMenu,
+}: {
+  item: NegotiationItem;
+  i: number;
+  interested: number;
+  onOpen: (el: HTMLElement) => void;
+  onMenu: (pos: MenuPos) => void;
+}) {
+  const photo = negotiationPhoto(item.image_url, "card");
+  const meta = STATUS_META[item.status];
+  const faded = item.status === "SOLD" || item.status === "HIDDEN";
+  return (
+    <article
+      data-item-id={item.id}
+      role="button"
+      tabIndex={0}
+      aria-label={`Abrir ${item.name}`}
+      onClick={(e) => onOpen(e.currentTarget)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen(e.currentTarget);
+        }
+      }}
+      className="pk-tile pk-in flex flex-col p-2"
+      style={{ ["--i" as string]: i }}
+    >
+      <div className="relative aspect-[4/5] overflow-hidden rounded-[20px] bg-[#232323]">
+        {photo ? (
+          <img src={photo} alt={item.name} loading="lazy" className={cn("pk-tile-img size-full object-cover", faded && "opacity-45 grayscale")} />
+        ) : (
+          <div className="grid size-full place-items-center text-[#6F6F6F]">
+            <Gem className="size-7" strokeWidth={1.6} />
+          </div>
+        )}
+        {(item.priority ?? 0) > 0 ? (
+          <span className="absolute bottom-2.5 left-2.5 grid size-7 place-items-center rounded-full bg-black/70 text-[#FFD599]" title="Fixado no começo">
+            <Pin className="size-3.5" />
+          </span>
+        ) : null}
+        <ItemMenuButton size="sm" label={`Opções de ${item.name}`} onOpen={onMenu} className="pk-reveal absolute top-2 right-2 !bg-black/70 hover:!bg-black/85" />
+        {interested ? (
+          <span className="absolute right-2.5 bottom-2.5 inline-flex h-7 items-center gap-1 rounded-full bg-[#FFD599] px-2.5 text-[12px] font-bold text-[#15130F] tabular-nums">
+            <Users className="size-3.5" strokeWidth={2.4} /> {interested}
+          </span>
+        ) : null}
+      </div>
+      <div className="min-w-0 px-2 pt-3 pb-2">
+        <p className="truncate text-[11.5px] font-semibold tracking-[0.06em] text-[#8C8C8C] uppercase">{item.brand ?? "Orium"}</p>
+        <p className="mt-0.5 truncate text-[15.5px] leading-tight font-bold tracking-[-0.01em]">{item.name}</p>
+        <p className="mt-1 truncate text-[12.5px] text-[#8C8C8C]">{[item.volume_ml ? `${item.volume_ml} ml` : null, item.condition_note].filter(Boolean).join(" · ")}</p>
+        <StatusDot tone={meta.tone} className="mt-2.5">
+          {NEGOTIATION_STATUS_LABEL[item.status]}
+        </StatusDot>
+      </div>
+    </article>
+  );
+}
+
+function EmptyShowcase({ onCatalog, onBlank }: { onCatalog: (el: HTMLElement) => void; onBlank: (el: HTMLElement) => void }) {
+  return (
+    <div className="dash-card adm-rise flex flex-col items-center px-6 py-12 text-center">
+      <span className="grid size-16 place-items-center rounded-full bg-[#232323] text-[#FFD599]">
+        <Gem className="size-7" strokeWidth={1.8} />
+      </span>
+      <h2 className="mt-4 text-[22px] font-bold tracking-[-0.02em]">A vitrine está vazia</h2>
+      <p className="mt-1 max-w-sm text-[15px] text-[#A9A9A9]">Coloque aqui um perfume deslacrado para negociar. Começar pelo catálogo traz nome, foto e notas prontos.</p>
+      <div className="mt-6 flex flex-wrap justify-center gap-2">
+        <GoldButton icon={<Search className="size-[18px]" />} onClick={(e) => onCatalog(e.currentTarget)}>
+          Escolher do catálogo
+        </GoldButton>
+        <SoftButton icon={<PenLine />} onClick={(e) => onBlank(e.currentTarget)}>
+          Do zero
+        </SoftButton>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────── janela do perfume ─────────────── */
+
+function NegotiationPanel({
+  state,
+  onClose,
+  onSaved,
+  onDelete,
+}: {
+  state: { draft: Draft; origin: HTMLElement | null; startAt: "pick" | "form" } | null;
+  onClose: () => void;
+  onSaved: () => void;
+  onDelete: (id: string) => void;
+}) {
+  // mantém o conteúdo enquanto a janela anima a saída
+  const [last, setLast] = useState(state);
+  if (state && state !== last) setLast(state);
+  const s = state ?? last;
+  const [dirty, setDirty] = useState(false);
+  const [askDiscard, setAskDiscard] = useState(false);
+  const close = () => (dirty ? setAskDiscard(true) : onClose());
+  const done = () => {
+    setDirty(false);
+    onClose();
+  };
+  return (
+    <>
+      <SidePanel open={!!state} onClose={close} label="Perfume da Negociação" originEl={state?.origin ?? null}>
+        {s ? (
+          <PanelBody
+            key={s.draft.id ?? `novo-${String(s.startAt)}`}
+            initial={s.draft}
+            startAt={s.startAt}
+            onClose={close}
+            onDirty={setDirty}
+            onSaved={onSaved}
+            onDelete={onDelete}
+          />
+        ) : null}
+      </SidePanel>
+      <AdminConfirm
+        open={askDiscard}
+        onOpenChange={setAskDiscard}
+        title="Sair sem salvar?"
+        description="As mudanças neste perfume ainda não foram salvas."
+        confirmLabel="Sair sem salvar"
+        danger
+        onConfirm={done}
+      />
+    </>
+  );
+}
+
+function PanelBody({
+  initial,
+  startAt,
+  onClose,
+  onDirty,
+  onSaved,
+  onDelete,
+}: {
+  initial: Draft;
+  startAt: "pick" | "form";
+  onClose: () => void;
+  onDirty: (v: boolean) => void;
+  onSaved: () => void;
+  onDelete: (id: string) => void;
+}) {
+  const qc = useQueryClient();
+  const save = useServerFn(saveNegotiationItem);
+  const upload = useServerFn(uploadNegotiationPhoto);
+  const dropPhoto = useServerFn(removeNegotiationPhoto);
+  const copyFragrance = useServerFn(copyFragranceFrom);
+
+  const [draft, setDraft] = useState<Draft>(initial);
+  const [step, setStep] = useState<"pick" | "form">(initial.id ? "form" : startAt);
+  const [busy, setBusy] = useState<null | "photo" | "save">(null);
+  const [saved, setSaved] = useState(JSON.stringify(draftPayload(initial)));
+  const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
+  const dirty = JSON.stringify(draftPayload(draft)) !== saved;
+  useEffect(() => {
+    // novo perfume só conta como "não salvo" depois que algo foi preenchido
+    onDirty(dirty && !!(draft.id || draft.name.trim() || draft.imagePath));
+  }, [dirty, draft.id, draft.name, draft.imagePath, onDirty]);
+
+  const sendPhoto = async (file: Blob) => {
+    setBusy("photo");
+    try {
+      const optimized = await optimizePhoto(file);
+      const res = await upload({ data: { base64: optimized.main, contentType: "image/webp", cardBase64: optimized.card } });
+      const old = draft.imagePath;
+      set({ imagePath: res.path });
+      // a foto antiga só sai do armazenamento se ainda não foi salva no item
+      if (old && old !== initial.imagePath) await dropPhoto({ data: { path: old } });
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /** Veio do catálogo: preenche e copia a foto para a Negociação (WebP). */
+  const fromCatalog = async (hit: NegotiationCatalogHit) => {
+    setDraft((d) => ({ ...d, name: hit.name, brand: hit.brand ?? "", volume: hit.volumeMl ? String(hit.volumeMl) : "", source: hit }));
+    setStep("form");
+    const url = imgVariant(hit.imageUrl, "full");
+    if (!url) return;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("foto");
+      await sendPhoto(await res.blob());
+    } catch {
+      toast.info("Não deu para copiar a foto do catálogo. Envie uma foto do frasco.");
+    }
+  };
+
+  const submit = async () => {
+    setBusy("save");
+    try {
+      const res = await save({ data: draftPayload(draft) });
+      const productId = res.productId ?? draft.productId;
+      let copied = false;
+      // primeira vez a partir do catálogo: a ficha olfativa vem junto
+      if (!draft.id && draft.source?.hasFragrance && productId) {
+        try {
+          await copyFragrance({ data: { fromProductId: draft.source.id, toProductId: productId } });
+          copied = true;
+          void qc.invalidateQueries();
+        } catch {
+          /* sem ficha para copiar: segue só com o cadastro */
+        }
+      }
+      const next = { ...draft, id: res.id, productId, source: draft.id ? draft.source : null };
+      setDraft(next);
+      setSaved(JSON.stringify(draftPayload(next)));
+      onSaved();
+      toast.success(
+        draft.id ? "Alterações salvas." : copied ? "Perfume na vitrine, com as notas do catálogo." : "Perfume na vitrine. Complete as notas abaixo, se quiser.",
+      );
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (step === "pick")
+    return <CatalogPicker onPick={(h) => void fromCatalog(h)} onBlank={() => setStep("form")} onClose={onClose} />;
+
+  const photo = negotiationPhoto(draft.imagePath);
+  const pinned = draft.priority > 0;
+
+  return (
+    <>
+      <PanelHeader
+        image={negotiationPhoto(draft.imagePath, "card")}
+        fallback={<Gem className="size-5" />}
+        title={draft.name.trim() || "Novo perfume"}
+        subtitle={
+          draft.id ? (
+            <StatusDot tone={STATUS_META[draft.status].tone}>
+              {NEGOTIATION_STATUS_LABEL[draft.status]}
+              {draft.brand ? ` · ${draft.brand}` : ""}
+            </StatusDot>
+          ) : (
+            "Na vitrine de Negociação"
+          )
+        }
+        onClose={onClose}
+        right={
+          !draft.id ? (
+            <button
+              type="button"
+              onClick={() => setStep("pick")}
+              className="press hidden h-10 items-center gap-1.5 rounded-full bg-[#1F1F1F] px-3.5 text-[13px] font-semibold text-[#D4D4D4] hover:bg-[#2A2A2A] sm:inline-flex"
+            >
+              <Search className="size-4" /> Catálogo
+            </button>
+          ) : null
+        }
+      />
+
+      <PanelScroll>
+        {draft.source ? (
+          <div className="adm-pop flex items-center gap-3 rounded-[20px] bg-[#1A1813] p-3 pr-2 ring-1 ring-[#FFD599]/25">
+            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#FFD599] text-[#15130F]">
+              <Sparkles className="size-4" />
+            </span>
+            <p className="min-w-0 flex-1 text-[13px] leading-snug text-[#D4D4D4]">
+              Do catálogo: <b className="text-white">{draft.source.name}</b>.{" "}
+              {draft.source.hasFragrance ? "Acordes e notas vêm junto ao salvar." : "Ele ainda não tem notas no catálogo."}
+            </p>
+            <button
+              type="button"
+              aria-label="Não usar o perfume do catálogo"
+              onClick={() => set({ source: null })}
+              className="press grid size-9 shrink-0 place-items-center rounded-full text-[#8C8C8C] hover:bg-white/[0.06] hover:text-white"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+        ) : null}
+
+        <PanelCard title="O perfume">
+          <div className="grid gap-4 sm:grid-cols-[180px_1fr]">
+            <div className="mx-auto w-full max-w-[220px] sm:max-w-none">
+            <PhotoField
+              url={photo}
+              busy={busy === "photo"}
+              aspect="portrait"
+              onFile={(f) => void sendPhoto(f)}
+              onRemove={() => {
+                const old = draft.imagePath;
+                set({ imagePath: null });
+                if (old && old !== initial.imagePath) void dropPhoto({ data: { path: old } });
+              }}
+            />
+            </div>
+            <div className="min-w-0 space-y-3">
+              <Field label="Nome">
+                <TextInput value={draft.name} onChange={(e) => set({ name: e.target.value })} placeholder="Ex.: Khamrah" autoFocus={!draft.id && !draft.source} />
+              </Field>
+              <Field label="Marca">
+                <TextInput value={draft.brand} onChange={(e) => set({ brand: e.target.value })} placeholder="Ex.: Lattafa" />
+              </Field>
+              <Field label="Volume do frasco">
+                <TextInput
+                  inputMode="numeric"
+                  suffix="ml"
+                  value={draft.volume}
+                  onChange={(e) => set({ volume: e.target.value.replace(/\D/g, "") })}
+                  placeholder="100"
+                />
+              </Field>
+            </div>
+          </div>
+        </PanelCard>
+
+        <PanelCard title="Como está o frasco" hint="Aparece no cartão da loja, embaixo do nome.">
+          <QuickChips options={CONDITIONS} value={draft.conditionNote} onPick={(v) => set({ conditionNote: v })} />
+          <TextInput className="mt-3" value={draft.conditionNote} onChange={(e) => set({ conditionNote: e.target.value })} placeholder="Ou escreva do seu jeito" />
+        </PanelCard>
+
+        <PanelCard title="Situação">
+          <ChoiceCards
+            columns={2}
+            value={draft.status}
+            onChange={(v) => set({ status: v })}
+            options={STATUSES.map((s) => ({ value: s, label: NEGOTIATION_STATUS_LABEL[s], hint: STATUS_META[s].hint, icon: STATUS_META[s].icon }))}
+          />
+          {draft.status === "NEGOTIATING" ? (
+            <div className="adm-pop mt-3">
+              <ToggleRow
+                label="Continuar na vitrine"
+                hint="Com o selo “Em negociação”, para quem chegar depois."
+                checked={draft.showWhenNegotiating}
+                onChange={(v) => set({ showWhenNegotiating: v })}
+              />
+            </div>
+          ) : null}
+          <div className="mt-2 border-t border-white/[0.06] pt-2">
+            <ToggleRow
+              icon={<Pin />}
+              label="Fixar no começo da vitrine"
+              hint="Aparece antes dos outros."
+              checked={pinned}
+              onChange={(v) => set({ priority: v ? Math.max(PINNED, initial.priority) : 0 })}
+            />
+          </div>
+        </PanelCard>
+
+        <PanelCard title="Descrição" hint="Poucas linhas: o estado do frasco e por que vale a pena.">
+          <TextArea value={draft.description} onChange={(e) => set({ description: e.target.value })} placeholder="Ex.: Usado duas vezes, guardado na caixa, longe da luz." />
+        </PanelCard>
+
+        {draft.productId ? (
+          <section className="min-w-0 rounded-[24px] bg-[#1A1A1A] p-2 sm:p-3">
+            <FragranceEditor productId={draft.productId} defaultOpen allowCopyFromCatalog />
+          </section>
+        ) : (
+          <PanelCard tone="flat" title="Notas e acordes" hint={draft.source?.hasFragrance ? "Vêm do catálogo assim que você salvar." : "Depois de salvar, abre aqui o mesmo editor do catálogo: Fragrantica, acordes e pirâmide."} />
+        )}
+      </PanelScroll>
+
+      <PanelFooter>
+        {draft.id ? (
+          <SoftButton aria-label="Remover da Negociação" icon={<Trash2 className="text-[#FF9A8A]" />} className="w-[52px] px-0" onClick={() => onDelete(draft.id!)} />
+        ) : (
+          <SoftButton icon={<ArrowLeft />} className="w-[52px] px-0 sm:hidden" aria-label="Voltar ao catálogo" onClick={() => setStep("pick")} />
+        )}
+        {draft.id && !dirty ? (
+          <SoftButton className="flex-1" onClick={onClose}>
+            Concluir
+          </SoftButton>
+        ) : (
+          <GoldButton className="flex-1" loading={busy === "save"} disabled={!draft.name.trim() || busy === "photo"} onClick={() => void submit()}>
+            {draft.id ? "Salvar alterações" : "Colocar na vitrine"}
+          </GoldButton>
+        )}
+      </PanelFooter>
+    </>
+  );
+}
+
+/* ─────────────── escolher do catálogo ─────────────── */
+
+function CatalogPicker({ onPick, onBlank, onClose }: { onPick: (h: NegotiationCatalogHit) => void; onBlank: () => void; onClose: () => void }) {
+  const search = useServerFn(searchCatalogForNegotiation);
+  const [term, setTerm] = useState("");
+  const [q, setQ] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const t = setTimeout(() => setQ(term.trim()), 260);
+    return () => clearTimeout(t);
+  }, [term]);
+  useEffect(() => {
+    const t = setTimeout(() => inputRef.current?.focus(), 320);
+    return () => clearTimeout(t);
+  }, []);
+
+  const { data, isFetching, isError, refetch } = useQuery({
+    queryKey: ["negotiation-catalog-search", q],
+    enabled: q.length >= 2,
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
+    queryFn: async () => await search({ data: { q } }),
+  });
+  const hits = q.length >= 2 ? (data?.items ?? []) : [];
+
+  return (
+    <>
+      <PanelHeader title="Adicionar perfume" subtitle="Comece pelo catálogo: nome, foto e notas vêm prontos." onClose={onClose}>
+        <div className="mt-4 flex h-14 items-center gap-3 rounded-full bg-[#1F1F1F] px-5 transition-colors focus-within:bg-[#262626]">
+          {isFetching ? <Loader2 className="size-5 shrink-0 animate-spin text-[#8C8C8C]" /> : <Search className="size-5 shrink-0 text-[#8C8C8C]" />}
+          <input
+            ref={inputRef}
+            value={term}
+            onChange={(e) => setTerm(e.target.value)}
+            placeholder="Procure por nome ou marca"
+            aria-label="Procurar no catálogo"
+            className="pk-field h-full min-w-0 flex-1 bg-transparent text-[16px] text-white outline-none placeholder:text-[#6F6F6F]"
+          />
+          {term ? (
+            <button type="button" onClick={() => setTerm("")} aria-label="Limpar" className="press grid size-8 place-items-center rounded-full text-[#8C8C8C] hover:bg-white/[0.06] hover:text-white">
+              <X className="size-4" />
+            </button>
+          ) : null}
+        </div>
+      </PanelHeader>
+
+      <PanelScroll swapKey={q.length >= 2 ? "r" : "e"}>
+        {q.length < 2 ? (
+          <div className="flex flex-col items-center px-4 py-10 text-center">
+            <span className="grid size-14 place-items-center rounded-full bg-[#1A1A1A] text-[#FFD599]">
+              <Search className="size-6" />
+            </span>
+            <p className="mt-4 text-[16px] font-bold">Qual perfume vai para a vitrine?</p>
+            <p className="mt-1 max-w-xs text-[14px] text-[#8C8C8C]">Digite pelo menos duas letras. Ex.: “khamrah”, “club de nuit”, “lattafa”.</p>
+          </div>
+        ) : isError && !hits.length ? (
+          <div className="px-4 py-10 text-center">
+            <p className="text-[16px] font-bold">Não deu para buscar agora</p>
+            <p className="mt-1 text-[14px] text-[#8C8C8C]">Confira a internet e tente de novo, ou preencha do zero.</p>
+            <SoftButton className="mt-4 h-11" onClick={() => void refetch()}>
+              Tentar de novo
+            </SoftButton>
+          </div>
+        ) : hits.length === 0 && !isFetching ? (
+          <div className="px-4 py-10 text-center">
+            <p className="text-[16px] font-bold">Nada no catálogo com “{q}”</p>
+            <p className="mt-1 text-[14px] text-[#8C8C8C]">Sem problema: preencha do zero.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+            {hits.map((h, i) => (
+              <button
+                key={h.id}
+                type="button"
+                onClick={() => onPick(h)}
+                className="pk-tile pk-in press flex flex-col p-1.5 text-left"
+                style={{ ["--i" as string]: i }}
+              >
+                <span className="relative block aspect-square overflow-hidden rounded-[18px] bg-[#232323]">
+                  {h.imageUrl ? (
+                    <img src={imgVariant(h.imageUrl, "card") ?? ""} alt={h.name} loading="lazy" className="pk-tile-img size-full object-cover" />
+                  ) : (
+                    <span className="grid size-full place-items-center text-[#6F6F6F]">
+                      <Gem className="size-6" strokeWidth={1.6} />
+                    </span>
+                  )}
+                  {h.hasFragrance ? (
+                    <span className="absolute bottom-2 left-2 inline-flex h-6 items-center gap-1 rounded-full bg-black/70 px-2 text-[11px] font-semibold text-[#FFD599]">
+                      <Sparkles className="size-3" /> com notas
+                    </span>
+                  ) : null}
+                </span>
+                <span className="block min-w-0 px-1.5 pt-2.5 pb-1.5">
+                  <span className="block truncate text-[11px] font-semibold tracking-[0.06em] text-[#8C8C8C] uppercase">{h.brand ?? "—"}</span>
+                  <span className="mt-0.5 block truncate text-[14px] leading-tight font-bold">{h.name}</span>
+                  <span className="mt-0.5 block truncate text-[12px] text-[#8C8C8C]">{[h.volumeMl ? `${h.volumeMl} ml` : null, h.concentration].filter(Boolean).join(" · ") || " "}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </PanelScroll>
+
+      <PanelFooter>
+        <button
+          type="button"
+          onClick={onBlank}
+          className="press group flex h-[52px] w-full items-center gap-3 rounded-full bg-[#1F1F1F] pr-3 pl-5 text-left transition-colors hover:bg-[#2A2A2A]"
+        >
+          <PenLine className="size-[18px] text-[#A9A9A9]" />
+          <span className="min-w-0 flex-1 text-[15px] font-semibold">Não está no catálogo? Preencher do zero</span>
+          <span className="grid size-9 place-items-center rounded-full bg-[#2E2E2E] transition-transform duration-300 group-hover:translate-x-0.5">
+            <ArrowRight className="size-4" />
+          </span>
+        </button>
+      </PanelFooter>
+    </>
+  );
+}
+
+/* ─────────────── interesses ─────────────── */
+
+type InterestRow = {
+  id: string;
+  negotiation_item_id: string | null;
+  item_name: string;
+  customer_name: string | null;
+  customer_id: string | null;
+  customer_archived: boolean;
+  created_at: string;
+};
+
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("") || "?";
+
 /**
- * Quem demonstrou interesse, já ligado ao CRM.
- *
- * Uma pessoa = uma ficha (mesmo `customer_id`), com todos os perfumes que ela
- * quis negociar embaixo do nome. Ver, editar e excluir usam exatamente a mesma
- * ficha e o mesmo editor de Admin → Clientes.
+ * Quem demonstrou interesse, já ligado ao CRM. Uma pessoa = uma ficha (mesmo
+ * `customer_id`), com os perfumes embaixo do nome. Ver, editar e excluir usam a
+ * mesma ficha e o mesmo editor de Admin → Clientes.
  */
-function InterestList() {
-  const load = useServerFn(listNegotiationInterests);
+function InterestList({
+  data,
+  loading,
+  items,
+  onOpenItem,
+}: {
+  data: InterestRow[] | undefined;
+  loading: boolean;
+  items: NegotiationItem[];
+  onOpenItem: (it: NegotiationItem) => void;
+}) {
   const removeCustomer = useServerFn(crmCustomerDelete);
   const qc = useQueryClient();
+  const menu = useItemMenu();
   const [openId, setOpenId] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [confirm, setConfirm] = useState<{ id: string; name: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["negotiation-interests"],
-    retry: false,
-    queryFn: async () => await load(),
-  });
-
   const groups = useMemo(() => {
-    const rows = data?.interests ?? [];
-    const out: Array<{
-      key: string;
-      customerId: string | null;
-      name: string;
-      archived: boolean;
-      items: Array<{ id: string; item_id: string | null; item_name: string; created_at: string }>;
-    }> = [];
+    const out: Array<{ key: string; customerId: string | null; name: string; archived: boolean; items: Array<{ id: string; item_id: string | null; item_name: string; created_at: string }> }> = [];
     const index = new Map<string, number>();
-    for (const r of rows) {
+    for (const r of data ?? []) {
       const key = r.customer_id ?? `sem-ficha-${r.id}`;
-      const item = {
-        id: r.id,
-        item_id: r.negotiation_item_id,
-        item_name: r.item_name,
-        created_at: r.created_at,
-      };
+      const item = { id: r.id, item_id: r.negotiation_item_id, item_name: r.item_name, created_at: r.created_at };
       const at = index.get(key);
       if (at == null) {
         index.set(key, out.length);
-        out.push({
-          key,
-          customerId: r.customer_id,
-          name: r.customer_name ?? "Sem nome",
-          archived: r.customer_archived,
-          items: [item],
-        });
-      } else {
-        out[at]!.items.push(item);
-      }
+        out.push({ key, customerId: r.customer_id, name: r.customer_name ?? "Sem nome", archived: r.customer_archived, items: [item] });
+      } else out[at]!.items.push(item);
     }
     return out;
   }, [data]);
 
   const when = (v: string) =>
-    new Date(v).toLocaleString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    new Date(v).toLocaleString("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).replace(".", "");
+
+  const openMenu = (g: (typeof groups)[number], pos: MenuPos) =>
+    menu.open(
+      pos,
+      {
+        title: g.name,
+        subtitle: `${g.items.length} perfume${g.items.length === 1 ? "" : "s"} de interesse`,
+        main: [
+          { key: "ver", label: "Ver cliente", icon: <User />, onSelect: () => (setEditing(false), setOpenId(g.customerId)) },
+          { key: "editar", label: "Editar cliente", icon: <Pencil />, onSelect: () => (setEditing(true), setOpenId(g.customerId)) },
+        ],
+        danger: [{ key: "del", label: "Excluir cliente", icon: <Trash2 />, danger: true, onSelect: () => setConfirm({ id: g.customerId!, name: g.name }) }],
+      },
+      g.key,
+    );
 
   return (
-    <section className="mt-8">
-      <h2 className="text-sm font-semibold">Interesses recebidos</h2>
-      <p className="mt-0.5 text-xs text-muted-foreground">
-        Cada nome é a ficha real do cliente — abra, corrija ou exclua sem sair daqui.
-      </p>
-      {isLoading ? (
-        <div className="mt-3 h-16 animate-pulse rounded-2xl bg-surface-3" />
+    <section className="mt-10">
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <h2 className="text-[22px] font-bold tracking-[-0.02em]">Interesses recebidos</h2>
+          <p className="mt-0.5 text-[14px] text-[#8C8C8C]">Cada nome é a ficha real do cliente.</p>
+        </div>
+      </div>
+      {loading ? (
+        <div className="admin-skeleton mt-4 h-24 rounded-[24px]" />
       ) : groups.length === 0 ? (
-        <p className="mt-3 rounded-2xl border border-border/60 bg-surface-2 p-4 text-sm text-muted-foreground">
+        <div className="dash-card mt-4 flex items-center gap-3 p-5 text-[15px] text-[#A9A9A9]">
+          <span className="grid size-10 place-items-center rounded-full bg-[#232323]">
+            <Users className="size-[18px]" />
+          </span>
           Ninguém demonstrou interesse ainda.
-        </p>
+        </div>
       ) : (
-        <ul className="mt-3 divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/60 bg-surface-2">
-          {groups.map((g) => (
-            <li key={g.key} className="px-3 py-2.5">
-              <div className="flex items-center gap-2">
-                {g.customerId ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditing(false);
-                      setOpenId(g.customerId);
-                    }}
-                    className="press min-w-0 flex-1 truncate text-left text-sm font-medium underline decoration-border underline-offset-4 transition-colors hover:text-primary"
-                  >
-                    {g.name}
-                  </button>
-                ) : (
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{g.name}</span>
-                )}
-                {g.archived ? (
-                  <span className="shrink-0 text-[11px] text-muted-foreground">arquivado</span>
-                ) : null}
-                {g.customerId ? (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        aria-label={`Ações de ${g.name}`}
-                        className="press grid size-10 shrink-0 place-items-center rounded-full border border-border/70 bg-surface-3 text-foreground transition-colors hover:bg-surface-2"
-                      >
-                        <MoreHorizontal className="size-5" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48 rounded-2xl">
-                      <DropdownMenuItem
-                        onClick={() => {
-                          setEditing(false);
-                          setOpenId(g.customerId);
-                        }}
-                      >
-                        <User className="size-4" /> Ver cliente
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => {
-                          setEditing(true);
-                          setOpenId(g.customerId);
-                        }}
-                      >
-                        <Pencil className="size-4" /> Editar cliente
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        className="text-destructive focus:text-destructive"
-                        onClick={() => setConfirm({ id: g.customerId!, name: g.name })}
-                      >
-                        <Trash2 className="size-4" /> Excluir cliente
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                ) : null}
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          {groups.map((g, i) => (
+            <article key={g.key} data-item-id={g.key} className="pk-row pk-in flex gap-3.5 p-4" style={{ ["--i" as string]: i }} onClick={() => g.customerId && (setEditing(false), setOpenId(g.customerId))}>
+              <span className="grid size-11 shrink-0 place-items-center rounded-full bg-[#FFD599] text-[15px] font-bold text-[#15130F]">{initials(g.name)}</span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="min-w-0 flex-1 truncate text-[16px] font-bold">{g.name}</p>
+                  {g.archived ? <span className="shrink-0 rounded-full bg-[#232323] px-2 py-0.5 text-[11px] text-[#8C8C8C]">arquivado</span> : null}
+                  {g.customerId ? <ItemMenuButton size="sm" label={`Ações de ${g.name}`} onOpen={(pos) => openMenu(g, pos)} /> : null}
+                </div>
+                <ul className="mt-2 flex flex-wrap gap-1.5">
+                  {g.items.map((it) => {
+                    const target = items.find((x) => x.id === it.item_id);
+                    return (
+                      <li key={it.id}>
+                        <button
+                          type="button"
+                          disabled={!target}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (target) onOpenItem(target);
+                          }}
+                          className="press inline-flex h-8 max-w-full items-center gap-2 rounded-full bg-[#232323] pr-3 pl-3 text-[12.5px] transition-colors enabled:hover:bg-[#2C2C2C] disabled:cursor-default"
+                        >
+                          <span className="truncate font-semibold text-white">{it.item_name}</span>
+                          <span className="shrink-0 text-[#8C8C8C]">{when(it.created_at)}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
-              <ul className="mt-1 space-y-0.5">
-                {g.items.map((it) => (
-                  <li key={it.id} className="flex items-baseline gap-2 text-xs text-muted-foreground">
-                    <span className="min-w-0 flex-1 truncate">{it.item_name}</span>
-                    <span className="shrink-0 text-[11px]">{when(it.created_at)}</span>
-                  </li>
-                ))}
-              </ul>
-            </li>
+            </article>
           ))}
-        </ul>
+        </div>
       )}
 
+      {menu.node}
       {/* mesma ficha e mesmo editor de Admin → Clientes */}
       <CustomerSheet id={openId} openEditor={editing} onClose={() => setOpenId(null)} />
 
       <AlertDialog open={!!confirm} onOpenChange={(v) => !v && setConfirm(null)}>
-        <AlertDialogContent className="max-w-[min(92vw,26rem)] rounded-2xl">
+        <AlertDialogContent className="max-w-[min(92vw,26rem)] rounded-[28px]">
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir este cliente?</AlertDialogTitle>
             <AlertDialogDescription>
-              A ficha de {confirm?.name ?? "este cliente"} sai da área de Clientes. Os pedidos já
-              feitos continuam guardados.
+              A ficha de {confirm?.name ?? "este cliente"} sai da área de Clientes. Os pedidos já feitos continuam guardados.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -506,356 +1199,5 @@ function InterestList() {
         </AlertDialogContent>
       </AlertDialog>
     </section>
-  );
-}
-
-/**
- * Painel inferior de cadastro/edição.
- *
- * O teclado virtual do iOS não altera o layout viewport, então a altura e a
- * posição seguem o visual viewport. Com o teclado aberto o gesto de arrastar
- * para fechar fica desativado, para o scroll do formulário não fechar o painel.
- * O rascunho vive no componente pai, portanto nada digitado é perdido.
- */
-function NegotiationDrawer({
-  draft,
-  setDraft,
-  close,
-  refresh,
-}: {
-  draft: Draft | null;
-  setDraft: (d: Draft) => void;
-  close: () => void;
-  refresh: () => void;
-}) {
-  const open = draft !== null;
-  const vv = useVisualViewport(open);
-
-  const style: React.CSSProperties = vv.supported
-    ? vv.isKeyboardOpen
-      ? { height: vv.height, maxHeight: vv.height, bottom: vv.keyboardOffset }
-      : { maxHeight: Math.round(vv.height * 0.92) }
-    : {};
-
-  return (
-    <Drawer
-      open={open}
-      onOpenChange={(o) => !o && close()}
-      repositionInputs={false}
-      dismissible={!vv.isKeyboardOpen}
-    >
-      <DrawerContent
-        style={style}
-        className={cn(
-          "flex min-h-0 flex-col overflow-hidden",
-          !vv.supported && "max-h-[92dvh]",
-        )}
-      >
-        <DrawerHeader className="shrink-0 pb-2">
-          <DrawerTitle>{draft?.id ? "Editar perfume" : "Adicionar perfume"}</DrawerTitle>
-        </DrawerHeader>
-        {draft ? (
-          <NegotiationForm
-            draft={draft}
-            setDraft={setDraft}
-            keyboardOpen={vv.isKeyboardOpen}
-            onSaved={refresh}
-            onDone={() => {
-              close();
-              refresh();
-            }}
-          />
-        ) : null}
-      </DrawerContent>
-    </Drawer>
-  );
-}
-
-
-function NegotiationForm({
-  draft,
-  setDraft,
-  keyboardOpen,
-  onSaved,
-  onDone,
-}: {
-  draft: Draft;
-  setDraft: (d: Draft) => void;
-  keyboardOpen: boolean;
-  onSaved: () => void;
-  onDone: () => void;
-}) {
-  const save = useServerFn(saveNegotiationItem);
-  const upload = useServerFn(uploadNegotiationPhoto);
-  const dropPhoto = useServerFn(removeNegotiationPhoto);
-  const fileRef = useRef<HTMLInputElement | null>(null);
-
-  const [busy, setBusy] = useState<null | "photo" | "save">(null);
-
-  const set = (patch: Partial<Draft>) => setDraft({ ...draft, ...patch });
-
-  const pickPhoto = async (file: File) => {
-    setBusy("photo");
-    try {
-      // Foto do celular entra grande e em JPEG: convertemos aqui para WebP de
-      // alta qualidade (principal + versão do card) antes de enviar.
-      const optimized = await optimizePhoto(file);
-      const res = await upload({
-        data: { base64: optimized.main, contentType: "image/webp", cardBase64: optimized.card },
-      });
-      const old = draft.imagePath;
-      set({ imagePath: res.path });
-      if (old) await dropPhoto({ data: { path: old } });
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const submit = async () => {
-    setBusy("save");
-    try {
-      const res = await save({
-        data: {
-          id: draft.id,
-          name: draft.name,
-          brand: draft.brand,
-          volumeMl: draft.volume ? Number(draft.volume) : null,
-          description: draft.description,
-          conditionNote: draft.conditionNote,
-          status: draft.status,
-          showWhenNegotiating: draft.showWhenNegotiating,
-          imageUrl: draft.imagePath,
-          priority: Number(draft.priority) || 0,
-        },
-      });
-      set({ id: res.id, productId: res.productId ?? draft.productId });
-      onSaved();
-      toast.success(
-        draft.productId
-          ? "Perfume salvo na Negociação."
-          : "Perfume salvo. Agora complete as informações olfativas abaixo.",
-      );
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const photo = negotiationPhoto(draft.imagePath);
-
-  // mantém o campo tocado visível acima do teclado, sem pulos
-  const onFieldFocus = (event: React.FocusEvent<HTMLDivElement>) => {
-    const target = event.target as HTMLElement;
-    if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) return;
-    window.setTimeout(() => {
-      target.scrollIntoView({ block: "center", behavior: "smooth" });
-    }, 320);
-  };
-
-
-
-  return (
-    <div
-      onFocus={onFieldFocus}
-      data-vaul-no-drag=""
-      className={cn(
-        "min-h-0 flex-1 touch-pan-y space-y-5 overflow-y-auto overscroll-contain px-4",
-        keyboardOpen ? "pb-6" : "pb-[calc(1.5rem+env(safe-area-inset-bottom))]",
-      )}
-    >
-
-      {/* Foto real do item — câmera ou galeria */}
-      <div>
-        <Label className="text-sm">Foto do perfume</Label>
-        <div className="mt-2 flex items-center gap-3">
-          <div className="size-24 shrink-0 overflow-hidden rounded-2xl border border-border/60 bg-surface-3">
-            {photo ? (
-              <img src={photo} alt="Foto do perfume" className="size-full object-cover" />
-            ) : (
-              <div className="grid size-full place-items-center text-muted-foreground">
-                <ImagePlus className="size-5" />
-              </div>
-            )}
-          </div>
-          <div className="flex flex-col gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="press h-10 rounded-full px-4 text-xs"
-              disabled={busy === "photo"}
-              onClick={() => fileRef.current?.click()}
-            >
-              {busy === "photo" ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />}
-              {photo ? "Trocar foto" : "Escolher foto"}
-            </Button>
-            {photo ? (
-              <Button
-                type="button"
-                variant="ghost"
-                className="press h-9 rounded-full px-4 text-xs text-muted-foreground"
-                onClick={async () => {
-                  const old = draft.imagePath;
-                  set({ imagePath: null });
-                  if (old) await dropPhoto({ data: { path: old } });
-                }}
-              >
-                <X className="size-3.5" /> Remover foto
-              </Button>
-            ) : null}
-          </div>
-        </div>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            e.target.value = "";
-            if (file) void pickPhoto(file);
-          }}
-        />
-      </div>
-
-      <Field label="Nome do perfume">
-        <Input
-          className="h-11"
-          value={draft.name}
-          onChange={(e) => set({ name: e.target.value })}
-          placeholder="Ex.: Khamrah"
-        />
-      </Field>
-
-      <Field label="Marca">
-        <Input
-          className="h-11"
-          value={draft.brand}
-          onChange={(e) => set({ brand: e.target.value })}
-          placeholder="Ex.: Lattafa"
-        />
-      </Field>
-
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Volume (ml)">
-          <Input
-            className="h-11"
-            inputMode="numeric"
-            value={draft.volume}
-            onChange={(e) => set({ volume: e.target.value.replace(/\D/g, "") })}
-            placeholder="100"
-          />
-        </Field>
-        <Field label="Ordem (maior primeiro)">
-          <Input
-            className="h-11"
-            inputMode="numeric"
-            value={draft.priority}
-            onChange={(e) => set({ priority: e.target.value.replace(/[^\d-]/g, "") })}
-          />
-        </Field>
-      </div>
-
-      <Field label="Estado do frasco">
-        <Input
-          className="h-11"
-          value={draft.conditionNote}
-          onChange={(e) => set({ conditionNote: e.target.value })}
-          placeholder="Praticamente cheio"
-        />
-      </Field>
-
-      <Field label="Situação">
-        <div className="flex flex-wrap gap-2">
-          {STATUSES.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => set({ status: s })}
-              className={
-                "press h-10 rounded-full border px-4 text-xs " +
-                (draft.status === s
-                  ? "border-foreground bg-foreground text-background"
-                  : "border-border/70 text-muted-foreground")
-              }
-            >
-              {NEGOTIATION_STATUS_LABEL[s]}
-            </button>
-          ))}
-        </div>
-      </Field>
-
-      {draft.status === "NEGOTIATING" ? (
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="size-4"
-            checked={draft.showWhenNegotiating}
-            onChange={(e) => set({ showWhenNegotiating: e.target.checked })}
-          />
-          Continuar aparecendo com o selo “Em negociação”
-        </label>
-      ) : null}
-
-      <Field label="Descrição">
-        <Textarea
-          rows={4}
-          value={draft.description}
-          onChange={(e) => set({ description: e.target.value })}
-          placeholder="Conte em poucas linhas o estado do frasco e o que faz esse perfume valer a pena."
-        />
-      </Field>
-
-      {/* Informações olfativas: exatamente o mesmo sistema dos perfumes do catálogo */}
-      {draft.productId ? (
-        <FragranceEditor productId={draft.productId} defaultOpen allowCopyFromCatalog />
-      ) : (
-        <div className="rounded-2xl border border-border/60 bg-surface-2 p-4">
-          <p className="text-sm font-medium">Informações olfativas</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Salve o perfume primeiro. Em seguida abre aqui o mesmo bloco dos perfumes do
-            catálogo: link do Fragrantica, colar conteúdo, acordes, pirâmide e imagens das notas.
-          </p>
-        </div>
-      )}
-
-      <div className="space-y-2">
-        <Button
-          className="press h-12 w-full rounded-full text-sm font-semibold"
-          disabled={busy === "save" || !draft.name.trim()}
-          onClick={() => void submit()}
-        >
-          {busy === "save" ? <Loader2 className="size-4 animate-spin" /> : null} Salvar perfume
-        </Button>
-        {draft.productId ? (
-          <Button
-            variant="outline"
-            className="press h-11 w-full rounded-full text-sm"
-            onClick={onDone}
-          >
-            Concluir
-          </Button>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function Field({
-  label,
-  children,
-  className,
-}: {
-  label: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={className}>
-      <Label className="text-sm">{label}</Label>
-      <div className="mt-2">{children}</div>
-    </div>
   );
 }

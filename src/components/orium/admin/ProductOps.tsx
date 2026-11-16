@@ -85,15 +85,15 @@ function useSaver() {
 
 function Section({ title, subtitle, right, children }: { title: string; subtitle?: string; right?: ReactNode; children: ReactNode }) {
   return (
-    <section className="min-w-0 rounded-2xl border border-border/60 bg-card p-4">
+    <section className="min-w-0 rounded-[24px] bg-[#1A1A1A] p-4 sm:p-5">
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="text-sm font-semibold">{title}</h3>
-          {subtitle ? <p className="text-xs text-muted-foreground">{subtitle}</p> : null}
+          <h3 className="text-[16px] leading-tight font-bold">{title}</h3>
+          {subtitle ? <p className="mt-1 text-[13px] leading-snug text-[#8C8C8C]">{subtitle}</p> : null}
         </div>
         {right}
       </div>
-      <div className="mt-3 min-w-0">{children}</div>
+      <div className="mt-4 min-w-0">{children}</div>
     </section>
   );
 }
@@ -101,7 +101,7 @@ function Section({ title, subtitle, right, children }: { title: string; subtitle
 export function Stepper({ value, onChange, min = 0 }: { value: number; onChange: (v: number) => void; min?: number }) {
   return (
     <div className="flex items-center gap-2">
-      <Button type="button" variant="outline" size="icon" className="size-11 rounded-full" disabled={value <= min} onClick={() => onChange(Math.max(min, value - 1))} aria-label="Diminuir">
+      <Button type="button" variant="ghost" size="icon" className="size-12 rounded-full bg-[#232323] text-white hover:bg-[#2C2C2C] hover:text-white" disabled={value <= min} onClick={() => onChange(Math.max(min, value - 1))} aria-label="Diminuir">
         <Minus className="size-4" />
       </Button>
       <input
@@ -109,9 +109,9 @@ export function Stepper({ value, onChange, min = 0 }: { value: number; onChange:
         aria-label="Quantidade"
         value={String(value)}
         onChange={(e) => onChange(Math.max(min, Number(e.target.value.replace(/\D/g, "") || 0)))}
-        className="h-11 w-20 rounded-xl border bg-background text-center text-base tabular-nums"
+        className="h-12 w-20 pk-field rounded-[16px] bg-[#232323] text-center text-[18px] font-bold text-white tabular-nums outline-none transition-colors focus:bg-[#2A2A2A]"
       />
-      <Button type="button" variant="outline" size="icon" className="size-11 rounded-full" onClick={() => onChange(value + 1)} aria-label="Aumentar">
+      <Button type="button" variant="ghost" size="icon" className="size-12 rounded-full bg-[#232323] text-white hover:bg-[#2C2C2C] hover:text-white" onClick={() => onChange(value + 1)} aria-label="Aumentar">
         <Plus className="size-4" />
       </Button>
     </div>
@@ -130,16 +130,16 @@ export function ModePicker({ value, onChange, disabled }: { value: AvailMode; on
           disabled={disabled}
           onClick={() => onChange(k)}
           className={cn(
-            "press flex min-h-12 min-w-0 items-center gap-3 rounded-xl border px-3 py-2 text-left",
-            value === k ? "border-primary bg-primary/10" : "border-border/60",
+            "pk-choice press flex min-h-14 min-w-0 items-center gap-3 rounded-[18px] px-4 py-2.5 text-left",
+            value === k ? "bg-white text-[#15130F]" : "bg-[#232323] hover:bg-[#2A2A2A]",
           )}
         >
-          <span className={cn("grid size-4 shrink-0 place-items-center rounded-full border", value === k ? "border-primary" : "border-muted-foreground/50")}>
-            {value === k ? <span className="size-2 rounded-full bg-primary" /> : null}
+          <span className={cn("grid size-4 shrink-0 place-items-center rounded-full border", value === k ? "border-[#15130F]" : "border-[#6F6F6F]")}>
+            {value === k ? <span className="size-2 rounded-full bg-[#15130F]" /> : null}
           </span>
           <span className="min-w-0">
-            <span className="block text-sm font-medium">{label}</span>
-            <span className="block text-xs text-muted-foreground">{hint}</span>
+            <span className="block text-[14.5px] font-bold">{label}</span>
+            <span className="block text-[12.5px] leading-snug opacity-60">{hint}</span>
           </span>
         </button>
       ))}
@@ -168,7 +168,7 @@ export function StockTab({ productId }: { productId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s?.localStock, s?.mode]);
 
-  if (!s) return <div className="h-40 animate-pulse rounded-2xl bg-muted" />;
+  if (!s) return <div className="h-40 admin-skeleton rounded-[24px]" />;
 
   const result = op === "set" ? qty : op === "add" ? s.localStock + qty : s.localStock - qty;
   const negative = result < 0;
@@ -196,7 +196,7 @@ export function StockTab({ productId }: { productId: string }) {
   return (
     <div className="min-w-0 space-y-4">
       <Section title="Estoque da Orium" subtitle="Somente o estoque físico da loja. Não inclui fornecedores." right={<SaveBadge state={stockSaver.state} />}>
-        <p className="text-3xl font-semibold tabular-nums">
+        <p className="text-[40px] leading-none font-bold tracking-[-0.04em] tabular-nums">
           {s.localStock} <span className="text-sm font-normal text-muted-foreground">frasco(s) lacrado(s)</span>
         </p>
         {s.saleMode !== "FULL" && s.decantAvailable ? (
@@ -220,7 +220,7 @@ export function StockTab({ productId }: { productId: string }) {
                 setOp(k);
                 setQty(k === "set" ? s.localStock : 1);
               }}
-              className={cn("press min-h-10 rounded-full border px-4 text-sm", op === k ? "border-foreground bg-foreground text-background" : "border-border/60 text-muted-foreground")}
+              className={cn("press h-10 rounded-full px-4 text-[13.5px] font-semibold transition-colors duration-200", op === k ? "bg-white text-[#15130F]" : "bg-[#232323] text-[#A9A9A9] hover:bg-[#2A2A2A] hover:text-white")}
             >
               {l}
             </button>
@@ -243,7 +243,7 @@ export function StockTab({ productId }: { productId: string }) {
               key={r}
               type="button"
               onClick={() => setReason(reason === r ? null : r)}
-              className={cn("press min-h-8 rounded-full border px-3 text-xs", reason === r ? "border-primary bg-primary/10 text-primary" : "border-border/60 text-muted-foreground")}
+              className={cn("press h-8 rounded-full px-3 text-[12.5px] font-semibold transition-colors duration-200", reason === r ? "bg-[#FFD599] text-[#15130F]" : "bg-[#232323] text-[#8C8C8C] hover:text-white")}
             >
               {r}
             </button>
@@ -251,21 +251,21 @@ export function StockTab({ productId }: { productId: string }) {
         </div>
 
         {confirming ? (
-          <div className="mt-4 rounded-xl border border-border/60 bg-muted/30 p-3">
+          <div className="mt-4 adm-pop rounded-[18px] bg-[#232323] p-4">
             <p className="text-sm">
               Estoque Orium: <span className="font-semibold tabular-nums">{s.localStock} → {result}</span>
             </p>
             <div className="mt-3 flex gap-2">
-              <Button variant="outline" className="h-11 flex-1 rounded-full" onClick={() => setConfirming(false)}>
+              <Button variant="ghost" className="h-11 flex-1 rounded-full bg-[#2E2E2E] font-semibold text-white hover:bg-[#383838]" onClick={() => setConfirming(false)}>
                 Cancelar
               </Button>
-              <Button className="h-11 flex-1 rounded-full" disabled={stockSaver.state === "saving"} onClick={saveStock}>
+              <Button className="h-11 flex-1 rounded-full bg-[#FFD599] font-bold text-[#15130F] hover:bg-[#FFDDAA]" disabled={stockSaver.state === "saving"} onClick={saveStock}>
                 Confirmar
               </Button>
             </div>
           </div>
         ) : (
-          <Button className="mt-4 h-11 w-full rounded-full sm:w-auto sm:px-8" disabled={!changed || negative} onClick={() => setConfirming(true)}>
+          <Button className="mt-4 h-12 w-full rounded-full sm:w-auto sm:px-8 bg-[#FFD599] font-bold text-[#15130F] hover:bg-[#FFDDAA]" disabled={!changed || negative} onClick={() => setConfirming(true)}>
             Salvar estoque
           </Button>
         )}
@@ -291,11 +291,11 @@ export function StockTab({ productId }: { productId: string }) {
             <AlertTriangle className="size-3.5" /> Bloqueado manualmente.
           </p>
         ) : null}
-        <p className="mt-4 mb-2 text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">Disponibilidade do frasco</p>
+        <p className="mt-5 mb-2.5 text-[13px] font-semibold text-[#A9A9A9]">Disponibilidade do frasco</p>
         <ModePicker value={mode} onChange={(m) => m !== mode && saveMode(m)} disabled={availSaver.state === "saving"} />
         {s.saleMode !== "FULL" ? (
           <p className="mt-3 text-xs text-muted-foreground">
-            Decant: {s.decantAvailable ? "disponível" : "desligado"} (ajuste na aba Venda).
+            Decant: {s.decantAvailable ? "disponível" : "desligado"} (ajuste em Preço e estoque).
           </p>
         ) : null}
       </Section>
@@ -324,7 +324,7 @@ export function PricingTab({ productId }: { productId: string }) {
     setDec({ d2: s.decant.d2 != null ? String(s.decant.d2) : "", d5: s.decant.d5 != null ? String(s.decant.d5) : "", d10: s.decant.d10 != null ? String(s.decant.d10) : "" });
   }, [s]);
 
-  if (!s) return <div className="h-40 animate-pulse rounded-2xl bg-muted" />;
+  if (!s) return <div className="h-40 admin-skeleton rounded-[24px]" />;
 
   const val = (v: string) => (v.trim() === "" ? null : Number(v.replace(",", ".")));
   const pixN = val(pix);
@@ -360,7 +360,7 @@ export function PricingTab({ productId }: { productId: string }) {
     if (ok) await refresh();
   };
 
-  const inputCls = "h-11 w-full min-w-0 rounded-xl border bg-background px-3 text-base tabular-nums disabled:opacity-60";
+  const inputCls = "h-12 w-full min-w-0 pk-field rounded-[16px] bg-[#232323] px-4 text-base text-white tabular-nums outline-none transition-colors placeholder:text-[#6F6F6F] focus:bg-[#2A2A2A] disabled:opacity-60";
 
   return (
     <div className="min-w-0 space-y-4">
@@ -377,10 +377,10 @@ export function PricingTab({ productId }: { productId: string }) {
                 key={l}
                 type="button"
                 onClick={() => (k === false && s.customRetail ? setPreview("auto") : setCustom(k))}
-                className={cn("press min-h-12 rounded-xl border px-3 py-2 text-left", custom === k ? "border-primary bg-primary/10" : "border-border/60")}
+                className={cn("pk-choice press min-h-14 rounded-[18px] px-4 py-2.5 text-left", custom === k ? "bg-white text-[#15130F]" : "bg-[#232323] hover:bg-[#2A2A2A]")}
               >
-                <span className="block text-sm font-medium">{l}</span>
-                <span className="block text-xs text-muted-foreground">{h}</span>
+                <span className="block text-[14.5px] font-bold">{l}</span>
+                <span className="block text-[12.5px] leading-snug opacity-60">{h}</span>
               </button>
             ))}
           </div>
@@ -388,7 +388,7 @@ export function PricingTab({ productId }: { productId: string }) {
           <Tag>Produto manual · preço sempre definido por você</Tag>
         )}
 
-        <div className="mt-3 divide-y divide-border/50 text-sm">
+        <div className="mt-3 divide-y divide-white/[0.06] text-sm">
           <Row label="Preço automático" value={brl(s.auto?.retail)} />
           <Row label="Custo" value={brl(s.cost)} />
         </div>
@@ -408,7 +408,7 @@ export function PricingTab({ productId }: { productId: string }) {
           </div>
         ) : null}
 
-        <div className="mt-3 divide-y divide-border/50 text-sm">
+        <div className="mt-3 divide-y divide-white/[0.06] text-sm">
           <Row label="Preço no Pix" value={brl(custom ? pixN : s.retail)} strong />
           <Row label="Preço no cartão" value={brl(custom ? card : s.retail ? getPaymentPricing(s.retail, payment).cardPrice : null)} />
           <Row label="Lucro bruto" value={brl(custom ? profit : s.retail != null && s.cost != null ? s.retail - s.cost : null)} />
@@ -433,12 +433,12 @@ export function PricingTab({ productId }: { productId: string }) {
         ) : (
           <div className="mt-4 flex flex-wrap gap-2">
             {custom ? (
-              <Button className="h-11 rounded-full px-6" disabled={!pixN || (pixN === s.retail && val(wholesale) === s.wholesale)} onClick={() => setPreview("custom")}>
+              <Button className="h-12 rounded-full px-6 bg-[#FFD599] font-bold text-[#15130F] hover:bg-[#FFDDAA]" disabled={!pixN || (pixN === s.retail && val(wholesale) === s.wholesale)} onClick={() => setPreview("custom")}>
                 Revisar e salvar
               </Button>
             ) : null}
             {s.customRetail && !s.manualPricing ? (
-              <Button variant="outline" className="h-11 rounded-full px-6" onClick={() => setPreview("auto")}>
+              <Button variant="ghost" className="h-12 rounded-full px-6 bg-[#232323] font-semibold text-white hover:bg-[#2C2C2C]" onClick={() => setPreview("auto")}>
                 Voltar ao preço automático
               </Button>
             ) : null}
@@ -471,17 +471,17 @@ export function PricingTab({ productId }: { productId: string }) {
 
 function Confirm({ lines, onCancel, onConfirm, busy }: { lines: string[]; onCancel: () => void; onConfirm: () => void; busy: boolean }) {
   return (
-    <div className="mt-4 rounded-xl border border-border/60 bg-muted/30 p-3">
+    <div className="mt-4 adm-pop rounded-[18px] bg-[#232323] p-4">
       {lines.map((l) => (
         <p key={l} className="text-sm tabular-nums">
           {l}
         </p>
       ))}
       <div className="mt-3 flex gap-2">
-        <Button variant="outline" className="h-11 flex-1 rounded-full" onClick={onCancel}>
+        <Button variant="ghost" className="h-11 flex-1 rounded-full bg-[#2E2E2E] font-semibold text-white hover:bg-[#383838]" onClick={onCancel}>
           Cancelar
         </Button>
-        <Button className="h-11 flex-1 rounded-full" disabled={busy} onClick={onConfirm}>
+        <Button className="h-11 flex-1 rounded-full bg-[#FFD599] font-bold text-[#15130F] hover:bg-[#FFDDAA]" disabled={busy} onClick={onConfirm}>
           Confirmar
         </Button>
       </div>
@@ -501,7 +501,7 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
 /** Aba FORNECEDORES: ofertas separadas do estoque Orium. */
 export function SuppliersTab({ productId }: { productId: string }) {
   const { data: s } = useProductState(productId);
-  if (!s) return <div className="h-40 animate-pulse rounded-2xl bg-muted" />;
+  if (!s) return <div className="h-40 admin-skeleton rounded-[24px]" />;
   type Offer = { id: string; supplier: string; name: string; price: number | null; inStock: boolean; syncedAt: string | null };
   const offers = s.offers as Offer[];
   const priced = offers.filter((o) => o.price != null);
@@ -511,7 +511,7 @@ export function SuppliersTab({ productId }: { productId: string }) {
       {offers.length === 0 ? (
         <p className="text-sm text-muted-foreground">Nenhum fornecedor vinculado.</p>
       ) : (
-        <ul className="min-w-0 divide-y divide-border/50">
+        <ul className="min-w-0 divide-y divide-white/[0.06]">
           {offers.map((o) => (
             <li key={o.id} className="flex min-w-0 items-start justify-between gap-3 py-3">
               <div className="min-w-0">
@@ -569,10 +569,10 @@ export type QuickKind = "stock" | "availability" | "price";
 export function QuickEditSheet({ productId, name, kind, onClose }: { productId: string; name: string; kind: QuickKind | null; onClose: () => void }) {
   return (
     <Drawer open={kind !== null} onOpenChange={(o) => !o && onClose()}>
-      <DrawerContent className="max-h-[90vh] border-border/60">
-        <DrawerTitle className="px-5 pt-3 text-base">
+      <DrawerContent className="max-h-[90vh] border-0 bg-[#121212] text-white">
+        <DrawerTitle className="px-5 pt-4 text-[22px] font-bold tracking-[-0.02em]">
           {kind === "stock" ? "Ajustar estoque" : kind === "availability" ? "Disponibilidade" : "Alterar preço"}
-          <span className="block truncate text-xs font-normal text-muted-foreground">{name}</span>
+          <span className="mt-0.5 block truncate text-[14px] font-normal tracking-normal text-[#8C8C8C]">{name}</span>
         </DrawerTitle>
         <div className="min-h-0 min-w-0 overflow-y-auto px-4 py-3 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
           {kind === "stock" ? <QuickStock productId={productId} onDone={onClose} /> : null}
@@ -590,7 +590,7 @@ function QuickStock({ productId, onDone }: { productId: string; onDone: () => vo
   const setStock = useServerFn(productSetLocalStock);
   const saver = useSaver();
   const [qty, setQty] = useState<number | null>(null);
-  if (!s) return <div className="h-24 animate-pulse rounded-2xl bg-muted" />;
+  if (!s) return <div className="h-24 admin-skeleton rounded-[24px]" />;
   const v = qty ?? s.localStock;
   return (
     <div className="space-y-4">
@@ -600,7 +600,7 @@ function QuickStock({ productId, onDone }: { productId: string; onDone: () => vo
       <Stepper value={v} onChange={setQty} />
       {v !== s.localStock ? <p className="text-sm tabular-nums">{s.localStock} → {v}</p> : null}
       <Button
-        className="h-12 w-full rounded-full"
+        className="h-[52px] w-full rounded-full text-[15px] bg-[#FFD599] font-bold text-[#15130F] hover:bg-[#FFDDAA]"
         disabled={v === s.localStock || saver.state === "saving"}
         onClick={async () => {
           const ok = await saver.run(() => setStock({ data: { productId, mode: "set", quantity: v, reason: "Ajuste rápido" } }));
@@ -623,7 +623,7 @@ function QuickAvailability({ productId, onDone }: { productId: string; onDone: (
   const setAvail = useServerFn(productSetAvailability);
   const saver = useSaver();
   const [mode, setMode] = useState<AvailMode | null>(null);
-  if (!s) return <div className="h-24 animate-pulse rounded-2xl bg-muted" />;
+  if (!s) return <div className="h-24 admin-skeleton rounded-[24px]" />;
   const m = mode ?? (s.mode as AvailMode);
   return (
     <div className="space-y-4">
@@ -632,7 +632,7 @@ function QuickAvailability({ productId, onDone }: { productId: string; onDone: (
         <p className="text-xs text-warning">Disponibilidade manual ativa sem estoque registrado.</p>
       ) : null}
       <Button
-        className="h-12 w-full rounded-full"
+        className="h-[52px] w-full rounded-full text-[15px] bg-[#FFD599] font-bold text-[#15130F] hover:bg-[#FFDDAA]"
         disabled={m === s.mode || saver.state === "saving"}
         onClick={async () => {
           const ok = await saver.run(() => setAvail({ data: { productIds: [productId], mode: m } }));
@@ -657,7 +657,7 @@ function QuickPrice({ productId, onDone }: { productId: string; onDone: () => vo
   const saver = useSaver();
   const [v, setV] = useState("");
   const [review, setReview] = useState(false);
-  if (!s) return <div className="h-24 animate-pulse rounded-2xl bg-muted" />;
+  if (!s) return <div className="h-24 admin-skeleton rounded-[24px]" />;
   const n = v.trim() ? Number(v.replace(",", ".")) : null;
   const profit = n != null && s.cost != null ? n - s.cost : null;
   return (
@@ -667,7 +667,7 @@ function QuickPrice({ productId, onDone }: { productId: string; onDone: () => vo
       </p>
       <label className="block space-y-1 text-xs text-muted-foreground">
         Novo preço Pix (R$)
-        <input inputMode="decimal" value={v} onChange={(e) => { setV(e.target.value); setReview(false); }} className="h-12 w-full rounded-xl border bg-background px-3 text-base tabular-nums" />
+        <input inputMode="decimal" value={v} onChange={(e) => { setV(e.target.value); setReview(false); }} className="mt-1.5 h-12 w-full pk-field rounded-[16px] bg-[#232323] px-4 text-base text-white tabular-nums outline-none transition-colors focus:bg-[#2A2A2A]" />
       </label>
       {n ? (
         <p className="text-sm text-muted-foreground">
@@ -676,7 +676,7 @@ function QuickPrice({ productId, onDone }: { productId: string; onDone: () => vo
       ) : null}
       {review && n ? <p className="text-sm tabular-nums">{brl(s.retail)} → {brl(n)}</p> : null}
       <Button
-        className="h-12 w-full rounded-full"
+        className="h-[52px] w-full rounded-full text-[15px] bg-[#FFD599] font-bold text-[#15130F] hover:bg-[#FFDDAA]"
         disabled={!n || n <= 0 || n === s.retail || saver.state === "saving"}
         onClick={async () => {
           if (!review) return setReview(true);

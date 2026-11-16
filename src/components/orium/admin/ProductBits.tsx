@@ -1,11 +1,9 @@
-import { memo, useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { AlertTriangle, ChevronDown, ImageOff, Search, X } from "lucide-react";
+import { ImageOff, Search, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 import { AdminMore, type AdminAction } from "@/components/orium/admin/AdminUI";
-import { brl } from "@/lib/format";
 import { TYPE_LABEL, GENDER_LABEL, ALLOWED_TYPES, type ProductType, type Gender } from "@/lib/catalog/classify";
 import { cn } from "@/lib/utils";
 
@@ -78,138 +76,6 @@ export function ProductThumb({ src, alt, size = 56 }: { src: string | null; alt:
   );
 }
 
-/** Linha “Que produto é esse?” em duas segundos: foto, nome, marca, preço, estado. */
-export const ProductListCard = memo(function ProductListCard({
-  product: p,
-  issues,
-  price,
-  promoFrom,
-  customPrice,
-  ops,
-  checked,
-  busy,
-  onCheck,
-  onEdit,
-  actions,
-}: {
-  product: ProductRowData;
-  issues: ProductIssueLite[];
-  /** preço final que o cliente vê hoje, no Pix */
-  price: number | null;
-  /** preço antes da promoção, quando houver campanha ativa */
-  promoFrom?: number | null;
-  customPrice?: boolean;
-  /** estado interno de disponibilidade (somente Admin) */
-  ops?: { source: string; localStock: number; manual: boolean };
-  checked: boolean;
-  busy?: boolean;
-  onCheck: (v: boolean) => void;
-  onEdit: () => void;
-  actions: AdminAction[];
-}) {
-  const [showIssues, setShowIssues] = useState(false);
-  const hidden = !(p.active && p.catalog_eligible);
-  const needsReview = issues.some((i) => i.severity <= 2);
-
-  return (
-    <article
-      className={cn(
-        "min-w-0 rounded-2xl border border-border/60 bg-card p-3 transition-colors",
-        checked && "border-foreground/50 bg-foreground/[0.04]",
-        busy && "opacity-60",
-      )}
-    >
-      <div className="flex min-w-0 gap-3">
-        <div className="-m-1 grid size-11 shrink-0 place-items-center rounded-xl">
-          <Checkbox
-            checked={checked}
-            onCheckedChange={(v) => onCheck(v === true)}
-            aria-label={checked ? "Remover da seleção" : "Selecionar produto"}
-            className="size-5"
-          />
-        </div>
-
-
-        <ProductThumb src={p.image_url} alt={p.canonical_name} />
-
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{p.canonical_name}</p>
-          <p className="truncate text-xs text-muted-foreground">{p.brand ?? "Marca não identificada"}</p>
-          <p className="truncate text-xs text-muted-foreground">
-            {[
-              TYPE_LABEL[(p.product_type as ProductType) ?? "UNKNOWN"],
-              p.product_type === "PERFUME" ? GENDER_LABEL[(p.gender_norm as Gender) ?? "UNKNOWN"] : null,
-              p.volume_ml ? `${p.volume_ml} ml` : null,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </p>
-
-          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-            <p className="min-w-0 text-sm font-semibold tabular-nums">
-              {promoFrom != null ? (
-                <span className="mr-1.5 text-xs font-normal text-muted-foreground line-through">{brl(promoFrom)}</span>
-              ) : null}
-              {price != null ? brl(price) : "Sem preço"}
-              {price != null ? <span className="ml-1 text-[11px] font-normal text-muted-foreground"> no Pix</span> : null}
-
-            </p>
-            {hidden ? (
-              <Tag>Oculto</Tag>
-            ) : !p.in_stock ? (
-              <Tag>{ops?.source === "blocked" ? "Indisponível · manual" : "Indisponível"}</Tag>
-            ) : ops?.source === "local" || ops?.source === "manual" ? (
-              <Tag tone="ok">Pronta entrega{ops.localStock > 0 ? ` · ${ops.localStock} un.` : ""}</Tag>
-            ) : ops?.source === "supplier" ? (
-              <Tag tone="ok">Sob encomenda</Tag>
-            ) : (
-              <Tag tone="ok">Disponível</Tag>
-            )}
-            {ops?.manual ? <Tag tone="warn">Manual</Tag> : null}
-            {customPrice ? <Tag tone="gold">Preço personalizado</Tag> : null}
-            {p.source === "manual" ? <Tag>Manual</Tag> : null}
-          </div>
-
-          {needsReview ? (
-            <button
-              type="button"
-              onClick={() => setShowIssues((v) => !v)}
-              className="press mt-2 inline-flex items-center gap-1.5 rounded-full border border-warning/30 bg-warning/10 px-2.5 py-1 text-[11px] font-medium text-warning"
-            >
-              <AlertTriangle className="size-3" strokeWidth={2} /> Precisa de revisão
-              <ChevronDown className={cn("size-3 transition-transform", showIssues && "rotate-180")} />
-            </button>
-          ) : null}
-
-          {showIssues ? (
-            <ul className="mt-2 space-y-1">
-              {issues.map((i) => (
-                <li key={i.key} className="text-xs text-muted-foreground">
-                  <span className="font-medium text-foreground">{i.label}</span>
-                  {i.reason ? ` · ${i.reason}` : ""}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-
-          <div className="mt-3 flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              className="press h-10 rounded-full px-5 text-xs"
-              disabled={busy}
-              onClick={onEdit}
-            >
-              Editar
-            </Button>
-            <AdminMore actions={actions} label={p.canonical_name} />
-          </div>
-        </div>
-      </div>
-    </article>
-  );
-});
-
 /** Chips do que está filtrado agora — sempre removíveis. */
 export function ActiveFilterChips({
   chips,
@@ -226,13 +92,13 @@ export function ActiveFilterChips({
           key={c.label}
           type="button"
           onClick={c.onRemove}
-          className="press inline-flex max-w-full items-center gap-1.5 rounded-full border border-border/60 bg-muted/40 px-3 py-1 text-xs"
+          className="press inline-flex h-9 max-w-full items-center gap-1.5 rounded-full bg-white pr-2.5 pl-3.5 text-[13px] font-semibold text-[#15130F] transition-colors hover:bg-[#EDEDED]"
         >
           <span className="truncate">{c.label}</span>
-          <X className="size-3 shrink-0" />
+          <X className="size-3.5 shrink-0" strokeWidth={2.6} />
         </button>
       ))}
-      <button type="button" onClick={onClear} className="text-xs text-muted-foreground underline">
+      <button type="button" onClick={onClear} className="press h-9 rounded-full px-3 text-[13px] font-semibold text-[#A9A9A9] hover:text-white">
         Limpar
       </button>
     </div>
@@ -296,8 +162,8 @@ export function ProductFiltersSheet({
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="max-h-[88vh] border-border/60">
-        <DrawerTitle className="px-5 pt-3 text-lg">Filtros</DrawerTitle>
+      <DrawerContent className="max-h-[88vh] border-0 bg-[#121212] text-white">
+        <DrawerTitle className="flex items-center gap-2.5 px-5 pt-4 text-[22px] font-bold tracking-[-0.02em]"><SlidersHorizontal className="size-5 text-[#A9A9A9]" /> Filtros</DrawerTitle>
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-4 pt-4 pb-3">
           <Group title="Disponibilidade">
             <Pill active={!state.stock} onClick={() => set({ stock: undefined })}>
@@ -386,18 +252,18 @@ export function ProductFiltersSheet({
           ) : null}
 
           <div className="min-w-0">
-            <p className="mb-2 text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">Marca</p>
+            <p className="mb-2.5 text-[13px] font-semibold text-[#A9A9A9]">Marca</p>
             <div className="relative mb-2">
-              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Search className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-[#8C8C8C]" />
               <input
                 value={brandTerm}
                 onChange={(e) => setBrandTerm(e.target.value)}
                 placeholder="Pesquisar marca..."
                 aria-label="Pesquisar marca"
-                className="h-11 w-full rounded-full border border-border/60 bg-background pl-9 text-base outline-none focus:ring-1 focus:ring-ring"
+                className="pk-field h-12 w-full rounded-full bg-[#232323] pl-10 text-base text-white outline-none transition-colors placeholder:text-[#6F6F6F] focus:bg-[#2A2A2A]"
               />
             </div>
-            <div className="max-h-56 min-w-0 overflow-y-auto overscroll-contain rounded-2xl border border-border/60">
+            <div className="max-h-56 min-w-0 overflow-y-auto overscroll-contain rounded-[20px] bg-[#1A1A1A] p-1.5">
               <Row active={!state.brandId} onClick={() => set({ brandId: undefined })} label="Todas as marcas" />
               {list.map((b) => (
                 <Row
@@ -408,17 +274,17 @@ export function ProductFiltersSheet({
                 />
               ))}
               {list.length === 0 ? (
-                <p className="px-4 py-3 text-sm text-muted-foreground">Nenhuma marca com esse nome.</p>
+                <p className="px-4 py-3 text-sm text-[#8C8C8C]">Nenhuma marca com esse nome.</p>
               ) : null}
             </div>
           </div>
         </div>
 
-        <div className="flex gap-2 border-t border-border/60 px-4 pt-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)]">
-          <Button variant="outline" className="press h-12 flex-1 rounded-full" onClick={onClear}>
+        <div className="flex gap-2 border-t border-white/[0.06] px-4 pt-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)]">
+          <Button variant="ghost" className="press h-[52px] flex-1 rounded-full bg-[#1F1F1F] text-[15px] font-semibold hover:bg-[#2A2A2A]" onClick={onClear}>
             Limpar
           </Button>
-          <Button className="press h-12 flex-[1.6] rounded-full text-base" onClick={() => onOpenChange(false)}>
+          <Button className="press h-[52px] flex-[1.6] rounded-full bg-[#FFD599] text-[15px] font-bold text-[#15130F] hover:bg-[#FFDDAA]" onClick={() => onOpenChange(false)}>
             Ver {total} produto{total === 1 ? "" : "s"}
           </Button>
         </div>
@@ -430,8 +296,8 @@ export function ProductFiltersSheet({
 function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="min-w-0">
-      <p className="mb-2 text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">{title}</p>
-      <div className="flex flex-wrap gap-2">{children}</div>
+      <p className="mb-2.5 text-[13px] font-semibold text-[#A9A9A9]">{title}</p>
+      <div className="flex flex-wrap gap-1.5">{children}</div>
     </div>
   );
 }
@@ -442,8 +308,8 @@ function Pill({ active, onClick, children }: { active: boolean; onClick: () => v
       type="button"
       onClick={onClick}
       className={cn(
-        "press min-h-10 max-w-full rounded-full border px-4 text-xs transition-colors",
-        active ? "border-foreground bg-foreground text-background" : "border-border/60 text-muted-foreground",
+        "press h-10 max-w-full rounded-full px-4 text-[13.5px] font-semibold transition-colors duration-200",
+        active ? "bg-white text-[#15130F]" : "bg-[#232323] text-[#A9A9A9] hover:bg-[#2A2A2A] hover:text-white",
       )}
     >
       <span className="block truncate">{children}</span>
@@ -457,12 +323,12 @@ function Row({ active, onClick, label }: { active: boolean; onClick: () => void;
       type="button"
       onClick={onClick}
       className={cn(
-        "flex min-h-12 w-full items-center justify-between gap-2 border-b border-border/50 px-4 text-left text-sm last:border-b-0",
-        active ? "font-semibold" : "text-muted-foreground",
+        "press flex h-11 w-full items-center justify-between gap-2 rounded-[12px] px-3 text-left text-[14.5px] transition-colors hover:bg-white/[0.05]",
+        active ? "font-bold text-white" : "text-[#D4D4D4]",
       )}
     >
       <span className="truncate">{label}</span>
-      {active ? <span className="shrink-0 text-gold">•</span> : null}
+      {active ? <span className="size-2 shrink-0 rounded-full bg-[#FFD599]" /> : null}
     </button>
   );
 }
@@ -488,24 +354,24 @@ export function BulkBar({
   if (!mounted) return null;
   return createPortal(
     <div className="orium-island pointer-events-none fixed inset-x-0 bottom-0 z-40 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+76px)] lg:pb-6 lg:pl-[276px] wide:pl-[300px]">
-      <div className="pointer-events-auto mx-auto w-full max-w-xl min-w-0 space-y-2 rounded-[28px] border border-white/[0.07] bg-[#161616] p-3 shadow-[0_24px_48px_-20px_rgb(0_0_0/0.9)]">
+      <div className="adm-pop pointer-events-auto mx-auto w-full max-w-xl min-w-0 space-y-2.5 rounded-[28px] bg-[#1A1A1A] p-3 shadow-[0_24px_70px_-12px_rgb(0_0_0/0.8)] ring-1 ring-white/[0.08]">
         <div className="flex min-w-0 items-center justify-between gap-3">
-          <span className="min-w-0 truncate text-sm font-semibold tabular-nums">
+          <span className="min-w-0 truncate pl-1 text-[15px] font-bold tabular-nums">
             {count} selecionado{count === 1 ? "" : "s"}
           </span>
-          <button type="button" className="shrink-0 text-xs text-muted-foreground underline" onClick={onClear}>
+          <button type="button" className="press h-8 shrink-0 rounded-full bg-[#232323] px-3 text-[12.5px] font-semibold text-[#D4D4D4] hover:bg-[#2C2C2C]" onClick={onClear}>
             Limpar
           </button>
         </div>
         <div className="flex min-w-0 items-center gap-2">
-          <Button variant="outline" className="press h-11 min-w-0 flex-1 rounded-full text-xs sm:text-sm" onClick={onBrand}>
+          <Button variant="ghost" className="press h-11 min-w-0 flex-1 rounded-full bg-[#232323] text-[13.5px] font-semibold hover:bg-[#2C2C2C]" onClick={onBrand}>
             <span className="truncate">Alterar marca</span>
           </Button>
-          <Button variant="outline" className="press h-11 min-w-0 flex-1 rounded-full text-xs sm:text-sm" onClick={onHide}>
+          <Button variant="ghost" className="press h-11 min-w-0 flex-1 rounded-full bg-[#232323] text-[13.5px] font-semibold hover:bg-[#2C2C2C]" onClick={onHide}>
             <span className="truncate">Ocultar</span>
           </Button>
           {onDelete ? (
-            <Button variant="destructive" className="press h-11 min-w-0 flex-1 rounded-full text-xs sm:text-sm" onClick={onDelete}>
+            <Button variant="ghost" className="press h-11 min-w-0 flex-1 rounded-full bg-[#2A1A18] text-[13.5px] font-semibold text-[#FF9A8A] hover:bg-[#341F1C]" onClick={onDelete}>
               <span className="truncate">Excluir</span>
             </Button>
           ) : null}
