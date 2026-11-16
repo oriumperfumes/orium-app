@@ -108,6 +108,7 @@ export function PricingSearch({
         <label className="flex h-[56px] min-w-0 items-center gap-3 rounded-full bg-[#232323] px-5 focus-within:ring-2 focus-within:ring-[#FFD599]/50">
           <Search className="size-[18px] shrink-0 text-[#8C8C8C]" strokeWidth={2.2} />
           <input
+            data-slot="input-group-control"
             ref={inputRef}
             value={term}
             onChange={(e) => setTerm(e.target.value)}

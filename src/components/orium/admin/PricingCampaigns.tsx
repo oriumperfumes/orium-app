@@ -152,6 +152,7 @@ function ProductPicker({ ids, setIds }: { ids: string[]; setIds: (v: string[]) =
       <label className="flex h-[52px] min-w-0 items-center gap-3 rounded-full bg-[#232323] px-4 focus-within:ring-2 focus-within:ring-[#FFD599]/50">
         <Search className="size-[18px] shrink-0 text-[#8C8C8C]" strokeWidth={2.2} />
         <input
+          data-slot="input-group-control"
           value={term}
           onChange={(e) => setTerm(e.target.value)}
           placeholder="Buscar perfume"
@@ -825,6 +826,7 @@ export function CouponsPanel({
           <label className="flex h-[56px] min-w-0 items-center gap-3 rounded-full bg-[#1A1A1A] px-5 focus-within:ring-2 focus-within:ring-[#FFD599]/50">
             <Search className="size-[18px] shrink-0 text-[#8C8C8C]" strokeWidth={2.2} />
             <input
+              data-slot="input-group-control"
               value={term}
               onChange={(e) => setTerm(e.target.value.toUpperCase())}
               placeholder="Buscar cupom pelo código"

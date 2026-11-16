@@ -70,6 +70,7 @@ export function MoneyInput({
       <div className="flex h-[52px] min-w-0 items-center gap-2 rounded-[18px] bg-[#232323] px-4 focus-within:ring-2 focus-within:ring-[#FFD599]/50">
         <span className="shrink-0 text-[15px] font-semibold text-[#8C8C8C]">R$</span>
         <input
+          data-slot="input-group-control"
           id={id}
           type="text"
           inputMode="numeric"
@@ -123,6 +124,7 @@ export function PercentInput({
       ) : null}
       <div className="flex h-[52px] min-w-0 items-center gap-2 rounded-[18px] bg-[#232323] px-4 focus-within:ring-2 focus-within:ring-[#FFD599]/50">
         <input
+          data-slot="input-group-control"
           id={id}
           type="text"
           inputMode="decimal"
@@ -167,6 +169,7 @@ export function CountInput({
         </label>
       ) : null}
       <input
+        data-slot="input-group-control"
         id={id}
         type="text"
         inputMode="numeric"

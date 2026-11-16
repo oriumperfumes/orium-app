@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Loader2 } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import {
   Sheet,
   SheetContent,
@@ -323,7 +324,9 @@ export const pxInputClass =
 
 export function PxInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   const { className, ...rest } = props;
-  return <input {...rest} className={cn(pxInputClass, className)} />;
+  return (
+    <input data-slot="input-group-control" {...rest} className={cn(pxInputClass, className)} />
+  );
 }
 
 /** Linha com chave liga/desliga. */
@@ -494,5 +497,80 @@ export function PxNote({
     >
       {children}
     </p>
+  );
+}
+
+/**
+ * Janela de edição curta (uma regra por vez): ícone + título, prévia dourada
+ * com o resultado ao vivo, campos e ações fixas no rodapé. No computador fica
+ * no centro da tela; no celular ocupa a largura com margem.
+ */
+export function PxDialog({
+  open,
+  onClose,
+  icon,
+  title,
+  description,
+  preview,
+  children,
+  footer,
+}: {
+  open: boolean;
+  onClose: () => void;
+  icon?: ReactNode;
+  title: string;
+  description?: string;
+  preview?: ReactNode;
+  children: ReactNode;
+  footer?: ReactNode;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="flex max-h-[calc(100svh-2rem)] max-w-[540px] flex-col gap-0 overflow-hidden rounded-[32px] border-0 bg-[#121212] p-0 text-white sm:p-0 [&>button:last-child]:top-6 [&>button:last-child]:right-6 [&>button:last-child]:grid [&>button:last-child]:size-10 [&>button:last-child]:place-items-center [&>button:last-child]:rounded-full [&>button:last-child]:bg-[#232323] [&>button:last-child]:opacity-100">
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="flex min-w-0 items-center gap-3 px-6 pt-6 pr-20">
+            {icon ? <span className="dash-ico">{icon}</span> : null}
+            <div className="min-w-0">
+              <DialogTitle className="text-[24px] leading-tight font-bold tracking-[-0.03em] text-white">
+                {title}
+              </DialogTitle>
+              <DialogDescription
+                className={cn("text-[14px] leading-snug text-[#A9A9A9]", !description && "sr-only")}
+              >
+                {description ?? title}
+              </DialogDescription>
+            </div>
+          </div>
+          {preview ? <div className="px-6 pt-5">{preview}</div> : null}
+          <div className="min-w-0 space-y-4 px-6 pt-5 pb-6">{children}</div>
+        </div>
+        {footer ? (
+          <div className="shrink-0 border-t border-white/[0.06] px-6 pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+20px)]">
+            {footer}
+          </div>
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Prévia dourada do resultado de uma regra (como o cartão principal do Início). */
+export function PxPreview({
+  label,
+  value,
+  foot,
+}: {
+  label: string;
+  value: ReactNode;
+  foot?: ReactNode;
+}) {
+  return (
+    <div className="dash-hero min-w-0 p-5">
+      <p className="text-[14px] font-semibold text-[#15130F]/70">{label}</p>
+      <div className="mt-2 text-[34px] leading-none font-bold tracking-[-0.045em] tabular-nums">
+        {value}
+      </div>
+      {foot ? <p className="mt-2 text-[13.5px] leading-snug text-[#15130F]/70">{foot}</p> : null}
+    </div>
   );
 }
