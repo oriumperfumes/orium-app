@@ -518,7 +518,8 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
   const [busy, setBusy] = useState(false);
   /** "percent" = X% OFF · "price" = de R$ 400 por R$ 299,90 (vira o percentual exato). */
   const [priceMode, setPriceMode] = useState<"percent" | "price">("percent");
-  const [target, setTarget] = useState<number | null>(null);
+  /** preço final ("por") de cada perfume, no modo de/por */
+  const [targets, setTargets] = useState<Record<string, number | null>>({});
 
   const { data: preview } = useQuery({
     queryKey: ["promo-preview", ids[0] ?? ""],
@@ -534,12 +535,35 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
   });
   const single = ids.length === 1 ? preview : null;
   const base = single?.retail_price != null ? Number(single.retail_price) : null;
+
+  /* de/por: cada perfume escolhido tem o seu "por" (ex.: Asad de 400 por 299,90,
+     Club de Nuit de 350 por 259,90). Vira uma promoção por perfume, todas com o
+     mesmo nome e período — a loja trata como uma campanha só. */
+  const { data: pricedRows } = useQuery({
+    queryKey: ["promo-de-por", ids.join(",")],
+    enabled: priceMode === "price" && ids.length > 0,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("products")
+        .select("id, canonical_name, brand, image_url, retail_price")
+        .in("id", ids);
+      const order = new Map(ids.map((id, i) => [id, i]));
+      return (data ?? []).sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+    },
+  });
+  const rows = priceMode === "price" ? (pricedRows ?? []).filter((r) => ids.includes(r.id)) : [];
   /** Preço final → percentual com 5 casas: o preço volta exato ao centavo. */
-  const priceOk = priceMode === "price" && base != null && base > 0 && target != null && target > 0 && target < base;
+  const pctOf = (r: { id: string; retail_price: number | null }) => {
+    const b = Number(r.retail_price ?? 0), t = targets[r.id];
+    return b > 0 && t != null && t > 0 && t < b ? Math.round((1 - t / b) * 100 * 1e5) / 1e5 : 0;
+  };
+  const priceOk =
+    priceMode === "price" && ids.length > 0 && rows.length === ids.length && rows.every((r) => pctOf(r) > 0 && pctOf(r) <= 90);
+  const target = ids.length === 1 ? (targets[ids[0]!] ?? null) : null;
   const pct =
     priceMode === "price"
       ? priceOk
-        ? Math.round((1 - target! / base!) * 100 * 1e5) / 1e5
+        ? Math.max(...rows.map(pctOf))
         : 0
       : Number(percent) || 0;
   /** Na loja o percentual aparece inteiro ("25% OFF"); o preço é que fica exato. */
@@ -566,7 +590,7 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
     setBadgeLabel("");
     setCopy(emptyCampaignCopy());
     setPriceMode("percent");
-    setTarget(null);
+    setTargets({});
   };
   const close = () => {
     reset();
@@ -612,7 +636,7 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
     if (!(pct > 0 && pct <= 90)) {
       toast.error(
         priceMode === "price"
-          ? "Escolha um perfume e um preço final menor que o atual (até 90% OFF)."
+          ? "Escolha os perfumes e preencha o \"por\" de cada um, menor que o preço atual (até 90% OFF)."
           : "O desconto deve ficar entre 1% e 90%.",
       );
       setStep(0);
@@ -624,35 +648,37 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
     }
     setBusy(true);
     try {
-      const { error } = await supabase.from("promotions").insert({
+      const common = {
         name: name.trim(),
-        discount_percent: pct,
         applies_to: appliesTo,
-        product_ids: ids,
         decant_sizes: appliesTo === "FULL" ? [] : sizes,
         starts_at: saoPauloDateTimeToIso(starts),
         ends_at: saoPauloDateTimeToIso(ends),
-        announce,
         app_exclusive: appExclusive,
         app_badge_label: badgeLabel.trim() || null,
         ...campaignCopyPayload(copy),
         active: true,
-      });
-      if (error) throw error;
-      if (priceMode === "price" && base != null && target != null) {
-        // confere o preço que o banco realmente vai cobrar
-        const { data: saved } = await supabase
+      };
+      if (priceMode === "price") {
+        // uma linha por perfume, cada uma com o próprio percentual; o aviso sai uma vez só
+        const { data: saved, error } = await supabase
           .from("promotions")
-          .select("discount_percent")
-          .eq("name", name.trim())
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        const real = saved ? applyPercent(base, Number(saved.discount_percent)) : target;
-        if (Math.abs(real - target) >= 0.01) {
-          toast.warning(`Promoção criada, mas o preço ficou ${brl(real)} (o banco ainda arredonda o desconto).`);
-        } else toast.success(`Promoção criada: de ${brl(base)} por ${brl(target)}.`);
-      } else toast.success("Promoção criada.");
+          .insert(rows.map((r, i) => ({ ...common, discount_percent: pctOf(r), product_ids: [r.id], announce: announce && i === 0 })))
+          .select("product_ids, discount_percent");
+        if (error) throw error;
+        // confere o preço que o banco realmente vai cobrar
+        const off = rows.filter((r) => {
+          const row = (saved ?? []).find((x) => (x.product_ids ?? [])[0] === r.id);
+          const real = row ? applyPercent(Number(r.retail_price), Number(row.discount_percent)) : targets[r.id];
+          return Math.abs(Number(real) - Number(targets[r.id])) >= 0.01;
+        });
+        if (off.length) toast.warning(`Promoção criada. ${off.length} preço(s) ficaram alguns centavos diferentes porque o banco ainda arredonda o desconto.`);
+        else toast.success(rows.length === 1 ? "Promoção criada." : `Promoção criada com ${rows.length} perfumes.`);
+      } else {
+        const { error } = await supabase.from("promotions").insert({ ...common, discount_percent: pct, product_ids: ids, announce });
+        if (error) throw error;
+        toast.success("Promoção criada.");
+      }
       qc.invalidateQueries();
       close();
     } catch (err) {
@@ -755,7 +781,7 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
       onStep={setStep}
       preview={card}
       summary={[
-        { label: "Desconto", value: priceOk ? `de ${brl(base)} por ${brl(target)}` : `${pctLabel}% OFF` },
+        { label: "Desconto", value: priceMode === "price" ? (priceOk ? (rows.length === 1 ? `de ${brl(base)} por ${brl(target)}` : `${rows.length} perfumes, preço de cada um`) : "falta preencher") : `${pctLabel}% OFF` },
         { label: "Produtos", value: scope },
         {
           label: "Vale para",
@@ -833,25 +859,45 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
             </PxField>
           ) : (
             <>
-              <ProductPicker ids={ids} setIds={(v) => setIds(v.slice(-1))} />
-              {ids.length !== 1 ? (
-                <PxNote>Escolha um perfume: o “de” é o preço atual do frasco dele.</PxNote>
-              ) : base != null ? (
-                <PxField label={`De ${brl(base)} por`} htmlFor="promo-target">
-                  <MoneyInput id="promo-target" value={target} onChange={setTarget} />
-                  {priceOk ? (
-                    <p className="text-[12.5px] text-[#A9A9A9]">
-                      Equivale a <strong className="text-white">{pct.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}% OFF</strong>
-                      {appliesTo !== "FULL" ? " — os decants recebem o mesmo percentual." : "."}
-                    </p>
-                  ) : null}
-                </PxField>
+              <ProductPicker ids={ids} setIds={setIds} />
+              {ids.length === 0 ? (
+                <PxNote>Escolha os perfumes. Para cada um, digite o preço “por”; o “de” é o preço atual do frasco.</PxNote>
               ) : (
-                <PxNote tone="warning">Este perfume não tem preço de frasco cadastrado.</PxNote>
+                <div className="min-w-0 space-y-2">
+                  {rows.map((r) => {
+                    const b = Number(r.retail_price ?? 0);
+                    const t = targets[r.id] ?? null;
+                    const p = pctOf(r);
+                    return (
+                      <div key={r.id} className="flex min-w-0 items-center gap-3 rounded-[18px] bg-[#1F1F1F] p-2.5">
+                        {r.image_url ? (
+                          <span className="shrink-0 overflow-hidden rounded-[12px] bg-white">
+                            <ItemThumb src={r.image_url} alt={r.canonical_name ?? ""} size={44} />
+                          </span>
+                        ) : null}
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[13.5px] font-semibold text-white">{productTitle(r.canonical_name ?? "")}</span>
+                          <span className="block truncate text-[12px] text-[#8C8C8C]">
+                            {b > 0 ? <>de <span className="line-through tabular-nums">{brl(b)}</span></> : "sem preço de frasco"}
+                            {p > 0 ? <span className="ml-1.5 font-bold text-[#FFD599]">{Math.round(p)}% OFF</span> : null}
+                            {t != null && b > 0 && t >= b ? <span className="ml-1.5 text-[#FF8A7A]">maior que o preço atual</span> : null}
+                          </span>
+                        </span>
+                        <span className="w-[118px] shrink-0">
+                          <MoneyInput
+                            id={`por-${r.id}`}
+                            value={t}
+                            onChange={(v) => setTargets((prev) => ({ ...prev, [r.id]: v }))}
+                          />
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {appliesTo !== "FULL" ? (
+                    <PxNote>Os decants de cada perfume recebem o mesmo percentual do frasco.</PxNote>
+                  ) : null}
+                </div>
               )}
-              {target != null && base != null && target >= base ? (
-                <PxNote tone="warning">O “por” precisa ser menor que {brl(base)}.</PxNote>
-              ) : null}
             </>
           )}
           {priceMode === "percent" && !(pct > 0 && pct <= 90) ? (
@@ -860,7 +906,7 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
         </>
       ) : step === 1 ? (
         <>
-          <ProductPicker ids={ids} setIds={priceMode === "price" ? (v) => setIds(v.slice(-1)) : setIds} />
+          <ProductPicker ids={ids} setIds={setIds} />
           {appliesTo !== "FULL" ? (
             <PxField label="Tamanhos de decant" hint="Nenhum marcado = todos os tamanhos.">
               <div className="flex min-w-0 gap-2">
