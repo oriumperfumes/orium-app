@@ -1,31 +1,40 @@
 /**
- * Lattafa Asad Bourbon (100 ml) em 3D — medidas tiradas do vídeo do frasco
- * real, com o corpo (Ø 50 mm) como régua (mm, base em y = 0, frente em +z):
+ * Lattafa Asad Bourbon (100 ml) em 3D — medidas tiradas da foto de frente do
+ * frasco real, com a largura do ombro (Ø 50 mm) como régua (mm, base em y = 0,
+ * frente em +z):
  *
- *   133 ┬ aro dourado espelhado no topo da tampa
- *   129 ┤ tampa caramelo acetinada
- *   103 ┤ anel cromado do gargalo (mais estreito)
- *   100 ┤ faixa dourada no topo do corpo
- *    94 ┤ corpo caramelo acetinado, afinando ~8% até o pé
- *         · "أسد" em caligrafia dourada (Aref Ruqaa)
- *    56 ┤ · duas fitas douradas que se cruzam na frente, na moeda (Ø 19)
- *         · "ASAD / BOURBON" (Cinzel) e "Lattafa" em dourado
- *     0 ┴ pé
+ *   133,5 ┬ aro dourado espesso no topo da tampa
+ *   129   ┤ tampa terracota acetinada (borda de baixo arredondada)
+ *   103   ┤ anel cromado escuro do gargalo (mais estreito)
+ *    98,4 ┤ faixa dourada no topo do corpo
+ *    93,6 ┤ corpo terracota acetinado: cheio até ~56 mm e afinando até o pé
+ *            (Ø 50 → Ø 41), pé arredondado
+ *          · "أسد" em caligrafia dourada (Aref Ruqaa)
+ *    54   ┤ · moeda Ø 20,5: aro dourado polido + face cobre com a grega e o
+ *            leão em relevo (textura tirada do frasco real)
+ *          · duas fitas douradas largas e abauladas chegam na moeda por cima e
+ *            por baixo e se afastam nas laterais e nas costas
+ *    34   ┤ · "ASAD / BOURBON" (Cinzel) e "Lattafa" em dourado
+ *     0   ┴ pé
  *
- * Seção levemente oval (50 × 44). Letras: contornos reais das fontes (OFL),
- * já com o shaping do árabe, aplicados sobre a curvatura do frasco.
+ * Seção levemente oval (50 × 44). Letras: contornos reais das fontes (OFL), já
+ * com o shaping do árabe, aplicados sobre a curvatura do frasco.
  */
 import * as THREE from "three";
 import glyphs from "./asad-bourbon-glyphs.json";
 
 type GlyphText = { w: number; top: number; bot: number; s: { o: number[][]; h: number[][][] }[] };
 
-export const ASAD_SIZE = { W: 50, D: 44, H: 133, total: 133 };
+export const ASAD_SIZE = { W: 50, D: 44, H: 133.5, total: 133.5 };
 
-const BODY_H = 94.3;
+const BODY_H = 93.6;
 const OVAL = 44 / 50;
-/** raio do corpo na altura y (afina ~8% até o pé) */
-const bodyR = (y: number) => 23 + 2 * Math.min(1, Math.max(0, y / BODY_H));
+const sstep = (a: number, b: number, x: number) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+/** raio do corpo na altura y: cheio em cima, afinando de ~56 mm até o pé (medido na foto) */
+const bodyR = (y: number) => 20.6 + 4.4 * sstep(0, 56, y);
 
 /** formas 2D do texto: escala (sx, sy) em mm por em, centralizado em x, base em y = 0 */
 function textGeometry(t: GlyphText, sx: number, sy: number) {
@@ -55,48 +64,50 @@ function wrapOnBody(geo: THREE.BufferGeometry, baseY: number, offsetX = 0, lift 
 }
 
 /**
- * Fita dourada: um perfil retangular de cantos redondos (largura × espessura)
- * varrido ao longo de uma volta completa em torno do corpo, com a altura
- * variando pelo ângulo (as duas fitas se cruzam na frente e abrem atrás).
+ * Fita dourada: perfil abaulado (superelipse, largura × espessura) varrido ao
+ * longo de uma volta completa em torno do corpo, com a altura variando pelo
+ * ângulo — encostada no corpo (que afina, então o raio acompanha a altura).
  */
-function ribbon(yOf: (a: number) => number, width: number, thick: number, steps = 220) {
+function ribbon(yOf: (a: number) => number, width: number, thick: number, steps = 260) {
   const prof: [number, number][] = []; // (u: ao longo da largura, v: para fora)
-  const segs = 6,
-    rr = thick / 2;
-  const hw = width / 2 - rr;
-  for (let i = 0; i <= segs; i++) {
-    const t = -Math.PI / 2 + (Math.PI * i) / segs;
-    prof.push([hw + Math.cos(t) * rr, Math.sin(t) * rr]);
-  }
-  for (let i = 0; i <= segs; i++) {
-    const t = Math.PI / 2 + (Math.PI * i) / segs;
-    prof.push([-hw + Math.cos(t) * rr, Math.sin(t) * rr]);
+  const N = 28,
+    n = 3.2;
+  for (let i = 0; i < N; i++) {
+    const t = (i / N) * Math.PI * 2;
+    const c = Math.cos(t),
+      s = Math.sin(t);
+    prof.push([
+      Math.sign(c) * Math.pow(Math.abs(c), 2 / n) * (width / 2),
+      Math.sign(s) * Math.pow(Math.abs(s), 2 / n) * (thick / 2),
+    ]);
   }
   const P = prof.length;
   const verts: number[] = [];
   const idx: number[] = [];
   const pt = (a: number) => {
     const y = yOf(a);
-    const r = bodyR(y) + thick / 2 + 0.15;
+    const r = bodyR(y) + thick / 2 + 0.1;
     return new THREE.Vector3(Math.sin(a) * r, y, Math.cos(a) * r);
   };
-  for (let s = 0; s < steps; s++) {
-    const a = (s / steps) * Math.PI * 2;
+  for (let st = 0; st < steps; st++) {
+    const a = (st / steps) * Math.PI * 2;
     const p = pt(a);
-    const tan = pt(a + 0.002).sub(pt(a - 0.002)).normalize();
+    const tan = pt(a + 0.002)
+      .sub(pt(a - 0.002))
+      .normalize();
     const out = new THREE.Vector3(Math.sin(a), 0, Math.cos(a));
     const up = new THREE.Vector3().crossVectors(out, tan).normalize(); // na superfície, ~vertical
-    const n = new THREE.Vector3().crossVectors(tan, up).normalize(); // para fora
+    const nn = new THREE.Vector3().crossVectors(tan, up).normalize(); // para fora
     for (const [u, v] of prof) {
-      verts.push(p.x + up.x * u + n.x * v, p.y + up.y * u + n.y * v, p.z + up.z * u + n.z * v);
+      verts.push(p.x + up.x * u + nn.x * v, p.y + up.y * u + nn.y * v, p.z + up.z * u + nn.z * v);
     }
   }
-  for (let s = 0; s < steps; s++) {
-    const s2 = (s + 1) % steps;
+  for (let st = 0; st < steps; st++) {
+    const s2 = (st + 1) % steps;
     for (let k = 0; k < P; k++) {
       const k2 = (k + 1) % P;
-      const a0 = s * P + k,
-        a1 = s * P + k2,
+      const a0 = st * P + k,
+        a1 = st * P + k2,
         b0 = s2 * P + k,
         b1 = s2 * P + k2;
       idx.push(a0, b0, a1, a1, b0, b1);
@@ -109,217 +120,169 @@ function ribbon(yOf: (a: number) => number, width: number, thick: number, steps 
   return g;
 }
 
-/** face da moeda: marfim com gregas e roseta gravadas em dourado (desenhada aqui, sem imagem) */
-function coinFace(): { gold: THREE.CanvasTexture; bump: THREE.CanvasTexture } {
-  const S = 512;
-  const c = document.createElement("canvas");
-  c.width = c.height = S;
-  const g = c.getContext("2d")!;
-  g.fillStyle = "#000";
-  g.fillRect(0, 0, S, S);
-  g.translate(S / 2, S / 2);
-  g.strokeStyle = g.fillStyle = "#fff";
-  g.lineCap = "square";
-  // dois filetes
-  g.lineWidth = 7;
-  g.beginPath();
-  g.arc(0, 0, 232, 0, Math.PI * 2);
-  g.stroke();
-  g.lineWidth = 5;
-  g.beginPath();
-  g.arc(0, 0, 168, 0, Math.PI * 2);
-  g.stroke();
-  // grega (meandro) entre os filetes
-  const N = 22;
-  g.lineWidth = 6;
-  for (let i = 0; i < N; i++) {
-    g.save();
-    g.rotate((i / N) * Math.PI * 2);
-    g.beginPath();
-    g.moveTo(-14, -180);
-    g.lineTo(-14, -218);
-    g.lineTo(18, -218);
-    g.lineTo(18, -192);
-    g.lineTo(0, -192);
-    g.lineTo(0, -205);
-    g.stroke();
-    g.restore();
+/** perfil de anel (lathe) com cantos arredondados */
+function ringProfile(r: number, y0: number, y1: number, round: number, inner = 3) {
+  const p: THREE.Vector2[] = [new THREE.Vector2(r - inner, y0)];
+  for (let i = 0; i <= 8; i++) {
+    const t = -Math.PI / 2 + (i / 8) * (Math.PI / 2);
+    p.push(new THREE.Vector2(r - round + Math.cos(t) * round, y0 + round + Math.sin(t) * round));
   }
-  // roseta central (juba estilizada): pétalas em duas camadas + miolo
-  for (let layer = 0; layer < 2; layer++) {
-    const n = layer ? 12 : 16,
-      r0 = layer ? 52 : 70,
-      r1 = layer ? 118 : 150;
-    g.lineWidth = layer ? 6 : 4;
-    for (let i = 0; i < n; i++) {
-      g.save();
-      g.rotate(((i + layer * 0.5) / n) * Math.PI * 2);
-      g.beginPath();
-      g.moveTo(0, -r0);
-      g.quadraticCurveTo(26, -(r0 + r1) / 2, 0, -r1);
-      g.quadraticCurveTo(-26, -(r0 + r1) / 2, 0, -r0);
-      g.stroke();
-      g.restore();
-    }
+  for (let i = 0; i <= 8; i++) {
+    const t = (i / 8) * (Math.PI / 2);
+    p.push(new THREE.Vector2(r - round + Math.cos(t) * round, y1 - round + Math.sin(t) * round));
   }
-  g.beginPath();
-  g.arc(0, 0, 38, 0, Math.PI * 2);
-  g.fill();
-  const gold = new THREE.CanvasTexture(c);
-  gold.colorSpace = THREE.NoColorSpace;
-  gold.anisotropy = 4;
-  const bump = new THREE.CanvasTexture(c);
-  bump.anisotropy = 4;
-  return { gold, bump };
+  p.push(new THREE.Vector2(r - inner, y1));
+  return new THREE.LatheGeometry(p, 160);
 }
 
 export function buildAsadBourbon(): THREE.Group {
-  const T = glyphs as unknown as Record<"asad" | "bourbon" | "lattafa" | "arabic", GlyphText>;
+  const T = glyphs as unknown as Record<"asad" | "bourbon" | "lattafa" | "calligraphy", GlyphText>;
   const root = new THREE.Group();
   const oval = new THREE.Group();
   oval.scale.z = OVAL;
   root.add(oval);
 
   /* materiais */
-  // pintura acetinada "soft touch" caramelo
+  // pintura "soft touch" terracota: acetinada, com um brilho aveludado de lado
   const satin = new THREE.MeshPhysicalMaterial({
-    color: "#a8703f",
-    roughness: 0.46,
+    color: "#c2602b",
+    roughness: 0.5,
     metalness: 0,
-    clearcoat: 0.28,
-    clearcoatRoughness: 0.32,
-    sheen: 0.35,
-    sheenRoughness: 0.6,
-    sheenColor: new THREE.Color("#f6c68c"),
-    envMapIntensity: 1.1,
+    clearcoat: 0.22,
+    clearcoatRoughness: 0.38,
+    sheen: 0.45,
+    sheenRoughness: 0.55,
+    sheenColor: new THREE.Color("#ffa86e"),
+    envMapIntensity: 1.15,
   });
-  // dourado espelhado (fitas, aros, moeda)
+  // dourado espelhado (fitas, aros, borda da moeda)
   const gold = new THREE.MeshPhysicalMaterial({
-    color: "#f1c56c",
+    color: "#efc066",
+    metalness: 1,
+    roughness: 0.055,
+    envMapIntensity: 1.4,
+  });
+  // cromado escuro do anel do gargalo
+  const chrome = new THREE.MeshPhysicalMaterial({
+    color: "#5f5444",
     metalness: 1,
     roughness: 0.07,
-    envMapIntensity: 1.35,
-  });
-  // dourado do anel do gargalo: mais escuro (cromado com tom ouro)
-  const goldDark = new THREE.MeshPhysicalMaterial({
-    color: "#a88a55",
-    metalness: 1,
-    roughness: 0.12,
     envMapIntensity: 1.2,
   });
-  // folha dourada das letras: um pouco menos espelhada
+  // folha dourada das letras
   const foil = new THREE.MeshPhysicalMaterial({
     color: "#f0c879",
     metalness: 1,
-    roughness: 0.14,
+    roughness: 0.16,
     envMapIntensity: 1.3,
     polygonOffset: true,
     polygonOffsetFactor: -2,
     polygonOffsetUnits: -2,
   });
 
-  /* corpo (perfil de revolução: pé arredondado, afinando para baixo) */
+  /* corpo: perfil de revolução medido (cheio em cima, afina até o pé redondo) */
   {
-    const pts: THREE.Vector2[] = [new THREE.Vector2(0, 0)];
-    const rb = bodyR(0),
-      fillet = 2.6;
-    for (let i = 0; i <= 8; i++) {
-      const t = (i / 8) * (Math.PI / 2);
-      pts.push(new THREE.Vector2(rb - fillet + Math.sin(t) * fillet, fillet - Math.cos(t) * fillet));
+    const pts: THREE.Vector2[] = [new THREE.Vector2(0, 0.6)];
+    const fillet = 3.2;
+    const rb = bodyR(fillet);
+    for (let i = 0; i <= 10; i++) {
+      const t = (i / 10) * (Math.PI / 2);
+      pts.push(
+        new THREE.Vector2(rb - fillet + Math.sin(t) * fillet, fillet - Math.cos(t) * fillet),
+      );
     }
-    for (let i = 1; i <= 24; i++) {
-      const y = fillet + ((BODY_H - fillet) * i) / 24;
+    for (let i = 1; i <= 40; i++) {
+      const y = fillet + ((BODY_H - fillet) * i) / 40;
       pts.push(new THREE.Vector2(bodyR(y), y));
     }
-    pts.push(new THREE.Vector2(17, BODY_H));
-    const body = new THREE.Mesh(new THREE.LatheGeometry(pts, 128), satin);
-    oval.add(body);
+    pts.push(new THREE.Vector2(18, BODY_H));
+    oval.add(new THREE.Mesh(new THREE.LatheGeometry(pts, 160), satin));
   }
 
-  /* faixa dourada no topo do corpo (bordas arredondadas) */
-  const ringProfile = (r: number, y0: number, y1: number, round: number) => {
-    const p: THREE.Vector2[] = [new THREE.Vector2(r - 3, y0)];
-    for (let i = 0; i <= 6; i++) {
-      const t = -Math.PI / 2 + (i / 6) * (Math.PI / 2);
-      p.push(new THREE.Vector2(r - round + Math.cos(t) * round, y0 + round + Math.sin(t) * round));
-    }
-    for (let i = 0; i <= 6; i++) {
-      const t = (i / 6) * (Math.PI / 2);
-      p.push(new THREE.Vector2(r - round + Math.cos(t) * round, y1 - round + Math.sin(t) * round));
-    }
-    p.push(new THREE.Vector2(r - 3, y1));
-    return new THREE.LatheGeometry(p, 128);
-  };
-  oval.add(new THREE.Mesh(ringProfile(25.35, 94.3, 100.1, 1.1), gold));
-  // anel do gargalo, mais estreito
-  oval.add(new THREE.Mesh(ringProfile(18.6, 100.1, 103.1, 0.6), goldDark));
+  /* faixa dourada no topo do corpo e anel cromado do gargalo */
+  oval.add(new THREE.Mesh(ringProfile(25.25, BODY_H, 98.4, 1.0), gold));
+  oval.add(new THREE.Mesh(ringProfile(21.6, 98.4, 103, 0.8), chrome));
 
-  /* tampa: caramelo acetinado + aro dourado no topo */
+  /* tampa: terracota com a borda de baixo arredondada para dentro + aro dourado */
   {
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(25.4, 25.4, 25.8, 128, 1, true), satin);
-    cap.position.y = 103.1 + 25.8 / 2;
-    oval.add(cap);
-    // fundo da tampa (aparece por baixo, sobre o anel)
-    const under = new THREE.Mesh(new THREE.RingGeometry(18.6, 25.4, 96).rotateX(Math.PI / 2), satin);
-    under.position.y = 103.1;
-    oval.add(under);
-    oval.add(new THREE.Mesh(ringProfile(25.55, 128.9, 133, 1.4), gold));
-    const top = new THREE.Mesh(new THREE.CircleGeometry(24.2, 96).rotateX(-Math.PI / 2), gold);
-    top.position.y = 132.75;
+    const p: THREE.Vector2[] = [new THREE.Vector2(19.5, 103)];
+    const rr = 3.4;
+    for (let i = 0; i <= 10; i++) {
+      const t = (i / 10) * (Math.PI / 2);
+      p.push(new THREE.Vector2(25.5 - rr + Math.sin(t) * rr, 103 + rr - Math.cos(t) * rr));
+    }
+    p.push(new THREE.Vector2(25.5, 128.6));
+    p.push(new THREE.Vector2(23, 128.6));
+    oval.add(new THREE.Mesh(new THREE.LatheGeometry(p, 160), satin));
+    // aro dourado espesso no topo, com a borda de cima arredondada
+    oval.add(new THREE.Mesh(ringProfile(25.7, 128.5, 133.5, 1.6, 4), gold));
+    const top = new THREE.Mesh(new THREE.CircleGeometry(22.2, 128).rotateX(-Math.PI / 2), gold);
+    top.position.y = 133.2;
     oval.add(top);
   }
 
-  /* duas fitas douradas: cruzam na frente (na moeda), abrem até 26 mm atrás */
-  const yc = 55.6,
-    A = 26;
-  const open = (a: number) => (A * (1 - Math.cos(a))) / 2;
-  oval.add(new THREE.Mesh(ribbon((a) => yc + open(a), 6.2, 2.0), gold));
-  oval.add(new THREE.Mesh(ribbon((a) => yc - open(a), 6.2, 2.0), gold));
+  /* fitas: chegam na moeda por cima e por baixo, abrem nas laterais e atrás */
+  // descem em "V" até a moeda (subida rápida perto da frente, suave nas laterais)
+  const open = (a: number) => Math.pow(Math.abs(Math.sin(a / 2)), 0.85);
+  oval.add(
+    new THREE.Mesh(
+      ribbon((a) => 60.6 + 16 * open(a), 8, 4.2),
+      gold,
+    ),
+  );
+  oval.add(
+    new THREE.Mesh(
+      ribbon((a) => 48.2 - 7.5 * open(a), 8, 4.2),
+      gold,
+    ),
+  );
 
-  /* moeda: aro dourado polido + face marfim com ornamentos dourados */
+  /* moeda: aro dourado polido + face cobre com a grega e o leão em relevo */
   {
-    const R = 9.5,
-      zf = bodyR(yc) + 3.6;
+    const yc = 54.3,
+      R = 10.25;
     const coin = new THREE.Group();
-    coin.position.set(0, yc, zf);
-    const rim = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 2.8, 96).rotateX(Math.PI / 2), gold);
+    coin.position.set(0, yc, bodyR(yc) + 4.2 + 1.7);
+    const rim = new THREE.Mesh(
+      new THREE.CylinderGeometry(R, R, 3.4, 128).rotateX(Math.PI / 2),
+      gold,
+    );
     coin.add(rim);
-    const bezel = new THREE.Mesh(new THREE.TorusGeometry(R - 0.9, 0.9, 16, 96), gold);
-    bezel.position.z = 1.4;
+    const bezel = new THREE.Mesh(new THREE.TorusGeometry(R - 1.05, 1.05, 20, 128), gold);
+    bezel.position.z = 1.7;
     coin.add(bezel);
-    const { gold: pattern, bump } = coinFace();
-    const ivory = new THREE.MeshPhysicalMaterial({
-      color: "#efe4cc",
-      roughness: 0.42,
-      clearcoat: 0.4,
-      clearcoatRoughness: 0.2,
-      bumpMap: bump,
-      bumpScale: -0.6,
-    });
-    const face = new THREE.Mesh(new THREE.CircleGeometry(R - 1.6, 96), ivory);
-    face.position.z = 1.42;
-    coin.add(face);
-    const engr = new THREE.Mesh(
-      new THREE.CircleGeometry(R - 1.6, 96),
+    const loader = new THREE.TextureLoader();
+    const color = loader.load("/3d/asad-coin-color.webp");
+    color.colorSpace = THREE.SRGBColorSpace;
+    color.anisotropy = 8;
+    const relief = loader.load("/3d/asad-coin-relief.webp");
+    relief.anisotropy = 8;
+    const face = new THREE.Mesh(
+      new THREE.CircleGeometry(R - 1.9, 128),
       new THREE.MeshPhysicalMaterial({
-        color: "#c99436",
-        metalness: 1,
-        roughness: 0.3,
-        alphaMap: pattern,
-        transparent: true,
-        depthWrite: false,
+        map: color,
+        // metal rosé acetinado: a cor aparece (não só o reflexo do estúdio)
+        metalness: 0.35,
+        roughness: 0.38,
+        clearcoat: 0.5,
+        clearcoatRoughness: 0.2,
+        // o desenho dourado fica em relevo e pega a luz do estúdio
+        bumpMap: relief,
+        bumpScale: 1.4,
+        envMapIntensity: 1.3,
       }),
     );
-    engr.position.z = 1.45;
-    coin.add(engr);
+    face.position.z = 1.74; // à frente da tampa do aro, dentro do filete
+    coin.add(face);
     oval.add(coin);
   }
 
-  /* letras em folha dourada, coladas na curvatura */
-  oval.add(new THREE.Mesh(wrapOnBody(textGeometry(T.arabic, 16.4, 19), 72.5, 1.6), foil));
-  oval.add(new THREE.Mesh(wrapOnBody(textGeometry(T.asad, 4.7, 4.7), 37.2), foil));
-  oval.add(new THREE.Mesh(wrapOnBody(textGeometry(T.bourbon, 3.0, 3.25), 30.4), foil));
-  oval.add(new THREE.Mesh(wrapOnBody(textGeometry(T.lattafa, 4.6, 3.1), 24.6), foil));
+  /* letras em folha dourada, coladas na curvatura (o corpo afina ali) */
+  // a caligrafia é a do próprio frasco: vetorizada do vídeo 4K (já em mm)
+  oval.add(new THREE.Mesh(wrapOnBody(textGeometry(T.calligraphy, 1, 1.15), 72, -1.8), foil));
+  oval.add(new THREE.Mesh(wrapOnBody(textGeometry(T.asad, 4.6, 4.6), 34), foil));
+  oval.add(new THREE.Mesh(wrapOnBody(textGeometry(T.bourbon, 3.1, 3.5), 26.6), foil));
+  oval.add(new THREE.Mesh(wrapOnBody(textGeometry(T.lattafa, 4.75, 3.7), 20.3), foil));
 
   return root;
 }

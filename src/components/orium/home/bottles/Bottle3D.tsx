@@ -3,16 +3,24 @@ import { cn } from "@/lib/utils";
 import type { Studio3D } from "@/components/orium/home/bottles/studio-3d";
 
 /** Modelos 3D disponíveis (cada um vira um pedaço de código que só baixa quando o card se aproxima). */
-export type Bottle3DModel = "club-de-nuit";
+export type Bottle3DModel = "club-de-nuit" | "asad-bourbon";
 
 const BG: [number, number, number] = [12, 12, 12];
 
+/** cada modelo baixa só o próprio código (o estúdio é comum a todos) */
 async function load(model: Bottle3DModel) {
+  const studio = import("@/components/orium/home/bottles/studio-3d");
+  if (model === "asad-bourbon") {
+    const [{ createStudio3D }, m] = await Promise.all([
+      studio,
+      import("@/components/orium/home/bottles/asad-bourbon-3d"),
+    ]);
+    return { createStudio3D, build: m.buildAsadBourbon, size: m.ASAD_SIZE };
+  }
   const [{ createStudio3D }, m] = await Promise.all([
-    import("@/components/orium/home/bottles/studio-3d"),
+    studio,
     import("@/components/orium/home/bottles/club-de-nuit-3d"),
   ]);
-  void model; // por enquanto um modelo só; novos frascos entram aqui
   return { createStudio3D, build: m.buildClubDeNuit, size: m.CDN_SIZE };
 }
 

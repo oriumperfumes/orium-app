@@ -34,6 +34,13 @@ const SPIN_BOTTLES: {
     name: "Club de Nuit Intense Man",
     brand: "Armaf",
   },
+  {
+    slug: "lattafa-asad-bourbon-b91749",
+    model: "asad-bourbon",
+    still: "/3d/asad-bourbon.webp",
+    name: "Asad Bourbon",
+    brand: "Lattafa",
+  },
 ];
 
 const COLUMNS =
@@ -210,18 +217,29 @@ export function FrascosSpinCard({
             {isBlack(promo.promotion) ? (
               <BlackTag promotion={promo.promotion} size="sm" />
             ) : (
-              <span className="rounded-full bg-[#FFD599] px-2.5 py-0.5 text-[11px] font-bold tracking-wide text-[#15130F] uppercase">Promoção</span>
+              <span className="rounded-full bg-[#FFD599] px-2.5 py-0.5 text-[11px] font-bold tracking-wide text-[#15130F] uppercase">
+                Promoção
+              </span>
             )}
             <span className="flex items-baseline gap-2 text-[14px] text-[#8C8C8C]">
               <s className="tabular-nums">{brl(promo.basePrice)}</s>
-              <strong className="text-[20px] font-extrabold tracking-tight text-white tabular-nums">{brl(promo.finalPrice)}</strong>
+              <strong className="text-[20px] font-extrabold tracking-tight text-white tabular-nums">
+                {brl(promo.finalPrice)}
+              </strong>
               <BlackOff percent={off} className="text-[14px]" />
             </span>
           </span>
         ) : null}
-        <span className={cn("flex items-baseline gap-2 text-[14px] text-[#A9A9A9]", promo ? "mt-1" : "mt-1.5")}>
+        <span
+          className={cn(
+            "flex items-baseline gap-2 text-[14px] text-[#A9A9A9]",
+            promo ? "mt-1" : "mt-1.5",
+          )}
+        >
           {promo ? null : priced ? (
-            <strong className="text-[16px] font-bold text-white tabular-nums">{brl(priced.finalPrice)}</strong>
+            <strong className="text-[16px] font-bold text-white tabular-nums">
+              {brl(priced.finalPrice)}
+            </strong>
           ) : consult ? (
             <strong className="text-[16px] font-bold text-[#FFD599]">Sob consulta</strong>
           ) : null}
