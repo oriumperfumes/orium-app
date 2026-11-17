@@ -467,7 +467,12 @@ void main(){
   vec3 col = render(W2L(uEye - uPivot), W2L(rdw));
   // mesmo mapeamento de tons para tudo + correção: a cor do card sai exata,
   // então a mesa some no fundo sem linha de horizonte
-  outColor = vec4(pow(aces(col * 1.05), vec3(1./2.2)) + uToneFix, 1.);
+  vec3 outc = pow(aces(col * 1.05), vec3(1./2.2)) + uToneFix;
+  // perto das bordas a cena funde na cor exata do card: a mesa e o brilho
+  // nunca terminam num corte reto (o canvas não aparece como um retângulo)
+  float edge = smoothstep(0., 0.08, vUv.x) * smoothstep(0., 0.08, 1. - vUv.x)
+             * smoothstep(0., 0.10, vUv.y) * smoothstep(0., 0.05, 1. - vUv.y);
+  outColor = vec4(mix(pow(uBg, vec3(1./2.2)), outc, edge), 1.);
 }`;
 
 /* ─────────────────────────────── matemática ─────────────────────────────── */

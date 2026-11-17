@@ -9,7 +9,11 @@ import vialsImg from "@/assets/home-decants-vials.webp";
 import type { DecantMl, DecantRT } from "@/components/orium/home/decant-rt";
 
 const SIZES: DecantMl[] = [2, 5, 10];
-const LASTS: Record<DecantMl, string> = { 2: "cerca de 1 semana", 5: "cerca de 2 semanas", 10: "cerca de 1 mês" };
+const LASTS: Record<DecantMl, string> = {
+  2: "cerca de 1 semana",
+  5: "cerca de 2 semanas",
+  10: "cerca de 1 mês",
+};
 const BG: [number, number, number] = [12, 12, 12];
 
 /**
@@ -18,7 +22,13 @@ const BG: [number, number, number] = [12, 12, 12];
  * acompanha com física; trocar o tamanho muda o frasco na proporção real.
  * Sem WebGL2 (aparelho muito antigo), mostra a foto de sempre.
  */
-export function DecantStageCard({ onExplore, style }: { onExplore: () => void; style?: React.CSSProperties }) {
+export function DecantStageCard({
+  onExplore,
+  style,
+}: {
+  onExplore: () => void;
+  style?: React.CSSProperties;
+}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stageRef = useRef<DecantRT | null>(null);
   const [ml, setMl] = useState<DecantMl>(5);
@@ -26,7 +36,8 @@ export function DecantStageCard({ onExplore, style }: { onExplore: () => void; s
   const [touched, setTouched] = useState(false);
   const settings = useDecantSettings();
   const onRequestAll = usePricesOnRequestAll();
-  const price = (s: DecantMl) => (settings === undefined || onRequestAll ? null : decantPrice(null, settings, s));
+  const price = (s: DecantMl) =>
+    settings === undefined || onRequestAll ? null : decantPrice(null, settings, s);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -37,7 +48,11 @@ export function DecantStageCard({ onExplore, style }: { onExplore: () => void; s
     const start = () =>
       import("@/components/orium/home/decant-rt").then(({ createDecantRT }) => {
         if (cancelled) return;
-        stage = createDecantRT(canvas, { ml, bg: BG, onFirstFrame: () => !cancelled && setState("live") });
+        stage = createDecantRT(canvas, {
+          ml,
+          bg: BG,
+          onFirstFrame: () => !cancelled && setState("live"),
+        });
         stageRef.current = stage;
         if (!stage) setState("fallback");
       });
@@ -89,9 +104,16 @@ export function DecantStageCard({ onExplore, style }: { onExplore: () => void; s
         {from != null ? <span className="value-in"> A partir de {brl(from)}.</span> : null}
       </p>
 
-      <div className="relative mt-2 h-[340px] w-full max-w-[380px] tab:h-[360px]" onPointerDown={() => setTouched(true)}>
+      <div
+        className="relative mt-2 h-[340px] w-full max-w-[380px] tab:h-[360px]"
+        onPointerDown={() => setTouched(true)}
+      >
         {state === "fallback" ? (
-          <img src={vialsImg} alt="Três decants com perfume âmbar, de 2, 5 e 10 ml" className="mx-auto mt-10 block w-full max-w-[330px]" />
+          <img
+            src={vialsImg}
+            alt="Três decants com perfume âmbar, de 2, 5 e 10 ml"
+            className="mx-auto mt-10 block w-full max-w-[330px]"
+          />
         ) : (
           <canvas
             ref={canvasRef}
@@ -117,11 +139,18 @@ export function DecantStageCard({ onExplore, style }: { onExplore: () => void; s
       </div>
 
       {/* tamanhos: fundo branco desliza até o escolhido */}
-      <div role="radiogroup" aria-label="Tamanho do decant" className="relative mt-3 grid w-full max-w-[340px] grid-cols-3 rounded-full bg-[#1A1A1A] p-1">
+      <div
+        role="radiogroup"
+        aria-label="Tamanho do decant"
+        className="relative mt-3 grid w-full max-w-[340px] grid-cols-3 rounded-full bg-[#1A1A1A] p-1"
+      >
         <span
           aria-hidden
           className="pd-thumb absolute top-1 bottom-1 left-1 rounded-full bg-white"
-          style={{ width: "calc((100% - 0.5rem) / 3)", transform: `translateX(${SIZES.indexOf(ml) * 100}%)` }}
+          style={{
+            width: "calc((100% - 0.5rem) / 3)",
+            transform: `translateX(${SIZES.indexOf(ml) * 100}%)`,
+          }}
         />
         {SIZES.map((s) => (
           <button
@@ -140,7 +169,9 @@ export function DecantStageCard({ onExplore, style }: { onExplore: () => void; s
         ))}
       </div>
       <p key={ml} className="value-in mt-3 text-[14px] text-[#A9A9A9]">
-        {price(ml) != null ? <strong className="font-bold text-white tabular-nums">{brl(price(ml))}</strong> : null}
+        {price(ml) != null ? (
+          <strong className="font-bold text-white tabular-nums">{brl(price(ml))}</strong>
+        ) : null}
         {price(ml) != null ? " · " : ""}
         dura {LASTS[ml]}
       </p>
@@ -149,7 +180,10 @@ export function DecantStageCard({ onExplore, style }: { onExplore: () => void; s
         type="button"
         onClick={() => {
           setPriceView(ml);
-          trackDecant("decant_size_selected", { variant: `DECANT_${ml}`, details: { source: "home_3d_cta" } });
+          trackDecant("decant_size_selected", {
+            variant: `DECANT_${ml}`,
+            details: { source: "home_3d_cta" },
+          });
           onExplore();
         }}
         className="press mt-5 inline-flex h-[46px] items-center rounded-full bg-[#FFD599] px-6 text-[15px] font-bold text-[#15130F] transition-colors hover:bg-[#FFDDAA]"
