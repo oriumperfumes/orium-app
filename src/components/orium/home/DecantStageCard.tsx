@@ -83,6 +83,8 @@ export function DecantStageCard({
   const pick = (s: DecantMl) => {
     setMl(s);
     stageRef.current?.setSize(s);
+    // toque também serve para o iPhone liberar o giroscópio
+    stageRef.current?.sensors();
     trackDecant("decant_size_selected", { variant: `DECANT_${s}`, details: { source: "home_3d" } });
   };
 
