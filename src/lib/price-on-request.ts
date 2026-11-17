@@ -10,6 +10,8 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { productTitle } from "@/lib/format";
 import { usePublicPricingSettings } from "@/lib/pricing-settings";
+import { usePromotions } from "@/lib/use-promotions";
+import { runningBlack } from "@/lib/black";
 
 export const ORIUM_WHATSAPP = "5521977174508";
 
@@ -30,6 +32,29 @@ class AllIds extends Set<string> {
 }
 const ALL = new AllIds();
 
+/** Loja sob consulta, menos os perfumes liberados (os da Black). */
+class AllExcept extends Set<string> {
+  constructor(private open: Set<string>) {
+    super();
+  }
+  override has(id: string) {
+    return !this.open.has(id);
+  }
+}
+
+/**
+ * BLACK com a loja sob consulta: os perfumes de uma campanha Black em vigor
+ * continuam com preço, "Comprar agora" e Sacola, mesmo com a chave geral
+ * "Preços sob consulta" ligada. `all` = alguma campanha Black vale para o
+ * catálogo inteiro. O servidor confere a mesma regra ao fechar o pedido.
+ */
+export function useBlackOpen(): { all: boolean; ids: Set<string> } {
+  const black = runningBlack(usePromotions());
+  const all = black.some((p) => (p.product_ids ?? []).length === 0);
+  const ids = new Set(black.flatMap((p) => p.product_ids ?? []));
+  return { all, ids };
+}
+
 export function useConsultIds() {
   const all = usePricesOnRequestAll();
   const { data } = useQuery({
@@ -41,7 +66,8 @@ export function useConsultIds() {
       return new Set<string>((data ?? []).map((r: { id: string }) => r.id));
     },
   });
-  if (all) return ALL;
+  const open = useBlackOpen();
+  if (all) return open.all ? (data ?? EMPTY) : open.ids.size ? new AllExcept(open.ids) : ALL;
   return data ?? EMPTY;
 }
 const EMPTY = new Set<string>();

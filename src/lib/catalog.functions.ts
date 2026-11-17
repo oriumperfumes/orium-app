@@ -231,7 +231,24 @@ export const placeCatalogOrder = createServerFn({ method: "POST" })
     const { data: settings } = await db.from("pricing_settings").select("*").maybeSingle();
     // Admin → Precificação → "Preços sob consulta": a loja não fecha pedido pelo site.
     if ((settings as { prices_on_request?: boolean } | null)?.prices_on_request === true) {
-      throw new Error("No momento os preços são sob consulta. Fale com a Orium pelo WhatsApp para fechar o seu pedido.");
+      // exceção: perfumes de uma campanha Black em vigor continuam vendendo pelo site
+      const nowMs = Date.now();
+      const { data: blackRows } = await db
+        .from("promotions")
+        .select("name, product_ids, starts_at, ends_at")
+        .eq("active", true)
+        .ilike("name", "%black%");
+      const live = (blackRows ?? []).filter(
+        (p) =>
+          (!p.starts_at || new Date(p.starts_at).getTime() <= nowMs) &&
+          (!p.ends_at || new Date(p.ends_at).getTime() > nowMs) &&
+          /\bblack\b/i.test(p.name ?? ""),
+      );
+      const all = live.some((p) => (p.product_ids ?? []).length === 0);
+      const open = new Set(live.flatMap((p) => p.product_ids ?? []));
+      if (!all && !items.every((i) => open.has(i.productId))) {
+        throw new Error("No momento os preços são sob consulta. Fale com a Orium pelo WhatsApp para fechar o seu pedido.");
+      }
     }
     const minQty = settings?.wholesale_min_quantity ?? 6;
     const totalQuantity = items.reduce((s, i) => s + i.quantity, 0);

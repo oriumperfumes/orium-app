@@ -1,5 +1,5 @@
 import { imgVariant } from "@/lib/product-img";
-import { ORIUM_WHATSAPP, usePricesOnRequestAll } from "@/lib/price-on-request";
+import { ORIUM_WHATSAPP, useBlackOpen, usePricesOnRequestAll } from "@/lib/price-on-request";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Minus,
@@ -124,7 +124,11 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
   const { lead, updateLead } = useLead();
   const checkoutTracked = useRef(false);
   // Admin → Precificação → "Preços sob consulta": sacola sem preço nem checkout
-  const onRequestAll = usePricesOnRequestAll();
+  const blackOpen = useBlackOpen();
+  // ...a não ser que a Sacola só tenha perfumes da Black (esses vendem pelo site)
+  const onRequestAll =
+    usePricesOnRequestAll() &&
+    !(cart.items.length > 0 && cart.items.every((i) => blackOpen.all || blackOpen.ids.has(i.productId)));
 
   // mantém o campo tocado visível acima do teclado, sem pulos
   const onFieldFocus = (event: React.FocusEvent<HTMLDivElement>) => {
