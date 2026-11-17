@@ -43,12 +43,15 @@ export class AiError extends Error {
 
 const OPENAI = "https://api.openai.com/v1";
 
+/** A chave como foi colada pode vir com espaço, quebra de linha ou aspas: limpa antes de usar. */
+const cleanKey = (raw: string | undefined) => (raw ?? "").replace(/^[\s"'`]+|[\s"'`]+$/g, "").replace(/\s+/g, "");
+
 export function openaiKey(): string {
-  const k = process.env["OPENAI_API_KEY"];
+  const k = cleanKey(process.env["OPENAI_API_KEY"]);
   if (!k) throw new AiError("not_configured", "A IA ainda não está conectada. Cadastre a chave da OpenAI na Central de IA.", 503);
   return k;
 }
-export const hasOpenAiKey = () => Boolean(process.env["OPENAI_API_KEY"]);
+export const hasOpenAiKey = () => Boolean(cleanKey(process.env["OPENAI_API_KEY"]));
 
 let cache: { at: number; cfg: AiConfig } | null = null;
 async function db() {
@@ -193,9 +196,12 @@ export async function recordUsage(u: {
 
 export async function mapOpenAIError(res: Response): Promise<AiError> {
   let code = "";
+  let detail = "";
   try {
-    const j = (await res.json()) as { error?: { code?: string; type?: string } };
+    const j = (await res.json()) as { error?: { code?: string; type?: string; message?: string } };
     code = j.error?.code ?? j.error?.type ?? "";
+    // a OpenAI mascara a chave nas mensagens (sk-...abcd); corta por segurança
+    detail = (j.error?.message ?? "").replace(/sk-[\w-]{6,}/g, "sk-…").slice(0, 160);
   } catch {
     /* sem corpo */
   }
@@ -204,7 +210,7 @@ export async function mapOpenAIError(res: Response): Promise<AiError> {
   if (res.status === 429) return new AiError("rate_limited", "Muitos pedidos à OpenAI agora. Tente em alguns segundos.", 429);
   if (res.status === 404) return new AiError("bad_request", "O modelo escolhido não está disponível na sua conta OpenAI.", 400);
   if (res.status >= 500) return new AiError("unavailable", "A OpenAI está indisponível no momento. Tente de novo.", 503);
-  return new AiError("bad_request", `A OpenAI recusou o pedido (${res.status}${code ? ` · ${code}` : ""}).`, 400);
+  return new AiError("bad_request", `A OpenAI recusou o pedido (${res.status}${code ? ` · ${code}` : ""})${detail ? `: ${detail}` : "."}`, 400);
 }
 
 /** Provedor para o AI SDK (Copilot com ferramentas). */
