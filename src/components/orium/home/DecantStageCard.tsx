@@ -95,7 +95,7 @@ export function DecantStageCard({ onExplore, style }: { onExplore: () => void; s
         ) : (
           <canvas
             ref={canvasRef}
-            aria-label={`Decant de ${ml} ml em 3D. Arraste para girar.`}
+            aria-label={`Decant de ${ml} ml em 3D. Arraste para girar, toque para tirar a tampa.`}
             role="img"
             className={cn(
               "absolute inset-0 h-full w-full cursor-grab transition-opacity duration-700 active:cursor-grabbing",
@@ -111,7 +111,7 @@ export function DecantStageCard({ onExplore, style }: { onExplore: () => void; s
               touched && "opacity-0",
             )}
           >
-            Arraste para girar
+            Arraste para girar · toque para destampar
           </span>
         ) : null}
       </div>
