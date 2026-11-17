@@ -533,8 +533,12 @@ export type DecantRT = {
     spin: (v: number) => void;
     cap: (open: boolean) => void;
     stop: () => void;
+    /** força a escala da grade interna (teste) */
+    scale: (s: number) => void;
   };
   setSize: (ml: DecantMl) => void;
+  /** pede (num toque) a permissão do giroscópio — o iPhone só libera assim */
+  sensors: () => void;
   /** empurrão no líquido (ex.: ao trocar de tamanho) */
   nudge: (strength?: number) => void;
   destroy: () => void;
@@ -610,14 +614,43 @@ export function createDecantRT(
     jit: U("uJit"),
   };
 
-  /* ── antisserrilhado temporal: cada quadro sai com um deslocamento de
-     subpixel diferente e é acumulado com os anteriores (peso que se adapta ao
-     movimento: parado = acumula muito, arrastando = quase só o quadro novo) ── */
+  /* ── superamostragem temporal ──
+     A imagem mostrada é SEMPRE na resolução cheia da tela (até 2×). Cada
+     quadro é desenhado numa grade interna (cheia, ou menor quando o aparelho
+     aperta) com um deslocamento de subpixel diferente; cada pixel da tela
+     recebe a amostra que caiu perto dele e acumula com as anteriores. Parado,
+     a imagem converge para nítida e lisa como um render; em movimento o quadro
+     novo pesa mais e o histórico é limitado pela vizinhança (sem rastro). ── */
   const BLEND_FS = `#version 300 es
-precision mediump float;
+precision highp float;
 in vec2 vUv; out vec4 o;
-uniform sampler2D uCur, uHist; uniform float uA;
-void main(){ o = mix(texture(uHist, vUv), texture(uCur, vUv), uA); }`;
+uniform sampler2D uCur, uHist;
+uniform vec2 uR, uJit, uLow;     // escala interna, deslocamento (px internos), tamanho interno
+uniform float uA, uK, uValid;    // peso base, movimento (0..1), histórico válido
+void main(){
+  vec2 p = gl_FragCoord.xy;                       // centro do pixel da tela
+  vec2 lp = p * uR - uJit;                        // na grade interna (centros em i + 0,5)
+  ivec2 hi = ivec2(uLow) - 1;
+  ivec2 i = clamp(ivec2(floor(lp)), ivec2(0), hi);
+  vec2 sp = (vec2(i) + 0.5 + uJit) / uR;          // onde o raio daquele texel caiu
+  vec2 dd = sp - p;
+  float w = exp(-dot(dd, dd) * 2.2);              // amostra perto deste pixel = confiável
+  vec3 c = texelFetch(uCur, i, 0).rgb;
+  vec3 b = texture(uCur, lp / uLow).rgb;          // interpolada (para o primeiro quadro / movimento)
+  vec3 h = texture(uHist, vUv).rgb;
+  vec3 mn = c, mx = c;
+  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++){
+    vec3 n = texelFetch(uCur, clamp(i + ivec2(x, y), ivec2(0), hi), 0).rgb;
+    mn = min(mn, n); mx = max(mx, n);
+  }
+  // sempre limitado à vizinhança da imagem nova: folga maior parado (não cintila
+  // em detalhes finos), justa em movimento (corta o eco quando algo para)
+  float m = mix(0.10, 0.02, uK);
+  h = clamp(h, mn - m, mx + m);
+  vec3 target = mix(b, c, w);
+  float a = uValid < 0.5 ? 1. : clamp(mix(uA * w, uA, uK), 0., 1.);
+  o = vec4(mix(h, target, a), 1.);
+}`;
   const bfs = sh(gl.FRAGMENT_SHADER, BLEND_FS);
   const bvs = sh(gl.VERTEX_SHADER, VS);
   if (!bfs || !bvs) return null;
@@ -626,23 +659,33 @@ void main(){ o = mix(texture(uHist, vUv), texture(uCur, vUv), uA); }`;
   gl.attachShader(blendProg, bfs);
   gl.bindAttribLocation(blendProg, 0, "aP");
   gl.linkProgram(blendProg);
+  const BU = (n: string) => gl.getUniformLocation(blendProg, n);
   const bu = {
-    cur: gl.getUniformLocation(blendProg, "uCur"),
-    hist: gl.getUniformLocation(blendProg, "uHist"),
-    a: gl.getUniformLocation(blendProg, "uA"),
+    cur: BU("uCur"),
+    hist: BU("uHist"),
+    r: BU("uR"),
+    jit: BU("uJit"),
+    low: BU("uLow"),
+    a: BU("uA"),
+    k: BU("uK"),
+    valid: BU("uValid"),
   };
   type Target = { tex: WebGLTexture; fb: WebGLFramebuffer };
-  let targets: Target[] = [];
+  let targets: Target[] = []; // [histórico A, histórico B] na resolução da tela
+  let cur: Target | null = null; // quadro novo, na resolução interna
   let tw = 0,
     th = 0,
+    cw = 0,
+    ch = 0,
     histIdx = 0,
     histValid = false;
-  const makeTarget = (w: number, h: number): Target => {
+  const makeTarget = (w: number, h: number, linear: boolean): Target => {
     const tex = gl.createTexture()!;
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    const f = linear ? gl.LINEAR : gl.NEAREST;
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, f);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, f);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     const fb = gl.createFramebuffer()!;
@@ -651,16 +694,24 @@ void main(){ o = mix(texture(uHist, vUv), texture(uCur, vUv), uA); }`;
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     return { tex, fb };
   };
-  const ensureTargets = (w: number, h: number) => {
-    if (w === tw && h === th && targets.length) return;
-    targets.forEach((t) => {
-      gl.deleteTexture(t.tex);
-      gl.deleteFramebuffer(t.fb);
-    });
-    targets = [makeTarget(w, h), makeTarget(w, h), makeTarget(w, h)];
-    tw = w;
-    th = h;
-    histValid = false;
+  const drop = (t: Target) => {
+    gl.deleteTexture(t.tex);
+    gl.deleteFramebuffer(t.fb);
+  };
+  const ensureTargets = (w: number, h: number, iw: number, ih: number) => {
+    if (w !== tw || h !== th || !targets.length) {
+      targets.forEach(drop);
+      targets = [makeTarget(w, h, false), makeTarget(w, h, false)];
+      tw = w;
+      th = h;
+      histValid = false;
+    }
+    if (iw !== cw || ih !== ch || !cur) {
+      if (cur) drop(cur);
+      cur = makeTarget(iw, ih, true);
+      cw = iw;
+      ch = ih;
+    }
   };
   // sequência de Halton (2, 3): 16 posições de subpixel bem espalhadas
   const halton = (i: number, b: number) => {
@@ -732,11 +783,17 @@ void main(){ o = mix(texture(uHist, vUv), texture(uCur, vUv), uA); }`;
     dragVY = 0;
   let idleSpin = opts.autoRotate === false || reduced ? 0 : 0.22;
   let idleFor = 0;
+  // nível do perfume pedido pela gravidade real (giroscópio); 0 = horizontal da tela
+  let levelX = 0,
+    levelZ = 0;
   let deviceTiltX = 0,
     deviceTiltZ = 0;
 
+  // a tela é sempre na resolução cheia (até 3×, nativa do iPhone): nitidez nunca cai. Quando o
+  // aparelho aperta, só a grade INTERNA de desenho diminui (renderScale) e a
+  // superamostragem temporal reconstrói os detalhes
   const resize = () => {
-    const dpr = Math.min(Math.max(window.devicePixelRatio || 1, 1.5), 2) * quality;
+    const dpr = Math.min(Math.max(window.devicePixelRatio || 1, 1.5), 3);
     const w = Math.max(1, Math.round(canvas.clientWidth * dpr));
     const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
     if (canvas.width !== w || canvas.height !== h) {
@@ -744,7 +801,9 @@ void main(){ o = mix(texture(uHist, vUv), texture(uCur, vUv), uA); }`;
       canvas.height = h;
     }
   };
-  let quality = 1;
+  // telas 3× (iPhone): começa desenhando ~1/3 dos pixels por quadro e deixa o
+  // acúmulo completar; o ritmo adaptativo sobe ou desce a partir daí
+  let renderScale = (window.devicePixelRatio || 1) > 2.2 ? 0.6 : 1;
 
   /* ── entrada ── */
   let downX = 0,
@@ -784,6 +843,7 @@ void main(){ o = mix(texture(uHist, vUv), texture(uCur, vUv), uA); }`;
     wake();
   };
   const onUp = (e: PointerEvent) => {
+    if (dragging && e.pointerType !== "mouse") askSensors();
     // toque rápido sem arrastar: abre/fecha a tampa
     if (
       dragging &&
@@ -803,14 +863,93 @@ void main(){ o = mix(texture(uHist, vUv), texture(uCur, vUv), uA); }`;
   window.addEventListener("pointercancel", onUp);
   canvas.style.touchAction = "pan-y";
 
-  // inclinar o celular também mexe o perfume (Android libera direto; iOS só após permissão)
+  /* ── giroscópio ──
+     Inclinar o celular inclina o frasco e o perfume balança; sacudir agita o
+     perfume. A posição em que a pessoa segura o celular é o "em pé": o neutro
+     acompanha devagar (~2 s), então só as mudanças contam.
+     Android entrega os sensores direto; o iPhone (iOS 13+) só depois de pedir
+     a permissão dentro de um toque — feito no primeiro toque no decant (o
+     Chrome novo também tem o pedido, mas libera na hora). */
+  const DEG = Math.PI / 180;
+  let baseBeta: number | null = null,
+    baseGamma = 0,
+    lastOrientT = 0;
   const onOrient = (e: DeviceOrientationEvent) => {
     if (e.gamma == null || e.beta == null) return;
-    deviceTiltZ = Math.max(-0.35, Math.min(0.35, ((-e.gamma * Math.PI) / 180) * 0.5));
-    deviceTiltX = Math.max(-0.25, Math.min(0.25, (((e.beta - 45) * Math.PI) / 180) * 0.35));
+    const now = performance.now();
+    if (baseBeta == null) {
+      baseBeta = e.beta;
+      baseGamma = e.gamma;
+    }
+    const dt = Math.min(0.25, (now - (lastOrientT || now)) / 1000);
+    lastOrientT = now;
+    const kk = 1 - Math.exp(-dt / 2);
+    baseBeta += (e.beta - baseBeta) * kk;
+    baseGamma += (e.gamma - baseGamma) * kk;
+    // frasco: só um leve paralaxe com as mudanças (ele "está" na tela)
+    const tz = Math.max(-0.07, Math.min(0.07, -(e.gamma - baseGamma) * DEG * 0.3));
+    const tx = Math.max(-0.05, Math.min(0.05, (e.beta - baseBeta) * DEG * 0.2));
+    // perfume: nivelado com a GRAVIDADE DE VERDADE. Celular girado para a
+    // direita = o horizonte real gira para a esquerda na tela; a superfície
+    // acompanha (como se houvesse perfume de verdade dentro do celular)
+    const lx = Math.max(-0.55, Math.min(0.55, -Math.tan(e.gamma * DEG)));
+    const lz = Math.max(-0.2, Math.min(0.2, (e.beta - baseBeta) * DEG * 0.4));
+    if (
+      Math.abs(tz - deviceTiltZ) +
+        Math.abs(tx - deviceTiltX) +
+        Math.abs(lx - levelX) +
+        Math.abs(lz - levelZ) >
+      0.002
+    ) {
+      deviceTiltZ = tz;
+      deviceTiltX = tx;
+      levelX = lx;
+      levelZ = lz;
+      wake();
+    }
+  };
+  const onMotion = (e: DeviceMotionEvent) => {
+    const acc = e.acceleration;
+    if (!acc || acc.x == null || acc.y == null) return;
+    if (Math.abs(acc.x) + Math.abs(acc.y) < 0.5) return;
+    // sacudida: o perfume fica para trás e balança
+    sxv -= Math.max(-6, Math.min(6, acc.x)) * 0.05;
+    szv += Math.max(-6, Math.min(6, acc.y)) * 0.03;
+    idleFor = 0;
     wake();
   };
-  window.addEventListener("deviceorientation", onOrient);
+  type Perm = { requestPermission?: () => Promise<string> };
+  const OrientPerm =
+    typeof DeviceOrientationEvent !== "undefined"
+      ? (DeviceOrientationEvent as unknown as Perm)
+      : null;
+  const MotionPerm =
+    typeof DeviceMotionEvent !== "undefined" ? (DeviceMotionEvent as unknown as Perm) : null;
+  const needsPerm = typeof OrientPerm?.requestPermission === "function";
+  let sensorsOn = false,
+    asked = false;
+  const enableSensors = () => {
+    if (sensorsOn) return;
+    sensorsOn = true;
+    window.addEventListener("deviceorientation", onOrient);
+    window.addEventListener("devicemotion", onMotion);
+  };
+  const askSensors = () => {
+    if (!needsPerm || asked) return;
+    asked = true;
+    // os dois pedidos saem juntos, ainda dentro do toque (o iOS mostra um aviso só)
+    const o = OrientPerm!.requestPermission!();
+    const m = MotionPerm?.requestPermission?.();
+    o.then((r) => (r === "granted" ? enableSensors() : undefined)).catch(() => {
+      asked = false;
+    });
+    m?.catch(() => {});
+  };
+  // liga já: no Android os eventos chegam na hora; no iPhone só começam a
+  // chegar depois da permissão (pedida no primeiro toque)
+  enableSensors();
+  const onTouchEnd = () => askSensors();
+  canvas.addEventListener("touchend", onTouchEnd, { passive: true });
 
   /* ── loop ── */
   let raf = 0,
@@ -877,13 +1016,13 @@ void main(){ o = mix(texture(uHist, vUv), texture(uCur, vUv), uA); }`;
     // aceleração angular do frasco e volta para a horizontal oscilando
     const lk = 75,
       lc = 2.2;
-    const lax = lk * (0 - sx) - lc * sxv - ax * 0.55;
-    const laz = lk * (0 - sz) - lc * szv - az * 0.55;
+    const lax = lk * (levelX - sx) - lc * sxv - ax * 0.55;
+    const laz = lk * (levelZ - sz) - lc * szv - az * 0.55;
     sxv += lax * dt;
     szv += laz * dt;
     sx += sxv * dt;
     sz += szv * dt;
-    sx = Math.max(-0.5, Math.min(0.5, sx));
+    sx = Math.max(-0.65, Math.min(0.65, sx));
     sz = Math.max(-0.5, Math.min(0.5, sz));
     // ondinhas: ganham energia com o tranco e somem devagar
     // ondas: ganham energia com o tranco e assentam devagar (proporcionais ao raio)
@@ -932,14 +1071,15 @@ void main(){ o = mix(texture(uHist, vUv), texture(uCur, vUv), uA); }`;
     const gap = now - last;
     let dt = Math.min(0.05, gap / 1000);
     last = now;
-    // qualidade adaptativa: o intervalo entre quadros inclui o tempo da placa de
-    // vídeo; se passar de ~19 ms (abaixo de ~52 fps), baixa a resolução
+    // ritmo adaptativo: o intervalo entre quadros inclui o tempo da placa de
+    // vídeo; se passar de ~19 ms (abaixo de ~52 fps), desenha menos pixels por
+    // quadro (a tela continua na resolução cheia — a nitidez vem do acúmulo)
     if (gap > 0 && gap < 200) {
       frameMs = frameMs * 0.85 + gap * 0.15;
       if (++frames % 20 === 0) {
-        if (frameMs > 19 && quality > 0.5) quality = Math.max(0.5, quality - 0.12);
-        else if (frameMs < 17.4 && quality < 1 && frames > 120)
-          quality = Math.min(1, quality + 0.04);
+        if (frameMs > 19 && renderScale > 0.5) renderScale = Math.max(0.5, renderScale - 0.1);
+        else if (frameMs < 15.5 && renderScale < 1 && frames > 120)
+          renderScale = Math.min(1, renderScale + 0.05);
       }
     }
     // passos fixos: a física não depende da taxa de quadros
@@ -983,11 +1123,15 @@ void main(){ o = mix(texture(uHist, vUv), texture(uCur, vUv), uA); }`;
   const draw = () => {
     resize();
     gl.useProgram(prog);
-    ensureTargets(canvas.width, canvas.height);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, targets[2]!.fb);
-    gl.viewport(0, 0, canvas.width, canvas.height);
+    const iw = Math.max(1, Math.round(canvas.width * renderScale));
+    const ih = Math.max(1, Math.round(canvas.height * renderScale));
+    ensureTargets(canvas.width, canvas.height, iw, ih);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, cur!.fb);
+    gl.viewport(0, 0, iw, ih);
     jitIdx = (jitIdx % 16) + 1;
-    gl.uniform2f(u.jit, halton(jitIdx, 2) - 0.5, halton(jitIdx, 3) - 0.5);
+    const jx = halton(jitIdx, 2) - 0.5,
+      jy = halton(jitIdx, 3) - 0.5;
+    gl.uniform2f(u.jit, jx, jy);
     const R = rotMat(yaw, tiltX, tiltZ);
     // o frasco rola sobre a borda da base: sobe o pivô para a quina tocar a mesa
     // ponto mais baixo da quina arredondada (raio 1,1 mm) toca exatamente a mesa
@@ -1003,7 +1147,7 @@ void main(){ o = mix(texture(uHist, vUv), texture(uCur, vUv), uA); }`;
     const camM = new Float32Array([r[0], r[1], r[2], up[0], up[1], up[2], f[0], f[1], f[2]]);
     const aspect = canvas.width / canvas.height;
     const vfov = ((24 * Math.PI) / 180) * (aspect < 0.9 ? 1.12 : 1);
-    gl.uniform2f(u.res, canvas.width, canvas.height);
+    gl.uniform2f(u.res, iw, ih);
     gl.uniform3f(u.eye, eye[0], eye[1], eye[2]);
     gl.uniformMatrix3fv(u.cam, false, camM);
     gl.uniform1f(u.focal, 0.5 / Math.tan(vfov / 2));
@@ -1066,18 +1210,27 @@ void main(){ o = mix(texture(uHist, vUv), texture(uCur, vUv), uA); }`;
     const shapeKey = spec.R * 7 + spec.H + spec.fill * 3;
     if (Math.abs(shapeKey - lastShapeKey) > 0.6) histValid = false;
     lastShapeKey = shapeKey;
-    const a = histValid ? Math.min(1, 0.1 + motionPx * 0.45) : 1;
+    // grade interna menor = cada pixel da tela é atingido menos vezes: pesa mais
+    const base = renderScale < 0.99 ? 0.22 : 0.12;
+    const a = Math.min(1, base + motionPx * 0.45);
+    const k = Math.min(1, Math.max(0, (motionPx - 0.3) / 1.7));
     const src = targets[histIdx]!,
       dst = targets[1 - histIdx]!;
     gl.useProgram(blendProg);
     gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fb);
+    gl.viewport(0, 0, tw, th);
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, targets[2]!.tex);
+    gl.bindTexture(gl.TEXTURE_2D, cur!.tex);
     gl.uniform1i(bu.cur, 0);
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, src.tex);
     gl.uniform1i(bu.hist, 1);
+    gl.uniform2f(bu.r, iw / tw, ih / th);
+    gl.uniform2f(bu.jit, jx, jy);
+    gl.uniform2f(bu.low, iw, ih);
     gl.uniform1f(bu.a, a);
+    gl.uniform1f(bu.k, k);
+    gl.uniform1f(bu.valid, histValid ? 1 : 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     // mostra
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, dst.fb);
@@ -1118,6 +1271,9 @@ void main(){ o = mix(texture(uHist, vUv), texture(uCur, vUv), uA); }`;
         running = false;
         visible = false;
       },
+      scale(sc: number) {
+        renderScale = sc;
+      },
     },
     setSize(next) {
       if (next === ml) return;
@@ -1127,6 +1283,9 @@ void main(){ o = mix(texture(uHist, vUv), texture(uCur, vUv), uA); }`;
       sxv -= 0.6;
       idleFor = 0;
       wake();
+    },
+    sensors() {
+      askSensors();
     },
     nudge(s = 1) {
       szv += 2 * s;
@@ -1141,6 +1300,8 @@ void main(){ o = mix(texture(uHist, vUv), texture(uCur, vUv), uA); }`;
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
       window.removeEventListener("deviceorientation", onOrient);
+      window.removeEventListener("devicemotion", onMotion);
+      canvas.removeEventListener("touchend", onTouchEnd);
       gl.getExtension("WEBGL_lose_context")?.loseContext();
     },
   };
