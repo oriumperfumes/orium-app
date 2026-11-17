@@ -5,7 +5,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type FileUIPart, type UIMessage } from "ai";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowRight, ArrowDown, Boxes, Camera, ScanSearch, ChartNoAxesColumn, Check, Command, Eye, Loader2, Mic, Percent, Plus, Receipt, RefreshCw, ShoppingBag, Sparkles, Tag, Ticket, Truck, X } from "lucide-react";
+import { ArrowRight, ArrowDown, Boxes, Camera, Image as ImageIcon, ScanSearch, ChartNoAxesColumn, Check, Command, Eye, Loader2, Mic, Percent, Plus, Receipt, RefreshCw, ShoppingBag, Sparkles, Tag, Ticket, Truck, X } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai-elements/conversation";
@@ -152,27 +152,39 @@ function PhotoTray({ onCount }: { onCount: (n: number) => void }) {
   );
 }
 
-/** Botão de câmera/galeria (no celular abre a câmera ou as fotos). */
-function PhotoButton() {
-  const { openFileDialog } = usePromptInputAttachments();
+/**
+ * Câmera direta (abre a câmera traseira do celular) e galeria.
+ * O campo escondido com capture="environment" vai direto para a câmera;
+ * no computador ele abre a escolha de arquivo normal.
+ */
+function PhotoButtons({ registerCamera }: { registerCamera: (fn: () => void) => void }) {
+  const { add, openFileDialog } = usePromptInputAttachments();
+  const cam = useRef<HTMLInputElement>(null);
+  const openCamera = useCallback(() => cam.current?.click(), []);
+  useEffect(() => registerCamera(openCamera), [openCamera, registerCamera]);
+  const btn =
+    "press grid size-9 shrink-0 place-items-center rounded-full bg-[#232323] text-[#D4D4D4] transition-colors hover:bg-[#2E2E2E] hover:text-white";
   return (
-    <button
-      type="button"
-      aria-label="Mandar foto de um perfume"
-      title="Foto de um perfume"
-      onClick={openFileDialog}
-      className="press grid size-9 shrink-0 place-items-center rounded-full bg-[#232323] text-[#D4D4D4] transition-colors hover:bg-[#2E2E2E] hover:text-white"
-    >
-      <Camera className="size-[18px]" />
-    </button>
+    <>
+      <input
+        ref={cam}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => {
+          if (e.currentTarget.files?.length) add(e.currentTarget.files);
+          e.currentTarget.value = "";
+        }}
+      />
+      <button type="button" aria-label="Tirar foto com a câmera" title="Câmera" onClick={openCamera} className={btn}>
+        <Camera className="size-[18px]" />
+      </button>
+      <button type="button" aria-label="Escolher foto da galeria" title="Galeria" onClick={openFileDialog} className={btn}>
+        <ImageIcon className="size-[18px]" />
+      </button>
+    </>
   );
-}
-
-/** Abre a escolha de foto de fora do campo (cartão da tela inicial). */
-function PhotoOpener({ registerOpen }: { registerOpen: (fn: () => void) => void }) {
-  const { openFileDialog } = usePromptInputAttachments();
-  useEffect(() => registerOpen(openFileDialog), [openFileDialog, registerOpen]);
-  return null;
 }
 
 /** Ícone de cada sugestão, pelo assunto. */
@@ -612,7 +624,7 @@ export function CopilotChat({
                 </span>
                 <span className="min-w-0">
                   <span className="block text-[15px] font-bold">Reconhecer pela foto</span>
-                  <span className="block text-[13px] leading-snug text-[#8C8C8C]">Mande a foto de um perfume: eu identifico, pesquiso e cadastro.</span>
+                  <span className="block text-[13px] leading-snug text-[#8C8C8C]">Abre a câmera: tire a foto de um perfume e eu identifico, pesquiso e cadastro.</span>
                 </span>
               </button>
               <div className="mt-2.5 grid w-full grid-cols-2 gap-2.5">
@@ -746,7 +758,6 @@ export function CopilotChat({
             className="cp-composer rounded-[28px] border-0 [&_[data-slot=input-group]]:rounded-[28px] [&_[data-slot=input-group]]:border-0 [&_[data-slot=input-group]]:bg-transparent [&_[data-slot=input-group]]:shadow-none"
           >
             <PhotoTray onCount={setPhotoCount} />
-            <PhotoOpener registerOpen={registerOpen} />
             <PromptInputTextarea
               ref={textareaRef}
               value={text}
@@ -767,7 +778,7 @@ export function CopilotChat({
                 >
                   <Plus className="size-[18px]" />
                 </button>
-                <PhotoButton />
+                <PhotoButtons registerCamera={registerOpen} />
                 {page ? (
                   <span className="inline-flex h-9 min-w-0 items-center gap-1.5 rounded-full bg-[#1F1F1F] px-3 text-[12.5px] font-semibold text-[#A9A9A9]" title="O Copilot sabe em que tela você está">
                     <Eye className="size-3.5 shrink-0" />
