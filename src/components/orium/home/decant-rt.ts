@@ -32,11 +32,15 @@ const SLIM: Spec = { R: 8.3, H: 37, corner: 1.7, neck: 5.3, wall: 1.0, base: 3.0
 
 export const DECANT_SPECS: Record<DecantMl, Spec> = { 2: SLIM, 5: SLIM, 10: WIDE };
 
-/** cor do perfume: absorção por mm (R, G, B) — âmbar, rosé e champanhe */
+/**
+ * cor do perfume: âmbar dourado em todos (absorção por mm, R/G/B). O frasco fino
+ * tem menos líquido no caminho da luz, então absorve um pouco mais por mm para
+ * chegar no mesmo dourado do frasco largo.
+ */
 const SIGMA: Record<DecantMl, [number, number, number]> = {
   10: [0.008, 0.085, 0.34],
-  5: [0.003, 0.034, 0.024],
-  2: [0.003, 0.011, 0.05],
+  5: [0.011, 0.115, 0.45],
+  2: [0.011, 0.115, 0.45],
 };
 
 const NECK_H = 2.2;
@@ -229,10 +233,17 @@ vec3 trace(vec3 ro, vec3 rd, bool primary, out bool hitFloor, out vec3 floorP, o
           float fr = fresnel(1., 1.49, max(dot(-v, n), 0.));
           float dr = ringS(p), da = actS(p), dc = capS(p);
           int part = (dr < da && dr < dc) ? 0 : (da < dc ? 1 : 2);
-          vec3 milky = part == 0 ? vec3(0.93, 0.93, 0.92) : vec3(0.86, 0.89, 0.92);
-          float trans = part == 0 ? 0.22 : (part == 1 ? 0.5 : 0.62);
+          vec3 milky = part == 0 ? vec3(0.93, 0.93, 0.92) : vec3(0.84, 0.88, 0.93);
           float key = max(dot(n, normalize(vec3(-0.55, 0.65, -0.5))), 0.);
-          vec3 c = milky*(0.035 + 0.16*key) + milky*env(v, 0.5)*trans*0.5 + env(rf, part == 2 ? 0.22 : 0.12)*fr*1.3;
+          // polipropileno fosco: pouca cor própria, a luz de trás atravessa borrada,
+          // borda mais clara (o plástico fica mais espesso de lado) e reflexo suave
+          float rim = pow(1. - max(dot(-v, n), 0.), 2.);
+          vec3 c;
+          if (part == 0) c = milky*(0.05 + 0.22*key) + env(rf, 0.12)*fr*1.2;
+          else {
+            vec3 through = env(v, 0.6) * (part == 2 ? 0.15 : 0.2);
+            c = milky*(0.012 + 0.05*key + 0.10*rim) + milky*through + env(rf, part == 2 ? 0.28 : 0.14)*fr*1.15;
+          }
           if (part == 1){
             // bico branco do borrifador, virado para a frente
             float ang = atan(p.x, -p.z);
@@ -288,7 +299,7 @@ vec3 trace(vec3 ro, vec3 rd, bool primary, out bool hitFloor, out vec3 floorP, o
     float stepd = max(d, 0.002);
     if (m == LIQ) T *= exp(-uSigma * stepd);
     else if (m == GLASS){
-      if (rodS(p) < 0.){ T *= exp(-vec3(0.16) * stepd); col += T*vec3(0.010)*stepd; }   // tubinho leitoso
+      if (rodS(p) < 0.){ T *= exp(-vec3(0.05) * stepd); col += T*vec3(0.035)*stepd; }   // tubinho leitoso
       else T *= exp(-vec3(0.010, 0.004, 0.008) * stepd);
     }
     else if (m == PLAS) T *= exp(-vec3(0.035, 0.032, 0.028) * stepd);
@@ -380,7 +391,7 @@ function toLocal(M: Float32Array, v: V3): V3 {
 
 export type DecantRT = {
   /** controle manual para gravar prévias (quadro a quadro) */
-  preview: { step: (dt: number) => void; push: (x: number, z: number, yawVel?: number) => void; stop: () => void };
+  preview: { step: (dt: number) => void; push: (x: number, z: number, yawVel?: number) => void; cap: (open: boolean) => void; stop: () => void };
   setSize: (ml: DecantMl) => void;
   /** empurrão no líquido (ex.: ao trocar de tamanho) */
   nudge: (strength?: number) => void;
@@ -744,6 +755,9 @@ export function createDecantRT(canvas: HTMLCanvasElement, opts: DecantRTOptions 
         dragging = x !== 0 || z !== 0;
         if (yawVel != null) yawV = yawVel;
         idleFor = 0;
+      },
+      cap(open: boolean) {
+        capOpen = open;
       },
       stop() {
         cancelAnimationFrame(raf);
