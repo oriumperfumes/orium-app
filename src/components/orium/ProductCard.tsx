@@ -14,6 +14,8 @@ import { useDecantSettings } from "@/lib/use-decant-settings";
 import { usePromotions } from "@/lib/use-promotions";
 import { priceUnit, promotionCta } from "@/lib/promotions";
 import { PromotionBadge } from "@/components/orium/PromotionBadge";
+import { isBlack, scarcity } from "@/lib/black";
+import { BlackCountdown, BlackPrice, BlackScarcity, BlackTag } from "@/components/orium/black/Black";
 import { cn } from "@/lib/utils";
 import { nameHeroTile, rememberProductPreview, warmProductImage, warmProductRoute } from "@/lib/product-preview";
 import { AdminCatalogChip } from "@/components/orium/AdminCatalogChip";
@@ -287,6 +289,9 @@ function ProductCardBase({
   const bottleOnPromo = !!bottlePriced?.promotion && bottlePriced.basePrice > 0;
   /** Em modo Frasco o preço do frasco (com promoção) é sempre o preço principal. */
   const showBottleFirst = priceView === "frasco" || !showDecant || bottleOnPromo;
+  /** Black November: o visual de vitrine vale para a promoção que o card está mostrando. */
+  const shownPromo = showBottleFirst ? bottlePriced?.promotion : fromPriced?.promotion;
+  const black = !consult && isBlack(shownPromo) ? shownPromo! : null;
 
 
   // Rolagem e carrossel nunca contam como abertura do perfume.
@@ -328,7 +333,9 @@ function ProductCardBase({
             </span>
           ) : null}
 
-          {percent > 0 && !consult ? (
+          {black ? (
+            <BlackTag promotion={black} size="xs" className="absolute top-2.5 left-2.5" />
+          ) : percent > 0 && !consult ? (
             <span className="gold-chip absolute top-2.5 left-2.5 rounded-full px-2 py-0.5 text-[10px] font-bold">
               -{Math.round(percent)}%
             </span>
@@ -366,6 +373,30 @@ function ProductCardBase({
                 </p>
                 <p className="text-[16px] leading-tight font-bold tracking-tight text-[#FFD599] @min-[220px]/card:text-[18px]">Sob consulta</p>
                 <p className="mt-0.5 text-[10.5px] text-[#8C8C8C]">Preço no WhatsApp</p>
+              </>
+            ) : black && showBottleFirst && bottlePriced != null ? (
+              <>
+                <BlackPrice
+                  key={`bf-${bottlePriced.finalPrice}`}
+                  base={bottlePriced.basePrice}
+                  final={bottlePriced.finalPrice}
+                  percent={percent}
+                />
+                {/* uma urgência por card: estoque real baixo vence; senão, o relógio */}
+                <div className="mt-1.5">
+                  {scarcity(product) ? <BlackScarcity product={product} /> : <BlackCountdown endsAt={black.ends_at} />}
+                </div>
+              </>
+            ) : black && fromPriced != null ? (
+              <>
+                <p className="text-[10.5px] text-muted-foreground">Decant {size}ml</p>
+                <BlackPrice
+                  key={`bd-${size}-${fromPriced.finalPrice}`}
+                  base={fromPriced.basePrice}
+                  final={fromPriced.finalPrice}
+                  percent={percent}
+                />
+                <BlackCountdown endsAt={black.ends_at} className="mt-1.5" />
               </>
             ) : showBottleFirst && bottlePriced != null ? (
               <>
@@ -468,7 +499,7 @@ function ProductCardBase({
             search={{ frasco: 1 }}
             className="press inline-flex h-[34px] items-center rounded-full bg-[#FFD599] px-4 text-[13px] font-bold text-black transition-colors hover:bg-[#FFDDAA] @min-[220px]/card:h-[40px] @min-[220px]/card:px-5 @min-[220px]/card:text-[14px]"
           >
-            {promotionCta(bottlePriced!.promotion, "Ver oferta")}
+            {black ? "Comprar agora" : promotionCta(bottlePriced!.promotion, "Ver oferta")}
           </Link>
         ) : onChoose && decant ? (
           <button
@@ -476,7 +507,7 @@ function ProductCardBase({
             className="press inline-flex h-[34px] items-center rounded-full bg-[#FFD599] px-4 text-[13px] font-bold text-black transition-colors hover:bg-[#FFDDAA] @min-[220px]/card:h-[40px] @min-[220px]/card:px-5 @min-[220px]/card:text-[14px]"
             onClick={() => onChoose(product)}
           >
-            {fromPriced?.promotion ? promotionCta(fromPriced.promotion, "Adicionar") : "Adicionar"}
+            {black ? "Comprar agora" : fromPriced?.promotion ? promotionCta(fromPriced.promotion, "Adicionar") : "Adicionar"}
           </button>
         ) : onChoose ? (
           <Link

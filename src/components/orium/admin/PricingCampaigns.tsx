@@ -26,6 +26,8 @@ import { normalizeTheme, type CampaignVars } from "@/lib/campaign-message";
 import { getOffers, type OfferDiagnostic } from "@/lib/offers.functions";
 import { OfferPopup } from "@/components/orium/OfferPopup";
 import { ItemThumb } from "@/components/orium/admin/OrderItems";
+import { isBlack } from "@/lib/black";
+import { BlackTag } from "@/components/orium/black/Black";
 import {
   AdminConfirm,
   AdminEmpty,
@@ -339,7 +341,10 @@ export function PromotionsPanel({
                         </span>
                       )}
                       <div className="min-w-0 flex-1">
-                        <PxStatus status={status} />
+                        <span className="flex min-w-0 items-center gap-2">
+                          <PxStatus status={status} />
+                          {isBlack(p) ? <BlackTag promotion={p} size="xs" /> : null}
+                        </span>
                         <p className="mt-1.5 truncate text-[18px] font-bold tracking-[-0.015em]">
                           {p.name}
                         </p>
@@ -545,6 +550,29 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
     onClose();
   };
 
+  /**
+   * Black November em um toque: nome com "Black" (é isso que liga o visual de
+   * vitrine na loja), fim real em 30/11 às 23:59 e o aviso "Esquenta Black".
+   * Desconto, produtos e datas continuam editáveis nos próximos passos.
+   */
+  const black = isBlack({ name });
+  const applyBlackPreset = () => {
+    const year = new Date().getFullYear();
+    setName("Black November");
+    if (!(pct >= 15)) setPercent(30);
+    setEndPick(null);
+    setEnds(`${year}-11-30T23:59`);
+    setAppExclusive(false);
+    setAnnounce(true);
+    setCopy({
+      ...emptyCampaignCopy(),
+      title: "Esquenta Black: até {discount}% OFF",
+      message: "Perfumes árabes originais com preço de Black. Enquanto durar o estoque.",
+      cta: "Ver ofertas",
+      theme: "PROMO",
+    });
+  };
+
   const stepOk = [
     name.trim().length > 0 && pct > 0 && pct <= 90,
     true,
@@ -601,7 +629,42 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
         ? productTitle(single?.canonical_name ?? "1 perfume")
         : `${ids.length} perfumes`;
 
-  const card = (
+  const card = black ? (
+    <div className="min-w-0 overflow-hidden rounded-[26px] bg-black p-5 text-white ring-1 ring-white/15">
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <BlackTag promotion={{ name }} size="md" />
+        <span className="shrink-0 text-[12.5px] font-bold text-[#8C8C8C]">
+          {APPLIES_OPTIONS.find((o) => o.value === appliesTo)?.label}
+        </span>
+      </div>
+      <p className="mt-4 truncate text-[15px] font-bold text-[#A9A9A9]">{name.trim()}</p>
+      <p className="text-[46px] leading-none font-black tracking-[-0.05em] tabular-nums">
+        {pct}% <span className="text-[22px] tracking-[-0.02em] text-[#FFD599]">OFF</span>
+      </p>
+      {base != null ? (
+        <div className="mt-4 flex min-w-0 items-center gap-3 rounded-[18px] bg-white/[0.06] p-2.5">
+          {single?.image_url ? (
+            <span className="shrink-0 overflow-hidden rounded-[12px] bg-white">
+              <ItemThumb src={single.image_url} alt={single.canonical_name ?? ""} size={44} />
+            </span>
+          ) : null}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13.5px] font-semibold">{scope}</span>
+            <span className="flex items-baseline gap-2 tabular-nums">
+              <span className="text-[12.5px] text-[#8C8C8C] line-through">{brl(base)}</span>
+              <span className="text-[17px] font-bold">{brl(promoPrice)}</span>
+            </span>
+          </span>
+        </div>
+      ) : (
+        <p className="mt-3 truncate text-[14px] font-semibold text-[#A9A9A9]">{scope}</p>
+      )}
+      <p className="mt-3 text-[12.5px] font-semibold text-[#8C8C8C]">{periodText(starts, ends)}</p>
+      <p className="mt-3 border-t border-white/10 pt-3 text-[12px] leading-snug text-[#A9A9A9]">
+        Na loja: selo Black nos cards, preço riscado, contagem até o fim, aviso de estoque baixo real e botão “Comprar agora”.
+      </p>
+    </div>
+  ) : (
     <div className="min-w-0 overflow-hidden rounded-[26px] bg-[#FFD599] p-5 text-[#15130F]">
       <div className="flex min-w-0 items-center justify-between gap-2">
         <span className="inline-flex min-w-0 items-center gap-2 truncate rounded-full bg-[#15130F] px-3 py-1 text-[12px] font-semibold text-[#FFD599]">
@@ -671,7 +734,22 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
     >
       {step === 0 ? (
         <>
-          <PxField label="Nome da campanha" htmlFor="promo-name">
+          <button
+            type="button"
+            onClick={applyBlackPreset}
+            className={cn(
+              "press flex w-full min-w-0 items-center gap-3 rounded-[18px] bg-black p-3.5 text-left ring-1 transition-colors",
+              black ? "ring-white" : "ring-white/15 hover:ring-white/40",
+            )}
+          >
+            <BlackTag size="sm" />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[14px] font-bold text-white">Campanha Black November</span>
+              <span className="block truncate text-[12px] text-[#A9A9A9]">Visual de vitrine, contagem e “Comprar agora” — até 30/11</span>
+            </span>
+            {black ? <span className="shrink-0 text-[12px] font-bold text-white">Ativo ✓</span> : null}
+          </button>
+          <PxField label="Nome da campanha" htmlFor="promo-name" hint="Qualquer nome com “Black” liga o visual Black na loja.">
             <PxInput
               id="promo-name"
               autoFocus

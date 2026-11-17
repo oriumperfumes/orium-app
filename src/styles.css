@@ -3613,3 +3613,25 @@ body.admin-mode .press:active:not(:disabled) { transform: scale(0.965); transiti
   .skin-fill, .skin-stage, .skin-note, .fs-chip, .fs-acc { animation: none; }
   .fs-ring, .skin-bubble img { transition: none; }
 }
+
+/* ---------- BLACK NOVEMBER ---------- */
+/* ponto "ao vivo": pisca devagar, sem brilho */
+.black-dot { animation: blackDot 1.6s ease-in-out infinite; }
+@keyframes blackDot { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+/* o segundo troca com um passo curto para cima */
+.black-sec { animation: blackSec 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes blackSec { from { transform: translateY(3px); opacity: 0.4; } to { transform: none; opacity: 1; } }
+/* barra de estoque enche da esquerda */
+.black-bar { transform-origin: left; animation: blackBar 900ms cubic-bezier(0.2, 0.8, 0.2, 1) 200ms both; }
+@keyframes blackBar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+/* selo entra com um "carimbo" */
+.black-tag { animation: blackStamp 360ms cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+@keyframes blackStamp { from { transform: scale(1.18); opacity: 0; } to { transform: none; opacity: 1; } }
+/* faixa da Home: letreiro correndo */
+.black-marquee { display: flex; width: max-content; animation: blackMarquee 26s linear infinite; }
+@keyframes blackMarquee { to { transform: translateX(-50%); } }
+.black-in { animation: blackIn 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both; animation-delay: var(--d, 0ms); }
+@keyframes blackIn { from { transform: translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .black-dot, .black-sec, .black-bar, .black-tag, .black-marquee, .black-in { animation: none; }
+}
