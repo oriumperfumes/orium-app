@@ -393,7 +393,9 @@ export function CopilotChat({
     openPhotos.current = fn;
   }, []);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const busy = status === "submitted" || status === "streaming";
+  const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
+  const busy = status === "submitted" || status === "streaming" || sending;
 
   const seen = useRef<Set<string>>(new Set(initialMessages.flatMap((m) => m.parts.map((p: Part) => p.toolCallId).filter(Boolean))));
   useEffect(() => {
@@ -431,7 +433,18 @@ export function CopilotChat({
   submitRef.current = async (raw: string, fromVoice = false, files: FileUIPart[] = []) => {
     const value = raw.trim();
     const images = files.filter((f) => /^image\//.test(f.mediaType));
-    if ((!value && !images.length) || busy) return;
+    // um envio por vez: preparar a foto leva um instante e um segundo toque mandava tudo de novo
+    if ((!value && !images.length) || busy || sendingRef.current) return;
+    sendingRef.current = true;
+    setSending(true);
+    try {
+      await sendNow(value, images, fromVoice);
+    } finally {
+      sendingRef.current = false;
+      setSending(false);
+    }
+  };
+  const sendNow = async (value: string, images: FileUIPart[], fromVoice: boolean) => {
     setError(null);
     setText("");
     setMore(false);
@@ -448,13 +461,14 @@ export function CopilotChat({
     setHeard(fromVoice ? value : null);
     if (images.length) {
       const small = await Promise.all(images.map((f) => shrinkImage(f.url).catch(() => f.url)));
-      await sendMessage({
+      // não espera a resposta inteira: o campo (e as fotos) limpam na hora
+      void sendMessage({
         text: value || "Que perfume é esse?",
         files: small.map((url, k) => ({ type: "file" as const, mediaType: "image/jpeg", url, filename: `foto-${k + 1}.jpg` })),
       });
       return;
     }
-    await sendMessage({ text: value });
+    void sendMessage({ text: value });
   };
   const submit = useCallback((t: string) => void submitRef.current(t), []);
   // perguntas prontas vindas de fora do chat (cartão do Copilot no Início)
@@ -576,16 +590,25 @@ export function CopilotChat({
     return { orb: "idle", label: null };
   }, [voice, level, status, messages]);
   const lastLabel = useRef<string | null>(null);
+  const lastKey = useRef("");
+  const doneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (doneTimer.current) clearTimeout(doneTimer.current);
+  }, []);
   useEffect(() => {
+    // durante a resposta a lista de mensagens muda a cada pedacinho: só avisa quando o estado muda de verdade
+    const key = `${activity.orb}|${activity.label ?? ""}|${Math.round((activity.level ?? 0) * 50)}`;
+    if (key === lastKey.current) return;
+    lastKey.current = key;
+    if (doneTimer.current) clearTimeout(doneTimer.current);
     onState?.(activity);
     if (activity.orb === "idle" && lastLabel.current) {
       onState?.({ orb: "done", label: "Concluído" });
-      const t = setTimeout(() => onState?.({ orb: "idle", label: null }), 1400);
+      doneTimer.current = setTimeout(() => onState?.({ orb: "idle", label: null }), 1400);
       lastLabel.current = null;
-      return () => clearTimeout(t);
+      return;
     }
     if (activity.orb !== "idle" && activity.orb !== "listening") lastLabel.current = activity.label;
-    return undefined;
   }, [activity, onState]);
 
   const suggestions = contextSuggestions(loc.pathname);
