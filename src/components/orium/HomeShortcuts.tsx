@@ -1,12 +1,12 @@
 import { setPriceView } from "@/lib/decant-size";
-import { decantPrice, trackDecant } from "@/lib/decants";
+import { decantPrice } from "@/lib/decants";
 import { track } from "@/lib/analytics";
 import { brl } from "@/lib/format";
 import { useDecantSettings } from "@/lib/use-decant-settings";
 import { useRevealOnce } from "@/components/orium/Reveal";
 import { DecantComboCard, useFeaturedCombo } from "@/components/orium/DecantCombo";
 import { cn } from "@/lib/utils";
-import vialsImg from "@/assets/home-decants-vials.webp";
+import { DecantStageCard } from "@/components/orium/home/DecantStageCard";
 import trioImg from "@/assets/home-frascos-trio.webp";
 import { usePricesOnRequestAll } from "@/lib/price-on-request";
 
@@ -42,36 +42,10 @@ export function HomeShortcuts({ onExplore, total }: { onExplore: () => void; tot
           style={{ "--card-d": "0ms" } as React.CSSProperties}
         />
       ) : (
-      <ShortcutCard
-        label="Decants de 2, 5 e 10 ml"
-        hidden={!ready}
-        onClick={() => {
-          setPriceView(2);
-          trackDecant("decant_size_selected", { variant: "DECANT_2", details: { source: "home_atalho" } });
-          onExplore();
-        }}
-        image={vialsImg}
-        imageAlt="Três decants com perfume âmbar, de 2, 5 e 10 ml"
-        imageW={520}
-        imageH={404}
-        imageClass="max-w-[330px]"
-        style={{ "--card-d": "0ms" } as React.CSSProperties}
-      >
-        <span className="text-[36px] leading-[1.04] font-bold tracking-[-0.035em]">
-          2 ml. 5 ml.
-          <br />
-          10 ml.
-        </span>
-        <span className="mt-3 max-w-[280px] text-[17px] leading-[1.4] text-[#5F5A53]">
-          Prove antes do frasco.
-          {from != null ? (
-            <span className="value-in"> A partir de {brl(from)}.</span>
-          ) : null}
-        </span>
-        <span className="mt-5 inline-flex h-[46px] items-center rounded-full bg-[#15130F] px-6 text-[15px] font-semibold text-white transition-transform duration-[var(--motion-fast)] ease-[var(--ease-orium)] group-hover:scale-[1.03]">
-          Escolher decants
-        </span>
-      </ShortcutCard>
+      <DecantStageCard
+        onExplore={onExplore}
+        style={{ "--card-d": "0ms", visibility: ready ? undefined : "hidden" } as React.CSSProperties}
+      />
       )}
 
       <ShortcutCard
