@@ -8,7 +8,7 @@
  *   103   ┤ anel cromado escuro do gargalo (mais estreito)
  *    98,4 ┤ faixa dourada no topo do corpo
  *    93,6 ┤ corpo terracota acetinado: cheio até ~56 mm e afinando até o pé
- *            (Ø 50 → Ø 41), pé arredondado
+ *            (Ø 50 → Ø 42), pé arredondado
  *          · "أسد" em caligrafia dourada (Aref Ruqaa)
  *    54   ┤ · moeda Ø 20,5: aro dourado polido + face cobre com a grega e o
  *            leão em relevo (textura tirada do frasco real)
@@ -17,7 +17,7 @@
  *    34   ┤ · "ASAD / BOURBON" (Cinzel) e "Lattafa" em dourado
  *     0   ┴ pé
  *
- * Seção levemente oval (50 × 44). Letras: contornos reais das fontes (OFL), já
+ * Seção redonda (Ø 50). Letras: contornos reais das fontes (OFL), já
  * com o shaping do árabe, aplicados sobre a curvatura do frasco.
  */
 import * as THREE from "three";
@@ -25,16 +25,17 @@ import glyphs from "./asad-bourbon-glyphs.json";
 
 type GlyphText = { w: number; top: number; bot: number; s: { o: number[][]; h: number[][][] }[] };
 
-export const ASAD_SIZE = { W: 50, D: 44, H: 133.5, total: 133.5 };
+export const ASAD_SIZE = { W: 50, D: 50, H: 133.5, total: 133.5 };
 
 const BODY_H = 93.6;
-const OVAL = 44 / 50;
+// seção redonda: nas vistas laterais do vídeo a largura é a mesma da frente
+const OVAL = 1;
 const sstep = (a: number, b: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
 };
 /** raio do corpo na altura y: cheio em cima, afinando de ~56 mm até o pé (medido na foto) */
-const bodyR = (y: number) => 20.6 + 4.4 * sstep(0, 56, y);
+const bodyR = (y: number) => 21.2 + 3.8 * sstep(0, 56, y);
 
 /** formas 2D do texto: escala (sx, sy) em mm por em, centralizado em x, base em y = 0 */
 function textGeometry(t: GlyphText, sx: number, sy: number) {
@@ -222,27 +223,29 @@ export function buildAsadBourbon(): THREE.Group {
   }
 
   /* fitas: chegam na moeda por cima e por baixo, abrem nas laterais e atrás */
-  // descem em "V" até a moeda (subida rápida perto da frente, suave nas laterais)
+  // medidas da sobreposição com a foto: largas e grossas, bem próximas — a de
+  // cima desce íngreme até a moeda, a de baixo é quase reta; nas laterais os
+  // centros ficam a ~19 mm um do outro; encostadas no corpo
   const open = (a: number) => Math.pow(Math.abs(Math.sin(a / 2)), 0.85);
   oval.add(
     new THREE.Mesh(
-      ribbon((a) => 60.6 + 16 * open(a), 8, 4.2),
+      ribbon((a) => 58.2 + 10.6 * open(a), 9.4, 2.8),
       gold,
     ),
   );
   oval.add(
     new THREE.Mesh(
-      ribbon((a) => 48.2 - 7.5 * open(a), 8, 4.2),
+      ribbon((a) => 49.6 - 3.6 * open(a), 9.4, 2.8),
       gold,
     ),
   );
 
   /* moeda: aro dourado polido + face cobre com a grega e o leão em relevo */
   {
-    const yc = 54.3,
-      R = 10.25;
+    const yc = 53.7,
+      R = 10.5;
     const coin = new THREE.Group();
-    coin.position.set(0, yc, bodyR(yc) + 4.2 + 1.7);
+    coin.position.set(0, yc, bodyR(yc) + 2.8 + 1.7);
     const rim = new THREE.Mesh(
       new THREE.CylinderGeometry(R, R, 3.4, 128).rotateX(Math.PI / 2),
       gold,
