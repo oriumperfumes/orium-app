@@ -22,13 +22,54 @@ export type DecantMl = 2 | 5 | 10;
  * de plástico leitoso, tubinho flexível curvado dentro.
  */
 type Spec = {
-  R: number; H: number; corner: number; neck: number; wall: number; base: number;
-  collarR: number; collarH: number; actH: number; capH: number;
-  tubeA: number; tubeR: number;
+  R: number;
+  H: number;
+  corner: number;
+  neck: number;
+  wall: number;
+  base: number;
+  collarR: number;
+  collarH: number;
+  actH: number;
+  capH: number;
+  capR: number;
+  tubeA: number;
+  tubeR: number;
 };
 
-const WIDE: Spec = { R: 11, H: 36, corner: 2.0, neck: 6.6, wall: 1.1, base: 3.4, collarR: 7.6, collarH: 8.5, actH: 9, capH: 19, tubeA: 1.7, tubeR: 0.7 };
-const SLIM: Spec = { R: 8.3, H: 37, corner: 1.7, neck: 5.3, wall: 1.0, base: 3.0, collarR: 6.2, collarH: 7.5, actH: 8.5, capH: 17, tubeA: 1.15, tubeR: 0.55 };
+/* Proporções medidas nas fotos: o 10 ml é atarracado (corpo ≈ 1,26× o diâmetro),
+   o fino é alto (≈ 2,1×). O borrifador é o MESMO nos dois: rosca Ø 12 mm, tampa
+   Ø 11,8 × 15 mm. */
+const WIDE: Spec = {
+  R: 11,
+  H: 28,
+  corner: 1.6,
+  neck: 4.8,
+  wall: 1.1,
+  base: 3.2,
+  collarR: 6.0,
+  collarH: 7.0,
+  actH: 8.0,
+  capH: 15,
+  capR: 5.9,
+  tubeA: 1.6,
+  tubeR: 0.78,
+};
+const SLIM: Spec = {
+  R: 8.25,
+  H: 35,
+  corner: 1.4,
+  neck: 4.8,
+  wall: 0.95,
+  base: 2.8,
+  collarR: 6.0,
+  collarH: 7.0,
+  actH: 8.0,
+  capH: 15,
+  capR: 5.9,
+  tubeA: 1.1,
+  tubeR: 0.72,
+};
 
 export const DECANT_SPECS: Record<DecantMl, Spec> = { 2: SLIM, 5: SLIM, 10: WIDE };
 
@@ -45,8 +86,10 @@ const SIGMA: Record<DecantMl, [number, number, number]> = {
 
 const NECK_H = 2.2;
 
-/** Altura do perfume para o volume real (cilindro interno), sem passar do ombro. */
+/** Altura do perfume: 10 e 5 ml cheios até o ombro (como no estoque); o de 2 ml
+ *  no mesmo frasco fino fica bem abaixo da metade. */
 function fillOf(ml: DecantMl, s: Spec) {
+  if (ml === 2) return s.base + 9.5;
   const r = s.R - s.wall;
   return Math.min(s.base + (ml * 1000) / (Math.PI * r * r), s.H - 1.3 - 0.45);
 }
@@ -68,13 +111,17 @@ uniform vec4 uA;            // R, H (topo do ombro), raio da quina, raio do garg
 uniform vec4 uB;            // parede, fundo, nível do perfume, yT (boca)
 uniform vec3 uLiqN;         // normal do perfume, no espaço do frasco
 uniform vec4 uWave;         // amplitude, número de onda, fase, direção
+uniform vec3 uWave2;        // modo "sela" (2ª harmônica): amplitude, fase, direção
 uniform vec3 uBg;           // cor do card (linear)
-uniform sampler2D uLabel;
-uniform float uLabelOn;
 uniform vec3 uSigma;        // absorção do perfume por mm
 uniform vec4 uC;            // raio da rosca, altura da rosca, altura do atuador, altura da tampa
 uniform vec2 uTube;         // curvatura e raio do tubinho
-uniform float uCap;         // 0 = tampado, 1 = tampa fora
+uniform vec3 uCapP;         // base da tampa (espaço do frasco)
+uniform vec3 uCapAx;        // eixo da tampa (espaço do frasco)
+uniform vec3 uCapW;         // base da tampa no mundo (sombra na mesa)
+uniform float uCapR;        // raio da tampa
+uniform vec3 uToneFix;
+uniform int uN4;            // sempre 4 (limite de laço que o compilador não desenrola)      // correção para o fundo sair exatamente na cor do card
 
 #define AIR 0
 #define GLASS 1
@@ -82,6 +129,8 @@ uniform float uCap;         // 0 = tampado, 1 = tampa fora
 #define LIQ 3
 #define SOLID 4
 #define PLAS 5
+#define HAZE 6      // tampa: plástico fosco translúcido (névoa leitosa, sem desviar o raio)
+#define TUBE 7      // tubinho leitoso
 
 float sdBox2(vec2 p, vec2 b, float r){ vec2 q = abs(p) - b + r; return length(max(q,0.)) + min(max(q.x,q.y),0.) - r; }
 float smin(float a, float b, float k){ float h = max(k-abs(a-b),0.)/k; return min(a,b) - h*h*k*0.25; }
@@ -90,6 +139,7 @@ float outerS(vec3 p){
   vec2 q = vec2(length(p.xz), p.y);
   float H = uA.y, yT = uB.w;
   float body = sdBox2(q - vec2(0., H*0.5), vec2(uA.x, H*0.5), uA.z);
+  if (p.y < H - 3.) return min(body, H - 1. - p.y);   // longe do gargalo: limite barato
   float neck = sdBox2(q - vec2(0., (H - 1. + yT)*0.5), vec2(uA.w, (yT - H + 1.)*0.5), 0.4);
   return smin(body, neck, 0.9);
 }
@@ -97,6 +147,7 @@ float innerS(vec3 p){
   vec2 q = vec2(length(p.xz), p.y);
   float H = uA.y, w = uB.x, b = uB.y, top = H - 1.3;
   float body = sdBox2(q - vec2(0., (b + top)*0.5), vec2(uA.x - w, (top - b)*0.5), max(uA.z - w, 0.6));
+  if (p.y < top - 3.) return min(body, top - 1. - p.y);
   float yN = uB.w + 6.;
   float neck = sdBox2(q - vec2(0., (top - 1. + yN)*0.5), vec2(uA.w - 1.05, (yN - top + 1.)*0.5), 0.2);
   return smin(body, neck, 0.7);
@@ -109,15 +160,28 @@ vec2 tubeC(float y){
 }
 float rodS(vec3 p){
   float y0 = uB.y + 0.35, y1 = uA.y + 0.5;
+  float far = length(p.xz) - (uTube.x*1.25 + uTube.y);
+  if (far > 0.5) return max(far, max(y0 - p.y, p.y - y1));
   float d = (length(p.xz - tubeC(p.y)) - uTube.y)*0.8;
   return max(d, max(y0 - p.y, p.y - y1));
 }
 float surfS(vec3 p){
   float r = length(p.xz);
   float ri = uA.x - uB.x;
-  vec2 wd = vec2(cos(uWave.w), sin(uWave.w));
-  float wave = uWave.x * sin(dot(p.xz, wd)*uWave.y + uWave.z) * (0.4 + 0.6*r/ri);
-  float men = 0.32*exp(-max(ri - r, 0.)/0.45);   // menisco subindo na parede
+  float rn = r/ri;
+  float wave = 0.;
+  // onda que corre de parede a parede + modo "sela" (o perfume sobe em dois lados opostos)
+  if (uWave.x > 0.002){
+    vec2 wd = vec2(cos(uWave.w), sin(uWave.w));
+    wave = uWave.x * sin(dot(p.xz, wd)*uWave.y + uWave.z) * (0.35 + 0.65*rn);
+  }
+  if (uWave2.x > 0.002){
+    // cos(2(a-d)) sem atan: (x²-z²)/r² e 2xz/r²
+    vec2 n2 = p.xz/max(r, 1e-3);
+    float c2 = n2.x*n2.x - n2.y*n2.y, s2 = 2.*n2.x*n2.y;
+    wave += uWave2.x * (c2*cos(2.*uWave2.z) + s2*sin(2.*uWave2.z)) * rn*rn * sin(uWave2.y);
+  }
+  float men = 0.5*exp(-max(ri - r, 0.)/0.6);   // menisco subindo na parede
   return dot(p - vec3(0., uB.z, 0.), uLiqN) - wave - men;
 }
 float liqS(vec3 p){ return max(innerS(p), surfS(p)); }
@@ -128,48 +192,77 @@ float yAct(){ return yCol() + uC.y + 1.1; }
 // rosca de plástico transparente canelada (meio que refrata)
 float collarBox(vec3 p){
   vec2 q = vec2(length(p.xz), p.y);
-  float rib = 0.11*(0.5 + 0.5*cos(atan(p.x, p.z)*56.));
+  float lb = max(yCol() - 0.6 - p.y, q.x - uC.x - 0.6);
+  if (lb > 0.5) return lb;
+  // caneluras só na faixa de baixo (onde os dedos giram); em cima a rosca é lisa
+  float band = 1. - smoothstep(0.62, 0.72, (p.y - yCol())/uC.y);
+  float rib = 0.075*(0.5 + 0.5*cos(atan(p.x, p.z)*40.))*band;
   return sdBox2(q - vec2(0., yCol() + uC.y*0.5), vec2(uC.x - rib, uC.y*0.5), 0.5);
 }
-float collarS(vec3 p){ return max(collarBox(p), -outerS(p)); }
+float collarS(vec3 p){ float c = collarBox(p); return c > 0.4 ? c : max(c, -outerS(p)); }
 // peças leitosas: anel branco, atuador com o bico, tampa
-float ringS(vec3 p){ vec2 q = vec2(length(p.xz), p.y); return sdBox2(q - vec2(0., yCol() + uC.y + 0.5), vec2(uC.x*0.84, 0.6), 0.3); }
+float ringS(vec3 p){ vec2 q = vec2(length(p.xz), p.y);
+  float lb = max(yCol() + uC.y - 0.2 - p.y, q.x - uC.x);
+  if (lb > 0.5) return lb;
+  return sdBox2(q - vec2(0., yCol() + uC.y + 0.5), vec2(uC.x*0.84, 0.6), 0.3); }
 float actS(vec3 p){
   vec2 q = vec2(length(p.xz), p.y);
+  float lb = max(yCol() + uC.y - p.y, q.x - uC.x*0.6 - 0.2);
+  if (lb > 0.5) return lb;
   float a = sdBox2(q - vec2(0., yAct() + uC.z*0.5), vec2(uC.x*0.6, uC.z*0.5), 1.3);
   float stem = sdBox2(q - vec2(0., yAct() - 0.2), vec2(uC.x*0.3, 0.8), 0.2);
   return min(a, stem);
 }
+// tampa: cilindro de cantos macios em qualquer posição/eixo (ela sai e pousa na mesa)
 float capS(vec3 p){
-  vec2 q = vec2(length(p.xz), p.y);
-  float y0 = yCol() + uC.y + 0.25 + uCap*75.;
-  return sdBox2(q - vec2(0., y0 + uC.w*0.5), vec2(uC.x - 0.12, uC.w*0.5), 1.0);
+  vec3 d = p - uCapP;
+  float lb = length(d - uCapAx*uC.w*0.5) - length(vec2(uCapR, uC.w*0.5)) - 0.1;
+  if (lb > 0.5) return lb;
+  float a = dot(d, uCapAx);
+  float rr = length(d - a*uCapAx);
+  return sdBox2(vec2(rr, a - uC.w*0.5), vec2(uCapR, uC.w*0.5), 1.0);
 }
-float solidS(vec3 p){ return min(min(ringS(p), actS(p)), capS(p)); }
+float solidS(vec3 p){ return min(ringS(p), actS(p)); }
 
-int region(vec3 p){
-  if (solidS(p) < 0.) return SOLID;
-  if (collarS(p) < 0.) return PLAS;
-  if (outerS(p) > 0.) return AIR;
-  if (innerS(p) > 0. || rodS(p) < 0.) return GLASS;
-  if (liqS(p) < 0.) return LIQ;
-  return CAV;
+/* Todas as formas avaliadas num lugar só (cada uma aparece UMA vez no código
+   compilado). "full" = todas (para saber em que meio o ponto está); senão só as
+   que limitam o meio atual. */
+struct S { float o, i, rod, liq, col, sol, cap; };
+S evalS(vec3 p, int m, bool full){
+  S s = S(1e3, 1e3, 1e3, 1e3, 1e3, 1e3, 1e3);
+  if (full || m == AIR || m == GLASS || m == PLAS || m == CAV) s.o = outerS(p);
+  if (full || m == GLASS || m == CAV || m == LIQ || m == TUBE){ s.i = innerS(p); s.rod = rodS(p); }
+  if (full || m == CAV || m == LIQ) s.liq = max(s.i, surfS(p));
+  if (full || m == AIR || m == PLAS || m == CAV){ float cb = collarBox(p); s.col = cb > 0.4 ? cb : max(cb, -s.o); }
+  if (full || m == AIR || m == PLAS || m == HAZE) s.sol = solidS(p);
+  if (full || m == AIR || m == HAZE) s.cap = capS(p);
+  return s;
 }
 // distância até a fronteira do meio atual (positiva dentro dele)
-float bdist(int m, vec3 p){
-  if (m == AIR) return min(min(outerS(p), solidS(p)), collarS(p));
-  if (m == PLAS) return min(-collarS(p), solidS(p));
-  if (m == GLASS){ float r = rodS(p); return r < 0. ? -r : min(-outerS(p), innerS(p)); }
-  if (m == CAV) return min(min(-innerS(p), liqS(p)), min(rodS(p), collarS(p)));
-  return min(-liqS(p), rodS(p));
+float distOf(int m, S s){
+  if (m == AIR) return min(min(s.o, s.sol), min(s.col, s.cap));
+  if (m == HAZE) return min(-s.cap, s.sol);
+  if (m == TUBE) return -s.rod;
+  if (m == PLAS) return min(-s.col, s.sol);
+  if (m == GLASS) return min(-s.o, s.i);
+  if (m == CAV) return min(min(-s.i, s.liq), min(s.rod, s.col));
+  return min(-s.liq, s.rod);
 }
-vec3 bgrad(int m, vec3 p){
-  const vec2 k = vec2(1.,-1.); const float h = 0.0025;
-  return normalize(k.xyy*bdist(m,p+k.xyy*h) + k.yyx*bdist(m,p+k.yyx*h) + k.yxy*bdist(m,p+k.yxy*h) + k.xxx*bdist(m,p+k.xxx*h));
+int regionOf(S s){
+  if (s.sol < 0.) return SOLID;
+  if (s.cap < 0.) return HAZE;
+  if (s.col < 0.) return PLAS;
+  if (s.o > 0.) return AIR;
+  if (s.i > 0.) return GLASS;
+  if (s.rod < 0.) return TUBE;
+  if (s.liq < 0.) return LIQ;
+  return CAV;
 }
+const vec3 TET[4] = vec3[4](vec3(1.,-1.,-1.), vec3(-1.,-1.,1.), vec3(-1.,1.,-1.), vec3(1.,1.,1.));
 vec3 sgrad(vec3 p){
-  const vec2 k = vec2(1.,-1.); const float h = 0.003;
-  return normalize(k.xyy*solidS(p+k.xyy*h) + k.yyx*solidS(p+k.yyx*h) + k.yxy*solidS(p+k.yxy*h) + k.xxx*solidS(p+k.xxx*h));
+  vec3 g = vec3(0.);
+  for (int k = 0; k < uN4; k++) g += TET[k]*solidS(p + TET[k]*0.003);
+  return normalize(g);
 }
 float iorOf(int m){ return m == GLASS ? 1.5 : (m == LIQ ? 1.36 : (m == PLAS ? 1.49 : 1.0)); }
 
@@ -200,117 +293,6 @@ float fresnel(float n1, float n2, float c){
 vec3 L2W(vec3 v){ return uRot * v; }
 vec3 W2L(vec3 v){ return v * uRot; }
 
-/* Traça um raio (no espaço do frasco). Retorna cor; hitFloor diz se terminou na mesa. */
-vec3 trace(vec3 ro, vec3 rd, bool primary, out bool hitFloor, out vec3 floorP, out vec3 Tout, out int evOut, out vec3 dirOut){
-  hitFloor = false; floorP = vec3(0.); Tout = vec3(0.); evOut = 0; dirOut = vec3(0.);
-  vec3 col = vec3(0.), T = vec3(1.);
-  int m = AIR; vec3 p = ro; int events = 0; float travel = 0.;
-  // cilindro envolvente: quem não passa perto do frasco nem marcha
-  float bound = uA.x + 2.2, top = yCol() + uC.y + uC.w + uCap*80. + 2.;
-  for (int i = 0; i < 220; i++){
-    if (m == AIR){
-      float d = bdist(AIR, p);
-      // chão (plano do mundo y=0) em coordenadas locais: y_w = (uRot*p).y + uPivot.y
-      vec3 pw = L2W(p) + uPivot; vec3 dw = L2W(rd);
-      float r = length(p.xz);
-      bool away = (r > bound + 1. && dot(p.xz, rd.xz) > 0.) || (p.y > top + 2. && rd.y > 0.);
-      if (dw.y < 0.){
-        float tf = -pw.y / dw.y;
-        // atrás do frasco a mesa vira o fundo infinito do estúdio (ciclorama):
-        // quem atravessa o vidro enxerga o painel de luz, não o tampo escuro
-        bool behind = events > 0 && (pw + dw*tf).z > -uA.x*0.2;
-        if (!behind && (tf < d || (away && tf < 1e4))){ hitFloor = true; floorP = pw + dw*tf; Tout = T; evOut = events; dirOut = dw; return col; }
-      }
-      if (away || travel > 2000.){
-        col += T * (primary && events == 0 ? uBg : env(L2W(rd), 0.));
-        return col;
-      }
-      if (d < 0.006){
-        int m2 = region(p + rd*0.03);
-        if (m2 == SOLID){
-          // plástico leitoso (anel, atuador, tampa): reflexo suave + luz de trás atravessando
-          vec3 n = L2W(sgrad(p)); vec3 v = L2W(rd); vec3 rf = reflect(v, n);
-          float fr = fresnel(1., 1.49, max(dot(-v, n), 0.));
-          float dr = ringS(p), da = actS(p), dc = capS(p);
-          int part = (dr < da && dr < dc) ? 0 : (da < dc ? 1 : 2);
-          vec3 milky = part == 0 ? vec3(0.93, 0.93, 0.92) : vec3(0.84, 0.88, 0.93);
-          float key = max(dot(n, normalize(vec3(-0.55, 0.65, -0.5))), 0.);
-          // polipropileno fosco: pouca cor própria, a luz de trás atravessa borrada,
-          // borda mais clara (o plástico fica mais espesso de lado) e reflexo suave
-          float rim = pow(1. - max(dot(-v, n), 0.), 2.);
-          vec3 c;
-          if (part == 0) c = milky*(0.05 + 0.22*key) + env(rf, 0.12)*fr*1.2;
-          else {
-            vec3 through = env(v, 0.6) * (part == 2 ? 0.15 : 0.2);
-            c = milky*(0.012 + 0.05*key + 0.10*rim) + milky*through + env(rf, part == 2 ? 0.28 : 0.14)*fr*1.15;
-          }
-          if (part == 1){
-            // bico branco do borrifador, virado para a frente
-            float ang = atan(p.x, -p.z);
-            float nz = 1. - smoothstep(0.9, 1.25, length(vec2(ang*uC.x*0.6, p.y - (yAct() + uC.z - 2.4))));
-            c = mix(c, vec3(0.80), nz*0.85);
-          }
-          col += T * c * (1. - fr*0.3);
-          return col;
-        }
-        vec3 N = L2W(bgrad(AIR, p));   // normal apontando para fora do vidro/plástico
-        vec3 v = L2W(rd);
-        float c = max(dot(-v, N), 0.);
-        float n2 = iorOf(m2 == AIR ? GLASS : m2);
-        float F = fresnel(1., n2, c);
-        col += T * F * env(reflect(v, N), 0.) * (events == 0 ? 1. : 0.7);
-        // estampa ORIUM (tinta branca no vidro), só na face de fora
-        if (uLabelOn > 0.5 && m2 != PLAS){
-          float ang = atan(p.x, -p.z);
-          vec2 uv = vec2(0.5 + ang/1.5, (p.y - uA.y*0.36)/(uA.y*0.26));
-          if (uv.x > 0. && uv.x < 1. && uv.y > 0. && uv.y < 1.){
-            float a = texture(uLabel, vec2(uv.x, 1.-uv.y)).r;
-            float lit = 0.55 + 0.45*max(dot(N, normalize(vec3(-0.6,0.5,-0.6))), 0.);
-            // tinta preta serigrafada: fosca, com um brilho leve da luz
-            col += T * a * (1.-F) * vec3(0.018) * (0.6 + lit);
-            T *= 1. - a*0.995;
-          }
-        }
-        T *= 1. - F;
-        rd = W2L(refract(v, N, 1./n2)); m = (m2 == PLAS) ? PLAS : GLASS; p += rd*0.02; events++;
-        continue;
-      }
-      p += rd*d; travel += d;
-      continue;
-    }
-    float d = bdist(m, p);
-    if (d < 0.004){
-      vec3 nOut = -bgrad(m, p);           // sai do meio atual
-      int m2 = region(p + nOut*0.02);
-      if (m2 == m) { p += rd*0.01; continue; }
-      if (m2 == SOLID){ col += T*vec3(0.75)*env(L2W(rd), 0.5)*0.35; return col; }
-      float n1 = iorOf(m), n2 = iorOf(m2);
-      vec3 N = -nOut; // normal contra o raio
-      float c = max(dot(-rd, N), 0.);
-      vec3 tr = refract(rd, N, n1/n2);
-      if (dot(tr, tr) < 1e-6){ rd = reflect(rd, N); p += rd*0.02; events++; continue; }
-      float F = fresnel(n1, n2, c);
-      col += T * F * env(L2W(reflect(rd, N)), 0.02) * 0.55;
-      T *= 1. - F;
-      rd = tr; m = m2; p += rd*0.02; events++;
-      if (events > 14) { col += T * env(L2W(rd), 0.); return col; }
-      continue;
-    }
-    float stepd = max(d, 0.002);
-    if (m == LIQ) T *= exp(-uSigma * stepd);
-    else if (m == GLASS){
-      if (rodS(p) < 0.){ T *= exp(-vec3(0.05) * stepd); col += T*vec3(0.035)*stepd; }   // tubinho leitoso
-      else T *= exp(-vec3(0.010, 0.004, 0.008) * stepd);
-    }
-    else if (m == PLAS) T *= exp(-vec3(0.035, 0.032, 0.028) * stepd);
-    p += rd*stepd;
-  }
-  col += T * env(L2W(rd), 0.);
-  return col;
-}
-
-vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14), 0., 1.); }
-
 // mesa escura: sombra de contato + cáustica âmbar (luz de trás atravessando o perfume)
 vec3 floorBase(vec3 fp){
   float r = length(fp.xz), R = uA.x;
@@ -320,37 +302,172 @@ vec3 floorBase(vec3 fp){
   vec2 e = cp/vec2(R*0.8, R*1.45);
   float caus = exp(-dot(e, e)*1.6);
   float filled = clamp((uB.z - uB.y)/(uA.y*0.6), 0., 1.);
-  vec3 c = base*shadow + vec3(1.0, 0.55, 0.16)*caus*0.55*filled;
+  // sombra de contato da tampa quando ela está pousada na mesa
+  float capOn = 1. - smoothstep(0.2, 4., uCapW.y);
+  float dc = length(fp.xz - uCapW.xz);
+  shadow *= 1. - 0.7*capOn*exp(-max(dc - uCapR*0.9, 0.)/(uCapR*0.45))*smoothstep(uCapR*4., uCapR*0.5, dc);
+  vec3 c = base*shadow + vec3(1.0, 0.55, 0.16)*caus*0.42*filled;
   float far = smoothstep(R*3., R*9., r);
   return mix(c, uBg, far);
 }
 
+/* plástico (anel, atuador, tampa): uma única função, chamada de um só lugar */
+vec3 solidColor(vec3 p, vec3 rd){
+  vec3 n = L2W(sgrad(p)); vec3 v = L2W(rd); vec3 rf = reflect(v, n);
+  float ndv = max(dot(-v, n), 0.);
+  float fr = fresnel(1., 1.49, ndv);
+  int part = ringS(p) < actS(p) ? 0 : 1;   // 0 anel, 1 atuador
+  float key = max(dot(n, normalize(vec3(-0.55, 0.65, -0.5))), 0.);
+  float fill = max(dot(n, normalize(vec3(0.7, 0.3, -0.4))), 0.);
+  float top = smoothstep(0.2, 0.9, n.y);
+  float rim = pow(1. - ndv, 1.6);
+  // um reflexo e uma transmissão por pixel, com a aspereza de cada peça
+  vec3 spec = env(rf, part == 0 ? 0.18 : 0.16) * fr * 1.08;
+  vec3 through = env(v, 0.3) * (part == 0 ? 0. : 0.2);
+  vec3 c;
+  if (part == 0){
+    // anel branco fino (opaco, acetinado)
+    c = vec3(0.86, 0.86, 0.85)*(0.06 + 0.30*key + 0.10*fill) + spec;
+  } else {
+    /* atuador: plástico leitoso mais claro, com o miolo branco aparecendo por
+       dentro e o bico branco virado para a frente */
+    vec3 milk = vec3(0.84, 0.87, 0.90);
+    float tca = -dot(p.xz, rd.xz)/max(dot(rd.xz, rd.xz), 1e-4);
+    float ax = length(p.xz + rd.xz*max(tca, 0.));
+    float core = 1. - smoothstep(1.0, 1.7, ax);
+    through = mix(through, vec3(0.22)*(0.4 + 0.6*key), core*0.7);
+    c = through + milk*(0.02 + 0.10*key + 0.05*top) + milk*rim*0.12 + spec;
+    float ang = atan(p.x, -p.z);
+    float nz = 1. - smoothstep(0.75, 1.05, length(vec2(ang*uC.x*0.6, p.y - (yAct() + uC.z - 2.4))));
+    c = mix(c, vec3(0.62)*(0.5 + 0.5*key) + vec3(0.05), nz*0.9);
+  }
+  return c;
+}
+
+/* Traça o raio principal e, se ele bater na mesa perto do frasco, continua no
+   MESMO laço como raio refletido (o reflexo do frasco na mesa). Um laço só:
+   o shader fica pequeno e compila rápido em qualquer placa. Espaço do frasco. */
+vec3 render(vec3 ro, vec3 rd){
+  vec3 col = vec3(0.), T = vec3(1.);
+  int m = AIR; vec3 p = ro; int events = 0; float travel = 0.;
+  // cilindro envolvente: quem não passa perto do frasco nem marcha
+  float bound = uA.x + 2.2, top = yAct() + uC.z + 2.;
+  vec3 capMid = uCapP + uCapAx*uC.w*0.5;
+  float capRad = length(vec2(uCapR, uC.w*0.5)) + 1.;
+  bool refl = false, floorHit = false, escape = false, solid = false;
+  vec3 colP = vec3(0.), TP = vec3(1.), fpP = vec3(0.);
+  float floorK = 0.;
+  int maxIt = 260, maxEv = 14;
+  // ph: 0 = andando; 1..4 = amostras da normal na fronteira; 5 = qual é o próximo meio
+  int ph = 0; vec3 pB = vec3(0.), N = vec3(0.);
+  for (int i = 0; i < 350; i++){
+    if (i >= maxIt){ escape = true; break; }
+    vec3 q = p;
+    if (ph >= 1 && ph <= 4) q = pB + TET[ph - 1]*0.0025;
+    else if (ph == 5) q = pB - N*0.025;
+    S sd = evalS(q, m, ph == 5);
+    if (ph >= 1 && ph <= 4){
+      N += TET[ph - 1]*distOf(m, sd);
+      ph++;
+      if (ph == 5) N = normalize(N);       // aponta para dentro do meio atual (contra o raio)
+      continue;
+    }
+    if (ph == 5){
+      ph = 0;
+      int m2 = regionOf(sd);
+      if (m2 == m){ p += rd*0.01; continue; }
+      if (m2 == SOLID){ solid = true; break; }
+      // tampa e tubinho: plástico leitoso fino — a luz passa sem desviar,
+      // o reflexo é largo e suave (superfície fosca)
+      bool milky = m == HAZE || m2 == HAZE || m == TUBE || m2 == TUBE;
+      bool capB = m == HAZE || m2 == HAZE;
+      float n1 = milky ? 1. : iorOf(m), n2 = milky ? 1.49 : iorOf(m2);
+      float c = max(dot(-rd, N), 0.);
+      vec3 tr = milky ? rd : refract(rd, N, n1/n2);
+      if (dot(tr, tr) < 1e-6){ rd = reflect(rd, N); p += rd*0.02; events++; continue; }
+      float F = fresnel(n1, n2, c) * (milky ? (capB ? 0.85 : 0.3) : 1.);
+      col += T * F * env(L2W(reflect(rd, N)), capB ? 0.3 : 0.) * (m == AIR ? (events == 0 ? 1. : 0.7) : 0.55);
+      T *= 1. - F;
+      rd = tr; m = m2; p += rd*0.02; events++;
+      if (events > maxEv){ escape = true; break; }
+      continue;
+    }
+    float d = distOf(m, sd);
+    if (m == AIR){
+      // chão (plano do mundo y=0) em coordenadas locais: y_w = (uRot*p).y + uPivot.y
+      vec3 pw = L2W(p) + uPivot; vec3 dw = L2W(rd);
+      float r = length(p.xz);
+      vec3 pc = p - capMid;
+      bool awayCap = dot(pc, pc) > capRad*capRad && dot(pc, rd) > 0.;
+      bool away = ((r > bound + 1. && dot(p.xz, rd.xz) > 0.) || (p.y > top + 2. && rd.y > 0.)) && awayCap;
+      if (dw.y < 0.){
+        float tf = -pw.y / dw.y;
+        // atrás do frasco a mesa vira o fundo infinito do estúdio (ciclorama):
+        // quem atravessa o vidro enxerga o painel de luz, não o tampo escuro
+        bool behind = events > 0 && (pw + dw*tf).z > -uA.x*0.2;
+        if (!behind && (tf < d || (away && tf < 1e4))){
+          if (refl) break;                 // o reflexo voltou à mesa: acabou
+          vec3 fp = pw + dw*tf;
+          floorHit = true; fpP = fp; TP = T; colP = col;
+          float rr = length(fp.xz);
+          if (events == 0 && rr < uA.x*7.){
+            // reflexo do frasco na mesa: mesmo laço, menos passos e eventos
+            refl = true;
+            vec3 rdw = reflect(dw, vec3(0., 1., 0.));
+            floorK = (0.05 + 0.5*pow(1. - max(rdw.y, 0.), 5.)) * exp(-max(rr - uA.x, 0.)/(uA.x*2.2));
+            p = W2L(fp + vec3(0., 0.01, 0.) - uPivot); rd = W2L(rdw);
+            col = vec3(0.); T = vec3(1.); events = 0; travel = 0.;
+            maxIt = i + 90; maxEv = 5;
+            continue;
+          }
+          break;
+        }
+      }
+      if (away || travel > 2000.){
+        if (!refl && events == 0) col += T*uBg; else escape = true;
+        break;
+      }
+    }
+    if (d < (m == AIR ? 0.006 : 0.004)){ pB = p; N = vec3(0.); ph = 1; continue; }
+    if (m == AIR){ p += rd*d; travel += d; continue; }
+    float stepd = max(d, m == HAZE ? 0.25 : 0.002);
+    if (m == LIQ) T *= exp(-uSigma * stepd);
+    else if (m == GLASS) T *= exp(-vec3(0.010, 0.004, 0.008) * stepd);
+    else if (m == TUBE){
+      // tubinho leitoso: espalha luz branca e deixa passar um pouco do perfume
+      col += T*vec3(0.15, 0.147, 0.142)*stepd;
+      T *= exp(-vec3(0.6) * stepd);
+    }
+    else if (m == HAZE){
+      // tampa fosca OCA: só a parede (~0,9 mm) é plástico; quanto mais parede
+      // no caminho, mais branca (por isso a borda clareia e o miolo fica limpo)
+      float wall = 1. - smoothstep(0.75, 1.15, -sd.cap);
+      col += T*vec3(0.024, 0.026, 0.029)*stepd*wall;
+      T *= exp(-vec3(0.11, 0.105, 0.10) * stepd * wall);
+    }
+    else if (m == PLAS) T *= exp(-vec3(0.035, 0.032, 0.028) * stepd);
+    p += rd*stepd;
+  }
+  if (solid) col += T*solidColor(pB, rd);
+  if (escape) col += T*env(L2W(rd), 0.);
+  vec3 base = floorHit ? floorBase(fpP) : vec3(0.);
+  if (refl){
+    // a mesa reflete o frasco, não o estúdio todo
+    vec3 rc = col * (events == 0 ? 0.08 : 1.);
+    return colP + TP*(base + rc*floorK);
+  }
+  return col + T*base;
+}
+
+vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14), 0., 1.); }
+
 void main(){
   vec2 q = (gl_FragCoord.xy - 0.5*uRes) / uRes.y;
   vec3 rdw = normalize(uCam * vec3(q, uFocal));
-  vec3 ro = W2L(uEye - uPivot), rd = W2L(rdw);
-  bool hf; vec3 fp, Tf, df; int ev;
-  vec3 col = trace(ro, rd, true, hf, fp, Tf, ev, df);
-  bool bgOnly = false;
-  if (hf){
-    vec3 c2 = floorBase(fp);
-    float r = length(fp.xz), R = uA.x;
-    if (ev == 0 && r < R*7.){
-      // reflexo do frasco na mesa
-      vec3 rr = reflect(df, vec3(0.,1.,0.));
-      bool hf2; vec3 fp2, T2, d2; int ev2;
-      vec3 refl = trace(W2L(fp + vec3(0.,0.01,0.) - uPivot), W2L(rr), false, hf2, fp2, T2, ev2, d2);
-      if (ev2 == 0) refl *= 0.08;   // a mesa reflete o frasco, não o estúdio todo
-      float fr = 0.05 + 0.5*pow(1. - max(rr.y, 0.), 5.);
-      c2 += refl * fr * exp(-max(r - R, 0.)/(R*2.2));
-    }
-    col += Tf * c2;
-    bgOnly = ev == 0 && r > R*9.;
-  }
-  vec3 outc = pow(aces(col * 1.05), vec3(1./2.2));
-  vec3 bgs = pow(uBg, vec3(1./2.2));
-  float isBg = ((!hf && length(col - uBg) < 1e-4) || bgOnly) ? 1. : 0.;
-  outColor = vec4(mix(outc, bgs, isBg), 1.);
+  vec3 col = render(W2L(uEye - uPivot), W2L(rdw));
+  // mesmo mapeamento de tons para tudo + correção: a cor do card sai exata,
+  // então a mesa some no fundo sem linha de horizonte
+  outColor = vec4(pow(aces(col * 1.05), vec3(1./2.2)) + uToneFix, 1.);
 }`;
 
 /* ─────────────────────────────── matemática ─────────────────────────────── */
@@ -360,20 +477,29 @@ const norm = (a: V3): V3 => {
   const l = Math.hypot(a[0], a[1], a[2]) || 1;
   return [a[0] / l, a[1] / l, a[2] / l];
 };
-const cross = (a: V3, b: V3): V3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const cross = (a: V3, b: V3): V3 => [
+  a[1] * b[2] - a[2] * b[1],
+  a[2] * b[0] - a[0] * b[2],
+  a[0] * b[1] - a[1] * b[0],
+];
 
 /** Matriz 3x3 (coluna a coluna, como o WebGL espera) de yaw (Y), depois inclinações em X e Z. */
 function rotMat(yaw: number, tx: number, tz: number): Float32Array {
-  const cy = Math.cos(yaw), sy = Math.sin(yaw);
-  const cx = Math.cos(tx), sx = Math.sin(tx);
-  const cz = Math.cos(tz), sz = Math.sin(tz);
+  const cy = Math.cos(yaw),
+    sy = Math.sin(yaw);
+  const cx = Math.cos(tx),
+    sx = Math.sin(tx);
+  const cz = Math.cos(tz),
+    sz = Math.sin(tz);
   // R = Rz * Rx * Ry
   const Ry = [cy, 0, -sy, 0, 1, 0, sy, 0, cy];
   const Rx = [1, 0, 0, 0, cx, sx, 0, -sx, cx];
   const Rz = [cz, sz, 0, -sz, cz, 0, 0, 0, 1];
   const m = (a: number[], b: number[]) => {
     const o = new Array(9).fill(0);
-    for (let c = 0; c < 3; c++) for (let r = 0; r < 3; r++) for (let k = 0; k < 3; k++) o[c * 3 + r] += a[k * 3 + r]! * b[c * 3 + k]!;
+    for (let c = 0; c < 3; c++)
+      for (let r = 0; r < 3; r++)
+        for (let k = 0; k < 3; k++) o[c * 3 + r] += a[k * 3 + r]! * b[c * 3 + k]!;
     return o;
   };
   return new Float32Array(m(Rz, m(Rx, Ry)));
@@ -391,7 +517,15 @@ function toLocal(M: Float32Array, v: V3): V3 {
 
 export type DecantRT = {
   /** controle manual para gravar prévias (quadro a quadro) */
-  preview: { step: (dt: number) => void; push: (x: number, z: number, yawVel?: number) => void; cap: (open: boolean) => void; stop: () => void };
+  preview: {
+    step: (dt: number) => void;
+    /** inclinação comandada (como o dedo arrastando) e, opcional, velocidade de giro */
+    push: (x: number, z: number, yawVel?: number) => void;
+    /** giro contínuo (rad/s) */
+    spin: (v: number) => void;
+    cap: (open: boolean) => void;
+    stop: () => void;
+  };
   setSize: (ml: DecantMl) => void;
   /** empurrão no líquido (ex.: ao trocar de tamanho) */
   nudge: (strength?: number) => void;
@@ -407,37 +541,16 @@ export type DecantRTOptions = {
   onCapChange?: (open: boolean) => void;
 };
 
-function labelCanvas(ml: DecantMl) {
-  const c = document.createElement("canvas");
-  c.width = 512;
-  c.height = 256;
-  const g = c.getContext("2d")!;
-  g.fillStyle = "#000";
-  g.fillRect(0, 0, 512, 256);
-  g.fillStyle = "#fff";
-  g.textAlign = "center";
-  g.textBaseline = "middle";
-  g.font = "600 92px 'Inter', 'Helvetica Neue', Arial, sans-serif";
-  // espaçamento largo, como gravação de vidro
-  const word = "ORIUM";
-  const spacing = 26;
-  const widths = [...word].map((ch) => g.measureText(ch).width);
-  const total = widths.reduce((a, b) => a + b, 0) + spacing * (word.length - 1);
-  let x = 256 - total / 2;
-  g.textAlign = "left";
-  [...word].forEach((ch, i) => {
-    g.fillText(ch, x, 104);
-    x += widths[i]! + spacing;
+export function createDecantRT(
+  canvas: HTMLCanvasElement,
+  opts: DecantRTOptions = {},
+): DecantRT | null {
+  const gl = canvas.getContext("webgl2", {
+    antialias: false,
+    alpha: false,
+    powerPreference: "high-performance",
+    preserveDrawingBuffer: false,
   });
-  g.fillRect(206, 168, 100, 3);
-  g.textAlign = "center";
-  g.font = "500 44px 'Inter', 'Helvetica Neue', Arial, sans-serif";
-  g.fillText(`${ml} ml`, 256, 214);
-  return c;
-}
-
-export function createDecantRT(canvas: HTMLCanvasElement, opts: DecantRTOptions = {}): DecantRT | null {
-  const gl = canvas.getContext("webgl2", { antialias: false, alpha: false, powerPreference: "high-performance", preserveDrawingBuffer: false });
   if (!gl) return null;
 
   const sh = (type: number, src: string) => {
@@ -450,7 +563,8 @@ export function createDecantRT(canvas: HTMLCanvasElement, opts: DecantRTOptions 
     }
     return s;
   };
-  const vs = sh(gl.VERTEX_SHADER, VS), fs = sh(gl.FRAGMENT_SHADER, FS);
+  const vs = sh(gl.VERTEX_SHADER, VS),
+    fs = sh(gl.FRAGMENT_SHADER, FS);
   if (!vs || !fs) return null;
   const prog = gl.createProgram()!;
   gl.attachShader(prog, vs);
@@ -464,8 +578,27 @@ export function createDecantRT(canvas: HTMLCanvasElement, opts: DecantRTOptions 
   gl.useProgram(prog);
   const U = (n: string) => gl.getUniformLocation(prog, n);
   const u = {
-    res: U("uRes"), eye: U("uEye"), cam: U("uCam"), focal: U("uFocal"), rot: U("uRot"), pivot: U("uPivot"),
-    a: U("uA"), b: U("uB"), liqN: U("uLiqN"), wave: U("uWave"), bg: U("uBg"), label: U("uLabel"), labelOn: U("uLabelOn"), sigma: U("uSigma"), c: U("uC"), tube: U("uTube"), cap: U("uCap"),
+    res: U("uRes"),
+    eye: U("uEye"),
+    cam: U("uCam"),
+    focal: U("uFocal"),
+    rot: U("uRot"),
+    pivot: U("uPivot"),
+    a: U("uA"),
+    b: U("uB"),
+    liqN: U("uLiqN"),
+    wave: U("uWave"),
+    bg: U("uBg"),
+    wave2: U("uWave2"),
+    sigma: U("uSigma"),
+    c: U("uC"),
+    tube: U("uTube"),
+    capP: U("uCapP"),
+    capAx: U("uCapAx"),
+    capW: U("uCapW"),
+    capR: U("uCapR"),
+    toneFix: U("uToneFix"),
+    n4: U("uN4"),
   };
   const vbo = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
@@ -473,44 +606,58 @@ export function createDecantRT(canvas: HTMLCanvasElement, opts: DecantRTOptions 
   gl.enableVertexAttribArray(0);
   gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
-  const tex = gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D, tex);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  const uploadLabel = (ml: DecantMl) => {
-    gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, labelCanvas(ml));
-    gl.generateMipmap(gl.TEXTURE_2D);
-  };
-
   const bg = (opts.bg ?? [22, 22, 22]).map((c) => Math.pow(c / 255, 2.2)) as V3;
-  const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const aces = (x: number) =>
+    Math.min(1, Math.max(0, (x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14)));
+  const toneFix = bg.map((c) => Math.pow(c, 1 / 2.2) - Math.pow(aces(c * 1.05), 1 / 2.2)) as V3;
+  const reduced =
+    typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   /* ── estado físico ── */
   let ml: DecantMl = opts.ml ?? 5;
-  uploadLabel(ml);
   const targetOf = (m: DecantMl) => {
     const sp = DECANT_SPECS[m];
     const [sr, sg, sb] = SIGMA[m];
     return { ...sp, fill: fillOf(m, sp), sr, sg, sb };
   };
   const spec = targetOf(ml);
-  const specV = Object.fromEntries(Object.keys(spec).map((k) => [k, 0])) as Record<keyof typeof spec, number>;
+  const specV = Object.fromEntries(Object.keys(spec).map((k) => [k, 0])) as Record<
+    keyof typeof spec,
+    number
+  >;
   // tampa: 0 = no lugar, 1 = fora (toque no frasco abre e fecha)
-  let capOpen = false, cap = 0, capV = 0;
-  let yaw = -0.35, yawV = opts.autoRotate === false || reduced ? 0 : 0.22;
+  let capOpen = false,
+    capT = 0; // progresso linear do caminho da tampa (0 no frasco, 1 na mesa)
+  let yaw = -0.35,
+    yawV = opts.autoRotate === false || reduced ? 0 : 0.22;
   // inclinação do frasco (rad) e velocidade — mola para ficar em pé
-  let tiltX = 0, tiltZ = 0, tiltXV = 0, tiltZV = 0;
-  let pushX = 0, pushZ = 0; // inclinação comandada pelo dedo
+  let tiltX = 0,
+    tiltZ = 0,
+    tiltXV = 0,
+    tiltZV = 0;
+  let pushX = 0,
+    pushZ = 0; // inclinação comandada pelo dedo
   // líquido: desvio do plano em relação à horizontal do mundo (mola amortecida)
-  let sx = 0, sz = 0, sxv = 0, szv = 0;
-  let wavePhase = 0, waveAmp = 0, waveDir = 0;
-  let dragging = false, lastX = 0, lastY = 0, lastT = 0, dragVX = 0, dragVY = 0;
+  let sx = 0,
+    sz = 0,
+    sxv = 0,
+    szv = 0;
+  let wavePhase = 0,
+    waveAmp = 0,
+    waveDir = 0,
+    w2Amp = 0,
+    w2Phase = 0,
+    w2Dir = 0;
+  let dragging = false,
+    lastX = 0,
+    lastY = 0,
+    lastT = 0,
+    dragVX = 0,
+    dragVY = 0;
   let idleSpin = opts.autoRotate === false || reduced ? 0 : 0.22;
   let idleFor = 0;
-  let deviceTiltX = 0, deviceTiltZ = 0;
+  let deviceTiltX = 0,
+    deviceTiltZ = 0;
 
   const resize = () => {
     const dpr = Math.min(Math.max(window.devicePixelRatio || 1, 1.5), 2) * quality;
@@ -524,7 +671,9 @@ export function createDecantRT(canvas: HTMLCanvasElement, opts: DecantRTOptions 
   let quality = 1;
 
   /* ── entrada ── */
-  let downX = 0, downY = 0, downT = 0;
+  let downX = 0,
+    downY = 0,
+    downT = 0;
   const onDown = (e: PointerEvent) => {
     downX = e.clientX;
     downY = e.clientY;
@@ -541,7 +690,8 @@ export function createDecantRT(canvas: HTMLCanvasElement, opts: DecantRTOptions 
     if (!dragging) return;
     const now = performance.now();
     const dt = Math.max(8, now - lastT) / 1000;
-    const dx = e.clientX - lastX, dy = e.clientY - lastY;
+    const dx = e.clientX - lastX,
+      dy = e.clientY - lastY;
     lastX = e.clientX;
     lastY = e.clientY;
     lastT = now;
@@ -551,16 +701,20 @@ export function createDecantRT(canvas: HTMLCanvasElement, opts: DecantRTOptions 
     dragVX = dragVX * 0.6 + (dx / dt) * 0.4;
     dragVY = dragVY * 0.6 + (dy / dt) * 0.4;
     // o frasco "vai junto" com o dedo: inclina contra o movimento
-    pushZ = Math.max(-0.3, Math.min(0.3, -dragVX * 0.00045));
-    pushX = Math.max(-0.22, Math.min(0.22, dragVY * 0.00035));
+    // inclinação contida: o frasco balança no dedo, nunca parece que vai cair
+    pushZ = Math.max(-0.16, Math.min(0.16, -dragVX * 0.00032));
+    pushX = Math.max(-0.12, Math.min(0.12, dragVY * 0.00026));
     idleFor = 0;
     wake();
   };
   const onUp = (e: PointerEvent) => {
     // toque rápido sem arrastar: abre/fecha a tampa
-    if (dragging && Math.hypot(e.clientX - downX, e.clientY - downY) < 7 && performance.now() - downT < 350) {
+    if (
+      dragging &&
+      Math.hypot(e.clientX - downX, e.clientY - downY) < 7 &&
+      performance.now() - downT < 350
+    ) {
       capOpen = !capOpen;
-      if (!capOpen) szv += 0.8; // a tampa encaixando dá um tranquinho no perfume
       opts.onCapChange?.(capOpen);
     }
     dragging = false;
@@ -576,21 +730,28 @@ export function createDecantRT(canvas: HTMLCanvasElement, opts: DecantRTOptions 
   // inclinar o celular também mexe o perfume (Android libera direto; iOS só após permissão)
   const onOrient = (e: DeviceOrientationEvent) => {
     if (e.gamma == null || e.beta == null) return;
-    deviceTiltZ = Math.max(-0.35, Math.min(0.35, (-e.gamma * Math.PI) / 180 * 0.5));
-    deviceTiltX = Math.max(-0.25, Math.min(0.25, ((e.beta - 45) * Math.PI) / 180 * 0.35));
+    deviceTiltZ = Math.max(-0.35, Math.min(0.35, ((-e.gamma * Math.PI) / 180) * 0.5));
+    deviceTiltX = Math.max(-0.25, Math.min(0.25, (((e.beta - 45) * Math.PI) / 180) * 0.35));
     wake();
   };
   window.addEventListener("deviceorientation", onOrient);
 
   /* ── loop ── */
-  let raf = 0, visible = true, running = false, first = true, last = performance.now();
-  let frameMs = 16, frames = 0;
-  const io = typeof IntersectionObserver === "function"
-    ? new IntersectionObserver(([en]) => {
-        visible = !!en?.isIntersecting;
-        if (visible) wake();
-      })
-    : null;
+  let raf = 0,
+    visible = true,
+    running = false,
+    first = true,
+    last = performance.now();
+  let frameMs = 16,
+    frames = 0,
+    tick = 0;
+  const io =
+    typeof IntersectionObserver === "function"
+      ? new IntersectionObserver(([en]) => {
+          visible = !!en?.isIntersecting;
+          if (visible) wake();
+        })
+      : null;
   io?.observe(canvas);
   const onVis = () => {
     if (!document.hidden) wake();
@@ -601,10 +762,17 @@ export function createDecantRT(canvas: HTMLCanvasElement, opts: DecantRTOptions 
     // tamanho: mola criticamente amortecida em cada medida
     const target = targetOf(ml);
     // tampa: sobe rápido e some; ao fechar, desce e assenta com um quiquezinho
-    const ck = capOpen ? 60 : 110, cc = capOpen ? 14 : 13;
-    capV += (ck * ((capOpen ? 1 : 0) - cap) - cc * capV) * dt;
-    cap += capV * dt;
-    const k = 90, c = 2 * Math.sqrt(k) * 0.82;
+    if (capOpen && capT < 1) capT = Math.min(1, capT + dt / 1.05);
+    else if (!capOpen && capT > 0) {
+      capT = Math.max(0, capT - dt / 0.95);
+      if (capT === 0) {
+        // a tampa encaixando dá um tranquinho no perfume
+        szv += 0.9;
+        sxv -= 0.3;
+      }
+    }
+    const k = 90,
+      c = 2 * Math.sqrt(k) * 0.82;
     (Object.keys(target) as Array<keyof typeof target>).forEach((key) => {
       const a = k * (target[key] - spec[key]) - c * specV[key];
       specV[key] += a * dt;
@@ -618,8 +786,10 @@ export function createDecantRT(canvas: HTMLCanvasElement, opts: DecantRTOptions 
       yaw += yawV * dt;
     }
     // inclinação do frasco: mola com um pouco de sobra (balança e volta)
-    const tk = 140, tc = 9;
-    const gx = pushX + deviceTiltX, gz = pushZ + deviceTiltZ;
+    const tk = 140,
+      tc = 9;
+    const gx = pushX + deviceTiltX,
+      gz = pushZ + deviceTiltZ;
     const ax = tk * (gx - tiltX) - tc * tiltXV;
     const az = tk * (gz - tiltZ) - tc * tiltZV;
     tiltXV += ax * dt;
@@ -628,7 +798,8 @@ export function createDecantRT(canvas: HTMLCanvasElement, opts: DecantRTOptions 
     tiltZ += tiltZV * dt;
     // líquido: atrasado em relação ao vidro (inércia) — o plano é empurrado pela
     // aceleração angular do frasco e volta para a horizontal oscilando
-    const lk = 75, lc = 2.2;
+    const lk = 75,
+      lc = 2.2;
     const lax = lk * (0 - sx) - lc * sxv - ax * 0.55;
     const laz = lk * (0 - sz) - lc * szv - az * 0.55;
     sxv += lax * dt;
@@ -638,19 +809,27 @@ export function createDecantRT(canvas: HTMLCanvasElement, opts: DecantRTOptions 
     sx = Math.max(-0.5, Math.min(0.5, sx));
     sz = Math.max(-0.5, Math.min(0.5, sz));
     // ondinhas: ganham energia com o tranco e somem devagar
-    const energy = Math.hypot(sxv, szv) + Math.abs(yawV - idleSpin) * 0.06;
-    waveAmp += (Math.min(0.55, energy * 0.18) - waveAmp) * Math.min(1, dt * 3);
-    waveAmp *= Math.exp(-dt * 0.9);
-    wavePhase += dt * 11;
+    // ondas: ganham energia com o tranco e assentam devagar (proporcionais ao raio)
+    const energy = Math.hypot(sxv, szv) + Math.abs(yawV - idleSpin) * 0.05;
+    const ri = spec.R - spec.wall;
+    waveAmp += (Math.min(0.11 * ri, energy * 0.045 * ri) - waveAmp) * Math.min(1, dt * 4);
+    waveAmp *= Math.exp(-dt * 0.75);
+    wavePhase += dt * 9.5;
     if (energy > 0.05) waveDir = Math.atan2(szv, sxv);
+    // modo sela: a mais lenta das ondas, a última a parar
+    w2Amp += (Math.min(0.08 * ri, energy * 0.03 * ri) - w2Amp) * Math.min(1, dt * 2.5);
+    w2Amp *= Math.exp(-dt * 0.55);
+    w2Phase += dt * 7.2;
+    if (energy > 0.05) w2Dir = waveDir + 0.6;
   };
 
   const settled = () =>
     !dragging &&
     Math.abs(tiltXV) + Math.abs(tiltZV) + Math.abs(sxv) + Math.abs(szv) < 0.002 &&
     waveAmp < 0.004 &&
+    w2Amp < 0.004 &&
     Object.values(specV).every((v) => Math.abs(v) < 0.001) &&
-    Math.abs(capV) < 0.001 &&
+    (capOpen ? capT >= 1 : capT <= 0) &&
     (idleSpin === 0 || reduced);
 
   const frame = (now: number) => {
@@ -659,22 +838,35 @@ export function createDecantRT(canvas: HTMLCanvasElement, opts: DecantRTOptions 
       running = false;
       return;
     }
-    let dt = Math.min(0.05, (now - last) / 1000);
+    const gap = now - last;
+    let dt = Math.min(0.05, gap / 1000);
     last = now;
+    // qualidade adaptativa: o intervalo entre quadros inclui o tempo da placa de
+    // vídeo; se passar de ~19 ms (abaixo de ~52 fps), baixa a resolução
+    if (gap > 0 && gap < 200) {
+      frameMs = frameMs * 0.85 + gap * 0.15;
+      if (++frames % 20 === 0) {
+        if (frameMs > 19 && quality > 0.5) quality = Math.max(0.5, quality - 0.12);
+        else if (frameMs < 17.4 && quality < 1 && frames > 120)
+          quality = Math.min(1, quality + 0.04);
+      }
+    }
     // passos fixos: a física não depende da taxa de quadros
     while (dt > 0) {
       const h = Math.min(dt, 1 / 120);
       physics(h);
       dt -= h;
     }
-    draw();
-    // qualidade adaptativa: se o aparelho sofre, baixa a resolução
-    const t1 = performance.now();
-    frameMs = frameMs * 0.9 + (t1 - now) * 0.1;
-    if (++frames % 30 === 0) {
-      if (frameMs > 22 && quality > 0.55) quality -= 0.1;
-      else if (frameMs < 9 && quality < 1) quality += 0.05;
-    }
+    // só girando sozinho (ninguém tocando, perfume parado): 30 quadros por
+    // segundo bastam e poupam metade da bateria; ao tocar, volta a 60
+    const calm =
+      !dragging &&
+      Math.abs(tiltXV) + Math.abs(tiltZV) + Math.abs(sxv) + Math.abs(szv) < 0.02 &&
+      waveAmp < 0.01 &&
+      w2Amp < 0.01 &&
+      (capOpen ? capT >= 1 : capT <= 0) &&
+      Object.values(specV).every((v) => Math.abs(v) < 0.01);
+    if (first || !calm || (++tick & 1) === 0) draw();
     if (first) {
       first = false;
       opts.onFirstFrame?.();
@@ -702,14 +894,14 @@ export function createDecantRT(canvas: HTMLCanvasElement, opts: DecantRTOptions 
     const sinT = Math.sqrt(Math.max(0, 1 - cosT * cosT));
     const lift = (spec.R - 1.1) * sinT - 1.1 * cosT + 1.1;
     // câmera de produto: tele, um pouco acima, enquadrando o maior frasco
-    const eye: V3 = [0, 34, -178];
-    const target: V3 = [0, 29, 0];
+    const eye: V3 = [0, 36, -185];
+    const target: V3 = [0, 27.5, 0];
     const f = norm([target[0] - eye[0], target[1] - eye[1], target[2] - eye[2]]);
     const r = norm(cross([0, 1, 0], f));
     const up = cross(f, r);
     const camM = new Float32Array([r[0], r[1], r[2], up[0], up[1], up[2], f[0], f[1], f[2]]);
     const aspect = canvas.width / canvas.height;
-    const vfov = (24 * Math.PI) / 180 * (aspect < 0.9 ? 1.12 : 1);
+    const vfov = ((24 * Math.PI) / 180) * (aspect < 0.9 ? 1.12 : 1);
     gl.uniform2f(u.res, canvas.width, canvas.height);
     gl.uniform3f(u.eye, eye[0], eye[1], eye[2]);
     gl.uniformMatrix3fv(u.cam, false, camM);
@@ -721,18 +913,49 @@ export function createDecantRT(canvas: HTMLCanvasElement, opts: DecantRTOptions 
     gl.uniform4f(u.b, spec.wall, spec.base, spec.fill, yT);
     gl.uniform4f(u.c, spec.collarR, spec.collarH, spec.actH, spec.capH);
     gl.uniform2f(u.tube, spec.tubeA, spec.tubeR);
-    gl.uniform1f(u.cap, Math.max(0, cap));
+    // tampa: sobe reta até livrar o atuador, faz um arco para o lado e pousa
+    // em pé na mesa; ao fechar, refaz o caminho ao contrário
+    const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+    const sm = (a: number, b: number, x: number) => {
+      const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+      return t * t * (3 - 2 * t);
+    };
+    const uu = ease(capT);
+    const seatY = spec.H + 0.15 + spec.collarH + 0.25;
+    const axB: V3 = [R[3]!, R[4]!, R[5]!];
+    const seatW: V3 = [R[3]! * seatY, R[4]! * seatY + lift, R[5]! * seatY];
+    const rise = sm(0, 0.36, uu) * (spec.actH + 2.2);
+    const side = sm(0.3, 0.84, uu),
+      drop = sm(0.5, 1, uu);
+    const restW: V3 = [spec.R + spec.capR + 9, 0, 4];
+    const hi: V3 = [seatW[0] + axB[0] * rise, seatW[1] + axB[1] * rise, seatW[2] + axB[2] * rise];
+    const capW: V3 = [
+      hi[0] + (restW[0] - hi[0]) * side,
+      hi[1] + (0 - hi[1]) * drop + 5 * Math.sin(Math.PI * side) * (1 - drop * 0.6),
+      hi[2] + (restW[2] - hi[2]) * side,
+    ];
+    const lean = 0.22 * Math.sin(Math.PI * side);
+    const capAxW = norm([
+      axB[0] * (1 - side) + lean,
+      axB[1] * (1 - side) + side,
+      axB[2] * (1 - side),
+    ]);
+    const capL = toLocal(R, [capW[0], capW[1] - lift, capW[2]]);
+    const capAxL = toLocal(R, capAxW);
+    gl.uniform3f(u.capP, capL[0], capL[1], capL[2]);
+    gl.uniform3f(u.capAx, capAxL[0], capAxL[1], capAxL[2]);
+    gl.uniform3f(u.capW, capW[0], capW[1], capW[2]);
+    gl.uniform1f(u.capR, spec.capR);
+    gl.uniform3f(u.toneFix, toneFix[0], toneFix[1], toneFix[2]);
+    gl.uniform1i(u.n4, 4);
+    gl.uniform3f(u.wave2, w2Amp, w2Phase, w2Dir);
     // o perfume quer ficar nivelado no MUNDO: normal = cima + desvio da mola
     const nW = norm([sx, 1, sz]);
     const nL = toLocal(R, nW);
     gl.uniform3f(u.liqN, nL[0], nL[1], nL[2]);
     gl.uniform4f(u.wave, waveAmp, 0.55, wavePhase, waveDir);
     gl.uniform3f(u.bg, bg[0], bg[1], bg[2]);
-    gl.uniform1f(u.labelOn, 1);
     gl.uniform3f(u.sigma, spec.sr, spec.sg, spec.sb);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.uniform1i(u.label, 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   };
 
@@ -752,9 +975,11 @@ export function createDecantRT(canvas: HTMLCanvasElement, opts: DecantRTOptions 
       push(x: number, z: number, yawVel?: number) {
         pushX = x;
         pushZ = z;
-        dragging = x !== 0 || z !== 0;
         if (yawVel != null) yawV = yawVel;
-        idleFor = 0;
+      },
+      spin(v: number) {
+        idleSpin = v;
+        idleFor = 3;
       },
       cap(open: boolean) {
         capOpen = open;
@@ -768,7 +993,6 @@ export function createDecantRT(canvas: HTMLCanvasElement, opts: DecantRTOptions 
     setSize(next) {
       if (next === ml) return;
       ml = next;
-      uploadLabel(ml);
       // troca de frasco dá um tranco leve no perfume
       szv += 1.6;
       sxv -= 0.6;
