@@ -44,7 +44,7 @@ export class AiError extends Error {
 const OPENAI = "https://api.openai.com/v1";
 
 /** A chave como foi colada pode vir com espaço, quebra de linha ou aspas: limpa antes de usar. */
-const cleanKey = (raw: string | undefined) => (raw ?? "").replace(/^[\s"'`]+|[\s"'`]+$/g, "").replace(/\s+/g, "");
+const cleanKey = (raw: string | undefined) => (raw ?? "").replace(/[^A-Za-z0-9_-]/g, "");
 
 export function openaiKey(): string {
   const k = cleanKey(process.env["OPENAI_API_KEY"]);
@@ -205,6 +205,7 @@ export async function mapOpenAIError(res: Response): Promise<AiError> {
   } catch {
     /* sem corpo */
   }
+  console.error(`openai ${res.status} ${code || "-"}: ${detail || "(sem mensagem)"}`);
   if (res.status === 401) return new AiError("invalid_key", "A chave da OpenAI é inválida ou foi revogada.", 401);
   if (res.status === 429 && /quota|billing/.test(code)) return new AiError("no_quota", "A conta da OpenAI está sem saldo ou atingiu o limite de gastos.", 402);
   if (res.status === 429) return new AiError("rate_limited", "Muitos pedidos à OpenAI agora. Tente em alguns segundos.", 429);
