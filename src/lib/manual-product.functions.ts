@@ -244,6 +244,16 @@ async function saveManual(data: ManualProductInput, ctx: Ctx) {
   return { id: productId as string };
 }
 
+/** Mesmo cadastro da tela, para o Copilot (permissão já validada por ele). */
+export const saveManualCore = (data: ManualProductInput, ctx: { userId: string; claims?: { email?: string } | null }) =>
+  saveManual(data, ctx as Ctx);
+
+/** Preço automático (custo + margem da loja, preço comercial) — prévia do Copilot. */
+export async function autoPricesFor(cost: number | null) {
+  const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
+  return autoPrices(db, cost);
+}
+
 /** Cria ou atualiza um perfume cadastrado à mão. */
 export const saveManualProduct = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

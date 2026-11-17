@@ -143,6 +143,12 @@ export async function searchWeb(query: string): Promise<WebResult[]> {
   return out;
 }
 
+/** Lê uma página inteira (até `max` caracteres) — usado pela pesquisa do Copilot. */
+export async function readSourceLong(url: string, max = 14000): Promise<string | null> {
+  const md = await fetchText(`${READER}${url}`, 25000);
+  return md ? md.slice(0, max) : null;
+}
+
 /** Lê uma página de fonte confiável (dados estruturados quando existirem). */
 export async function readSourcePage(url: string): Promise<string | null> {
   const md = await fetchText(`${READER}${url}`, 25000);

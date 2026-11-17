@@ -38,6 +38,14 @@ Regras:
 - Estoque Orium (unidades físicas da loja) é diferente do estoque do fornecedor. "Tenho 3 aqui" / "coloca 5 em estoque" = mode set. "Chegaram mais 3" / "adiciona 3" / "dar entrada" = mode add. "Zera" = set 0. Se não der para saber set × add, pergunte. "Vendi um X aqui" = registrar venda da loja (propose_store_sale), não ajuste de estoque.
 - "Esconde X" = propose_availability blocked. "Libera X mesmo sem estoque" = available. "Volta ao automático" = none.
 - Promoções usam o sistema de promoções; nunca altere preço base para simular promoção.
+- FOTOS: o Admin pode mandar fotos (numeradas: foto 1 = a mais recente). Olhe a foto com atenção: leia rótulo, marca, nome, concentração e volume do frasco/caixa e diga qual perfume é (com o grau de certeza). Depois chame search_products para ver se já existe no catálogo. Se não der para ler, diga o que conseguiu ver e peça outra foto.
+- Ferramentas que usam foto têm o campo photo (número da foto). Use a foto do perfume quando o Admin pedir para cadastrar/registrar/trocar a foto.
+- PESQUISA: research_perfume busca na internet a ficha completa (volume, gênero, concentração, acordes, pirâmide, descrição em português). Use antes de cadastrar no catálogo ou na Negociação, e sempre que o Admin pedir para pesquisar. Mostre um resumo curto do que achou (marca, volume, gênero, 3-4 notas) antes do cartão.
+- CADASTRAR NO CATÁLOGO ("cadastra esse perfume", "registra no catálogo"): research_perfume → propose_catalog_create com os dados pesquisados + photo. Preço: use o que o Admin falar; se ele disser só o custo, mande cost (o sistema calcula o preço pela regra); se não falar preço, pergunte (ou ofereça sob consulta / só decant). Padrão: frasco e decant, à venda.
+- NEGOCIAÇÃO ("registra pra negociação", "coloca no mostruário"): research_perfume (para ficha e descrição) → propose_negotiation_create com photo, volume e ml restantes (se o Admin falar, ex.: "tá com 80ml"). Se ele não disser quanto tem no frasco, pergunte uma vez antes de propor.
+- EDITAR PRODUTO (nome, marca, volume, gênero, descrição, foto, situação à venda/oculto/indisponível, frasco/decant, sob consulta, fixar no topo, acordes/pirâmide) → propose_product_update só com os campos que mudam (os outros null). Preço continua em propose_price_change; estoque em propose_stock_change.
+- EDITAR PEDIDO (itens, quantidade, cliente, telefone, entrega, cupom, observação, data de entrega) → propose_order_edit. Etapas do pedido ("avança", "marca como entregue", "pedido feito", "cancela") → propose_order_status; "avançar" = próxima etapa: pendente → pedido feito → entregue. Pagamento ("cliente pagou", "pagou o sinal", "recebi 200") → propose_order_payment.
+- Você consegue fazer praticamente tudo no Admin. Se algo realmente não existir como ferramenta, diga o caminho na tela (e use navigate).
 - Registrar venda da loja: use propose_store_sale com todos os itens (quantidade, frasco ou decant+ml, pagamento PIX/CARTAO/DINHEIRO). Nunca invente preço: unit_price null usa o preço do sistema. Se faltar pagamento ou produto, a ferramenta pergunta; repasse a pergunta curta. A venda só é gravada após o Admin confirmar.
 - Navegação ("abre", "vai para", "mostra a tela") executa na hora pela ferramenta navigate.
 - "Ele", "esse", "desse" referem-se ao último produto/pedido desta conversa ou ao da tela atual.
@@ -79,7 +87,11 @@ export const Route = createFileRoute("/api/copilot")({
           if (!t) return new Response("Conversa não encontrada.", { status: 404 });
         }
         const lastUser = [...body.messages].reverse().find((m) => m.role === "user");
-        const utterance = lastUser?.parts?.map((p: any) => (p.type === "text" ? p.text : "")).join(" ").slice(0, 500) ?? null;
+        const PW = await import("@/lib/copilot/power-tools.server");
+        const photos = PW.collectPhotos(body.messages);
+        const withPhoto = PW.lastUserHasPhoto(body.messages);
+        const spoken = lastUser?.parts?.map((p: any) => (p.type === "text" ? p.text : "")).join(" ").trim().slice(0, 500) ?? "";
+        const utterance = spoken || (withPhoto ? "(foto de perfume)" : null);
         const safe = async (fn: () => Promise<unknown>) => {
           try {
             return await fn();
@@ -399,6 +411,102 @@ export const Route = createFileRoute("/api/copilot")({
             inputSchema: z.object({ items: z.array(z.object({ ...productRef, quantity: z.number(), supplier: z.string().nullable() })) }),
             execute: (a) => safe(() => R.proposeRestockAdd(ctx, a, utterance)),
           }),
+          research_perfume: tool({
+            description: "Pesquisa um perfume na internet (Fragrantica e outra fonte) e devolve a ficha em português: nome oficial, marca, concentração, volume, tamanhos, gênero, família, acordes, notas de saída/coração/fundo, descrição, ano, perfumista. Demora alguns segundos.",
+            inputSchema: z.object({ name: z.string(), brand: z.string().nullable(), details: z.string().nullable().describe("o que dá para ver na foto (rótulo, cor, volume), se houver") }),
+            execute: (a) => safe(() => PW.researchPerfume(a)),
+          }),
+          propose_negotiation_create: tool({
+            description: "Prepara uma peça nova na Negociação (mostruário): nome, marca, volume do frasco, ml que restam, foto e ficha olfativa pesquisada.",
+            inputSchema: z.object({
+              name: z.string(),
+              brand: z.string().nullable(),
+              volume_ml: z.number().nullable(),
+              remaining_ml: z.number().nullable().describe("quanto ainda tem no frasco, em ml"),
+              condition_note: z.string().nullable(),
+              status: z.enum(["AVAILABLE", "NEGOTIATING", "HIDDEN"]).nullable(),
+              photo: z.number().nullable().describe("número da foto (1 = a mais recente) ou null"),
+              description: z.string().nullable(),
+              olfactory_family: z.string().nullable(),
+              fragrantica_url: z.string().nullable(),
+              accords: z.array(z.object({ name: z.string(), intensity: z.number() })).nullable(),
+              top: z.array(z.string()).nullable(),
+              heart: z.array(z.string()).nullable(),
+              base: z.array(z.string()).nullable(),
+            }),
+            execute: (a) => P.guarded("propose_negotiation_create", () => PW.proposeNegotiationCreate(ctx, a as any, photos, utterance)),
+          }),
+          propose_catalog_create: tool({
+            description: "Prepara o cadastro de um perfume NOVO no catálogo da loja, com dados pesquisados, foto, preço/custo, estoque e ficha olfativa.",
+            inputSchema: z.object({
+              name: z.string(),
+              brand: z.string(),
+              volume_ml: z.number().nullable(),
+              concentration: z.string().nullable(),
+              gender: z.enum(["MASCULINO", "FEMININO", "UNISSEX"]).nullable(),
+              sale_mode: z.enum(["FULL", "DECANT", "BOTH"]).nullable().describe("padrão BOTH"),
+              visibility: z.enum(["ATIVO", "OCULTO", "INDISPONIVEL"]).nullable().describe("padrão ATIVO"),
+              retail_price: z.number().nullable().describe("preço de venda do frasco, se o Admin disse"),
+              cost: z.number().nullable().describe("custo, se o Admin disse"),
+              stock: z.number().nullable(),
+              price_on_request: z.boolean().nullable(),
+              photo: z.number().nullable(),
+              description: z.string().nullable(),
+              olfactory_family: z.string().nullable(),
+              fragrantica_url: z.string().nullable(),
+              accords: z.array(z.object({ name: z.string(), intensity: z.number() })).nullable(),
+              top: z.array(z.string()).nullable(),
+              heart: z.array(z.string()).nullable(),
+              base: z.array(z.string()).nullable(),
+            }),
+            execute: (a) => P.guarded("propose_catalog_create", () => PW.proposeCatalogCreate(ctx, a as any, photos, utterance)),
+          }),
+          propose_product_update: tool({
+            description: "Prepara edição de um produto do catálogo. Mande só o que muda (o resto null).",
+            inputSchema: z.object({
+              ...productRef,
+              name: z.string().nullable(),
+              brand: z.string().nullable(),
+              volume_ml: z.number().nullable(),
+              concentration: z.string().nullable(),
+              gender: z.enum(["MASCULINO", "FEMININO", "UNISSEX"]).nullable(),
+              visibility: z.enum(["ATIVO", "OCULTO", "INDISPONIVEL"]).nullable(),
+              sale_mode: z.enum(["FULL", "DECANT", "BOTH"]).nullable(),
+              price_on_request: z.boolean().nullable(),
+              pinned: z.boolean().nullable(),
+              photo: z.number().nullable(),
+              description: z.string().nullable(),
+              olfactory_family: z.string().nullable(),
+              accords: z.array(z.object({ name: z.string(), intensity: z.number() })).nullable(),
+              top: z.array(z.string()).nullable(),
+              heart: z.array(z.string()).nullable(),
+              base: z.array(z.string()).nullable(),
+            }),
+            execute: (a) => P.guarded("propose_product_update", () => PW.proposeProductUpdate(ctx, a as any, photos, utterance)),
+          }),
+          propose_order_edit: tool({
+            description: "Prepara edição de um pedido: adicionar/remover itens, mudar quantidade, cliente, telefone, entrega, cupom, forma de pagamento, observação e data de entrega. O sistema recalcula os preços e mostra a prévia.",
+            inputSchema: z.object({
+              order_number: z.string(),
+              customer_name: z.string().nullable(),
+              customer_phone: z.string().nullable(),
+              notes: z.string().nullable(),
+              fulfillment: z.enum(["PICKUP", "LOCAL", "SHIPPING"]).nullable(),
+              coupon_code: z.string().nullable(),
+              payment_method: z.enum(["PIX", "CARD"]).nullable(),
+              delivery_date: z.string().nullable().describe("AAAA-MM-DD"),
+              delivery_time: z.string().nullable().describe("HH:MM"),
+              add_items: z.array(z.object({ ...productRef, variant: z.enum(["FRASCO", "DECANT"]), decant_ml: z.number().nullable(), quantity: z.number(), unit_price: z.number().nullable() })).nullable(),
+              remove_items: z.array(z.object({ ...productRef, variant: z.enum(["FRASCO", "DECANT"]).nullable(), decant_ml: z.number().nullable() })).nullable(),
+              set_quantity: z.array(z.object({ ...productRef, variant: z.enum(["FRASCO", "DECANT"]).nullable(), decant_ml: z.number().nullable(), quantity: z.number() })).nullable(),
+            }),
+            execute: (a) => P.guarded("propose_order_edit", () => PW.proposeOrderEdit(ctx, a as any, utterance)),
+          }),
+          propose_order_payment: tool({
+            description: "Prepara o pagamento de um pedido: unpaid (não pago), deposit (sinal), paid (pago tudo) ou amount (valor total recebido até agora).",
+            inputSchema: z.object({ order_number: z.string(), mode: z.enum(["unpaid", "deposit", "paid", "amount"]), amount: z.number().nullable() }),
+            execute: (a) => P.guarded("propose_order_payment", () => PW.proposeOrderPayment(ctx, a, utterance)),
+          }),
           propose_store_sale: tool({
             description: "Prepara uma venda da loja física (vários itens). Resolve os perfumes no catálogo, usa o preço do sistema e pede confirmação.",
             inputSchema: z.object({
@@ -425,7 +533,7 @@ export const Route = createFileRoute("/api/copilot")({
         const route = engine.routeTask(utterance, cfg.auto_route);
         let prep;
         try {
-          prep = await engine.prepare(route.profile);
+          prep = await engine.prepare(withPhoto ? "vision" : route.profile);
         } catch (e) {
           if (e instanceof engine.AiError) return new Response(e.message, { status: e.status });
           throw e;
@@ -435,10 +543,26 @@ export const Route = createFileRoute("/api/copilot")({
 
         // histórico enxuto: só o necessário para manter o contexto
         const messages = body.messages.slice(-14);
+        // fotos antigas não vão de novo para a IA (custo): viram a marcação "[foto N enviada antes]"
+        let photoNo = 0;
+        const recentIds = new Set(messages.filter((m) => m.role === "user").slice(-2).map((m) => m.id));
+        const forModel = [...messages]
+          .reverse()
+          .map((m) => {
+            if (m.role !== "user") return m;
+            const parts = [...(m.parts as any[])].reverse().map((p) => {
+              if (p?.type !== "file" || !/^image\//.test(p.mediaType ?? "")) return p;
+              photoNo += 1;
+              const n = photoNo;
+              return recentIds.has(m.id) ? [{ type: "text", text: `[foto ${n}]` }, p] : [{ type: "text", text: `[foto ${n} enviada antes]` }];
+            });
+            return { ...m, parts: parts.reverse().flat() };
+          })
+          .reverse() as UIMessage[];
         const result = streamText({
           model: openai.responses(prep.model),
           system: SYSTEM(today, body.page ?? {}, commands ?? [], aliases ?? []),
-          messages: await convertToModelMessages(messages, { ignoreIncompleteToolCalls: true }),
+          messages: await convertToModelMessages(forModel, { ignoreIncompleteToolCalls: true }),
           tools,
           stopWhen: isStepCount(50),
           abortSignal: request.signal,
