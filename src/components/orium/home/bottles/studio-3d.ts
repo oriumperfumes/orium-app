@@ -30,6 +30,8 @@ export type Studio3DOptions = {
   height: number;
   /** maior medida da base (mm), para a sombra */
   footprint: number;
+  /** folga do enquadramento (altura visível / altura do frasco); padrão 1,42 */
+  frame?: number;
   autoRotate?: boolean;
   /** ângulo inicial (rad); 0 = de frente */
   yaw?: number;
@@ -331,7 +333,7 @@ export function createStudio3D(
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     // enquadra a altura do frasco + espaço para o reflexo
-    const fitH = H * 1.42;
+    const fitH = H * (opts.frame ?? 1.42);
     const dist = fitH / 2 / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
     const el = THREE.MathUtils.degToRad(7 + tilt * 10);
     camera.position.set(0, target.y + Math.sin(el) * dist, Math.cos(el) * dist);

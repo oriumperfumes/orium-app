@@ -60,6 +60,7 @@ export function Bottle3D({
             bg: BG,
             height: size.total,
             footprint: Math.max(size.W, size.D),
+            frame: "frame" in size ? (size as { frame?: number }).frame : undefined,
             yaw: -0.55,
             onFirstFrame: () => !cancelled && setState("live"),
           });
