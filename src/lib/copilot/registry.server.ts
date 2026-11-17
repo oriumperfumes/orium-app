@@ -51,6 +51,11 @@ export const ACTIONS: Record<string, ActionMeta> = {
   store_sale_register: { name: "store_sale_register", label: "Registrar venda da loja", description: "Venda presencial: baixa estoque, lucro e auditoria.", risk: "HIGH", confirm: true, reversible: true, roles: ["owner", "admin"] },
   order_create: { name: "order_create", label: "Criar pedido", description: "Pedido manual com preço do sistema e pagamento (não pago, sinal ou integral).", risk: "HIGH", confirm: true, reversible: true, roles: ["owner", "admin"] },
   order_to_restock: { name: "order_to_restock", label: "Enviar pedido à reposição", description: "", risk: "MEDIUM", confirm: true, reversible: false, roles: ["owner", "admin"] },
+  negotiation_create: { name: "negotiation_create", label: "Nova peça na Negociação", description: "Cadastra uma peça do mostruário (foto, ml, ficha olfativa).", risk: "MEDIUM", confirm: true, reversible: true, roles: ["owner", "admin"] },
+  catalog_create: { name: "catalog_create", label: "Cadastrar perfume no catálogo", description: "Perfume novo com dados pesquisados, foto, preço e ficha olfativa.", risk: "HIGH", confirm: true, reversible: true, roles: ["owner", "admin"] },
+  product_update: { name: "product_update", label: "Editar produto", description: "Nome, marca, volume, gênero, descrição, foto, situação, venda e ficha olfativa.", risk: "HIGH", confirm: true, reversible: true, roles: ["owner", "admin"] },
+  order_edit: { name: "order_edit", label: "Editar pedido", description: "Itens, cliente, entrega, cupom e observação (recalcula pelo sistema).", risk: "HIGH", confirm: true, reversible: false, roles: ["owner", "admin"] },
+  order_payment: { name: "order_payment", label: "Pagamento do pedido", description: "Não pago, sinal, pago ou valor recebido.", risk: "HIGH", confirm: true, reversible: true, roles: ["owner", "admin"] },
 };
 
 export const ORDER_STATUSES = ["pendente", "pedido feito", "entregue", "cancelado"] as const;
@@ -75,7 +80,7 @@ export type ProductCard = {
   volume_ml: number | null;
 };
 
-type Resolved =
+export type Resolved =
   | { status: "ok"; product: ProductCard }
   | { status: "ambiguous" | "not_found"; query: string; candidates: ProductCard[] };
 
@@ -510,11 +515,11 @@ export async function resolveNavigation(ctx: CopilotCtx, destination: string, pr
 
 // ---------------------------------------------------------------- propostas
 
-type Proposal =
+export type Proposal =
   | { kind: "action"; action_id: string; tool: string; label: string; risk: Risk; reversible: boolean; expires_at: string; preview: any }
   | { kind: "needs"; message: string; ask?: string; options?: string[]; candidates?: ProductCard[] };
 
-async function savePending(ctx: CopilotCtx, tool: string, params: any, preview: any, utterance: string | null): Promise<Proposal> {
+export async function savePending(ctx: CopilotCtx, tool: string, params: any, preview: any, utterance: string | null): Promise<Proposal> {
   const meta = ACTIONS[tool]!;
   allowed(ctx, meta);
   const expires = new Date(Date.now() + PENDING_TTL_MS).toISOString();
@@ -530,7 +535,7 @@ async function savePending(ctx: CopilotCtx, tool: string, params: any, preview: 
   return { kind: "action", action_id: data.id, tool, label: meta.label, risk: meta.risk, reversible: meta.reversible, expires_at: expires, preview };
 }
 
-const needsProduct = (r: Exclude<Resolved, { status: "ok" }>): Proposal => ({
+export const needsProduct = (r: Exclude<Resolved, { status: "ok" }>): Proposal => ({
   kind: "needs",
   message: r.status === "ambiguous" ? `Encontrei mais de um perfume para "${r.query}". Qual deles?` : `Não encontrei "${r.query}" no catálogo.`,
   candidates: r.candidates,
@@ -1118,8 +1123,11 @@ async function run(ctx: CopilotCtx, tool: string, params: any, actionId: string)
       if (error) throw new Error(error.message);
       return { canceled: params.id };
     }
-    default:
+    default: {
+      const { runPower, POWER_TOOLS } = await import("@/lib/copilot/power-tools.server");
+      if (POWER_TOOLS.has(tool)) return runPower(ctx, tool, params);
       throw new Error("Ação desconhecida.");
+    }
   }
 }
 

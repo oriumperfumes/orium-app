@@ -2,19 +2,20 @@ import { copilotMessageContentClass } from "./CopilotUI";
 import { COPILOT_ASK, takePendingAsk } from "@/components/orium/copilot/ask";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, type UIMessage } from "ai";
+import { DefaultChatTransport, type FileUIPart, type UIMessage } from "ai";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowRight, ArrowDown, Boxes, ChartNoAxesColumn, Check, Command, Eye, Loader2, Mic, Percent, Plus, Receipt, RefreshCw, ShoppingBag, Sparkles, Tag, Ticket, Truck, X } from "lucide-react";
+import { ArrowRight, ArrowDown, Boxes, Camera, ScanSearch, ChartNoAxesColumn, Check, Command, Eye, Loader2, Mic, Percent, Plus, Receipt, RefreshCw, ShoppingBag, Sparkles, Tag, Ticket, Truck, X } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai-elements/conversation";
 import { MessageResponse } from "@/components/ai-elements/message";
-import { PromptInput, PromptInputFooter, PromptInputSubmit, PromptInputTextarea } from "@/components/ai-elements/prompt-input";
+import { PromptInput, PromptInputFooter, PromptInputSubmit, PromptInputTextarea, usePromptInputAttachments } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { startVoiceRecording, type VoiceRecording } from "@/lib/voice/recorder";
 import { copilotConfirmLatest } from "@/lib/copilot.functions";
 import { useVisualViewport } from "@/hooks/use-visual-viewport";
+import { ResearchCard } from "./PowerCards";
 import { ActionCard, type ActionOutcome, type ActionProposal } from "./ActionCard";
 import { CopilotOrb, type OrbState } from "./CopilotOrb";
 import { cn } from "@/lib/utils";
@@ -84,6 +85,7 @@ const TOOL_LABEL: Record<string, [string, string]> = {
   compare_suppliers: ["Comparando fornecedores", "Fornecedores comparados"],
   advice_data: ["Analisando dados", "Dados analisados"],
   navigate: ["Abrindo tela", "Tela aberta"],
+  research_perfume: ["Pesquisando o perfume na internet", "Ficha encontrada"],
 };
 const toolLabel = (name: string, done: boolean) => {
   const l = TOOL_LABEL[name];
@@ -108,6 +110,70 @@ type ItemProps = {
   submit: (t: string) => void;
   onCorrect?: (() => void) | undefined;
 };
+
+/** Foto do celular → JPEG leve (até 1280px), boa para a IA ler o rótulo. */
+async function shrinkImage(url: string, max = 1280): Promise<string> {
+  const img = new Image();
+  img.decoding = "async";
+  img.src = url;
+  await img.decode();
+  const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+  const w = Math.round(img.naturalWidth * k);
+  const h = Math.round(img.naturalHeight * k);
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+  return canvas.toDataURL("image/jpeg", 0.84);
+}
+
+/** Miniaturas das fotos escolhidas, dentro do campo (tira com o ✕). */
+function PhotoTray({ onCount }: { onCount: (n: number) => void }) {
+  const { files, remove } = usePromptInputAttachments();
+  const imgs = files.filter((f) => /^image\//.test(f.mediaType));
+  useEffect(() => onCount(imgs.length), [imgs.length, onCount]);
+  if (!imgs.length) return null;
+  return (
+    <div className="flex w-full gap-2 overflow-x-auto px-3 pt-3 [scrollbar-width:none]">
+      {imgs.map((f) => (
+        <span key={f.id} className="cp-pop relative size-16 shrink-0 overflow-hidden rounded-[14px] bg-[#232323] ring-1 ring-white/10">
+          <img src={f.url} alt="" className="size-full object-cover" />
+          <button
+            type="button"
+            aria-label="Tirar foto"
+            onClick={() => remove(f.id)}
+            className="press absolute top-1 right-1 grid size-6 place-items-center rounded-full bg-black/70 text-white backdrop-blur"
+          >
+            <X className="size-3.5" />
+          </button>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** Botão de câmera/galeria (no celular abre a câmera ou as fotos). */
+function PhotoButton() {
+  const { openFileDialog } = usePromptInputAttachments();
+  return (
+    <button
+      type="button"
+      aria-label="Mandar foto de um perfume"
+      title="Foto de um perfume"
+      onClick={openFileDialog}
+      className="press grid size-9 shrink-0 place-items-center rounded-full bg-[#232323] text-[#D4D4D4] transition-colors hover:bg-[#2E2E2E] hover:text-white"
+    >
+      <Camera className="size-[18px]" />
+    </button>
+  );
+}
+
+/** Abre a escolha de foto de fora do campo (cartão da tela inicial). */
+function PhotoOpener({ registerOpen }: { registerOpen: (fn: () => void) => void }) {
+  const { openFileDialog } = usePromptInputAttachments();
+  useEffect(() => registerOpen(openFileDialog), [openFileDialog, registerOpen]);
+  return null;
+}
 
 /** Ícone de cada sugestão, pelo assunto. */
 function SuggestionIcon({ text }: { text: string }) {
@@ -135,6 +201,12 @@ const MessageItem = memo(function MessageItem({ m, outcomes, setOutcome, submit,
         <p key={i} className="whitespace-pre-wrap">{p.text}</p>
       ) : (
         <MessageResponse key={i}>{p.text}</MessageResponse>
+      );
+    if (p.type === "file" && /^image\//.test(p.mediaType ?? ""))
+      return (
+        <a key={i} href={p.url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-[16px]">
+          <img src={p.url} alt="Foto enviada" className="max-h-56 w-auto max-w-full object-cover" loading="lazy" />
+        </a>
       );
     if (typeof p.type !== "string" || !p.type.startsWith("tool-")) return null;
     const name = p.type.slice(5);
@@ -209,6 +281,7 @@ const MessageItem = memo(function MessageItem({ m, outcomes, setOutcome, submit,
         );
       return null;
     }
+    if (name === "research_perfume" && o?.found) return <ResearchCard key={i} o={o} />;
     if (name === "get_product" && o?.name)
       return (
         <div key={i} className="copilot-card copilot-msg-in flex w-full min-w-0 max-w-md gap-3 rounded-[22px] p-3">
@@ -240,7 +313,7 @@ const MessageItem = memo(function MessageItem({ m, outcomes, setOutcome, submit,
   if (m.role === "user")
     return (
       <div className="copilot-msg-in flex min-w-0 justify-end">
-        <div className="cp-user max-w-[85%] rounded-[22px] rounded-br-[8px] px-4 py-2.5 text-[15px] leading-relaxed break-words [overflow-wrap:anywhere]">
+        <div className="cp-user max-w-[85%] space-y-2 rounded-[22px] rounded-br-[8px] px-4 py-2.5 text-[15px] leading-relaxed break-words [overflow-wrap:anywhere] has-[img]:p-1.5 has-[img]:pb-2.5 [&>p]:px-2.5">
           {m.parts.map((p, i) => renderPart(p, i))}
         </div>
       </div>
@@ -302,6 +375,11 @@ export function CopilotChat({
   const [text, setText] = useState("");
   const [heard, setHeard] = useState<string | null>(null);
   const [more, setMore] = useState(false);
+  const [photoCount, setPhotoCount] = useState(0);
+  const openPhotos = useRef<() => void>(() => {});
+  const registerOpen = useCallback((fn: () => void) => {
+    openPhotos.current = fn;
+  }, []);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const busy = status === "submitted" || status === "streaming";
 
@@ -337,15 +415,16 @@ export function CopilotChat({
     return null;
   };
 
-  const submitRef = useRef<(raw: string, fromVoice?: boolean) => Promise<void>>(async () => {});
-  submitRef.current = async (raw: string, fromVoice = false) => {
+  const submitRef = useRef<(raw: string, fromVoice?: boolean, files?: FileUIPart[]) => Promise<void>>(async () => {});
+  submitRef.current = async (raw: string, fromVoice = false, files: FileUIPart[] = []) => {
     const value = raw.trim();
-    if (!value || busy) return;
+    const images = files.filter((f) => /^image\//.test(f.mediaType));
+    if ((!value && !images.length) || busy) return;
     setError(null);
     setText("");
     setMore(false);
     const pending = latestPending();
-    if (YES.test(value) && pending) {
+    if (YES.test(value) && pending && !images.length) {
       try {
         const r = (await confirmLatest({ data: { threadId, actionId: pending.action_id } })) as ActionOutcome;
         setOutcome(pending.action_id, r);
@@ -355,6 +434,14 @@ export function CopilotChat({
       return;
     }
     setHeard(fromVoice ? value : null);
+    if (images.length) {
+      const small = await Promise.all(images.map((f) => shrinkImage(f.url).catch(() => f.url)));
+      await sendMessage({
+        text: value || "Que perfume é esse?",
+        files: small.map((url, k) => ({ type: "file" as const, mediaType: "image/jpeg", url, filename: `foto-${k + 1}.jpg` })),
+      });
+      return;
+    }
     await sendMessage({ text: value });
   };
   const submit = useCallback((t: string) => void submitRef.current(t), []);
@@ -514,7 +601,21 @@ export function CopilotChat({
               <p className="cp-rise mt-2 max-w-[320px] text-[14.5px] leading-snug text-[#8C8C8C]" style={{ ["--i" as string]: 3 }}>
                 Fale ou escreva. Eu consulto, preparo e você só confirma.
               </p>
-              <div className="mt-8 grid w-full grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => openPhotos.current()}
+                className="cp-suggest cp-photo-card cp-rise press group mt-8 flex w-full items-center gap-4 rounded-[22px] p-4 text-left"
+                style={{ ["--i" as string]: 4 }}
+              >
+                <span className="grid size-12 shrink-0 place-items-center rounded-full bg-[#FFD599] text-[#15130F] transition-transform duration-300 group-hover:scale-110">
+                  <ScanSearch className="size-[22px]" strokeWidth={2.1} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[15px] font-bold">Reconhecer pela foto</span>
+                  <span className="block text-[13px] leading-snug text-[#8C8C8C]">Mande a foto de um perfume: eu identifico, pesquiso e cadastro.</span>
+                </span>
+              </button>
+              <div className="mt-2.5 grid w-full grid-cols-2 gap-2.5">
                 {suggestions.map((q, i) => (
                   <button
                     key={q.label}
@@ -637,14 +738,20 @@ export function CopilotChat({
           </div>
         ) : (
           <PromptInput
-            onSubmit={(msg) => submit(msg.text ?? "")}
+            accept="image/*"
+            multiple
+            maxFiles={4}
+            onError={(e) => setError(e.code === "max_files" ? "Mande até 4 fotos por vez." : "Use uma foto (JPG, PNG ou WEBP).")}
+            onSubmit={(msg) => submitRef.current(msg.text ?? "", false, msg.files ?? [])}
             className="cp-composer rounded-[28px] border-0 [&_[data-slot=input-group]]:rounded-[28px] [&_[data-slot=input-group]]:border-0 [&_[data-slot=input-group]]:bg-transparent [&_[data-slot=input-group]]:shadow-none"
           >
+            <PhotoTray onCount={setPhotoCount} />
+            <PhotoOpener registerOpen={registerOpen} />
             <PromptInputTextarea
               ref={textareaRef}
               value={text}
               onChange={(e) => setText(e.currentTarget.value)}
-              placeholder="Pergunte ou peça qualquer coisa…"
+              placeholder={photoCount ? "O que fazer com a foto? (ou só envie)" : "Pergunte, peça ou mande uma foto…"}
               className="min-h-12 bg-transparent px-4 pt-3.5 text-[16px] placeholder:text-[#6F6F6F]"
             />
             <PromptInputFooter className="items-center justify-between gap-2 px-2.5 pt-0 pb-2.5">
@@ -660,6 +767,7 @@ export function CopilotChat({
                 >
                   <Plus className="size-[18px]" />
                 </button>
+                <PhotoButton />
                 {page ? (
                   <span className="inline-flex h-9 min-w-0 items-center gap-1.5 rounded-full bg-[#1F1F1F] px-3 text-[12.5px] font-semibold text-[#A9A9A9]" title="O Copilot sabe em que tela você está">
                     <Eye className="size-3.5 shrink-0" />
@@ -687,7 +795,7 @@ export function CopilotChat({
                 <PromptInputSubmit
                   status={status}
                   onStop={stop}
-                  disabled={!busy && !text.trim()}
+                  disabled={!busy && !text.trim() && !photoCount}
                   className="size-10 rounded-full bg-[#FFD599] text-[#15130F] hover:bg-[#FFDDAA] disabled:bg-[#232323] disabled:text-[#6F6F6F] disabled:opacity-100"
                 />
               </div>

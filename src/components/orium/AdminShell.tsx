@@ -142,7 +142,7 @@ function AdminChromeInner({ children }: { children: ReactNode }) {
         <div
           className={cn(
             "flex min-w-0 flex-col transition-[padding] duration-200",
-            copilotOpen && "lg:pr-[calc(var(--copilot-w)+12px)]",
+            copilotOpen && "2xl:pr-[calc(var(--copilot-w)+12px)]",
           )}
         >
           {/* barra de cima (computador): pílulas, busca, novo pedido e perfil */}

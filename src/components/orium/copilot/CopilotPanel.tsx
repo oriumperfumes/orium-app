@@ -150,6 +150,7 @@ function CopilotPanel({ onClose, closing, onActivity }: { onClose: () => void; c
   const create = useServerFn(copilotCreateThread);
   const remove = useServerFn(copilotDeleteThread);
   const threads = useQuery({ queryKey: ["copilot-threads"], queryFn: () => list() });
+  const threadList = Array.isArray(threads.data) ? threads.data : null;
   const [active, setActive] = useState<string | null>(null);
   const [showList, setShowList] = useState(false);
   const [q, setQ] = useState("");
@@ -181,10 +182,10 @@ function CopilotPanel({ onClose, closing, onActivity }: { onClose: () => void; c
   // abre sempre numa conversa limpa se a última já tem mensagens antigas? Não:
   // continua a mais recente (o histórico fica a um toque).
   useEffect(() => {
-    if (active || !threads.data) return;
-    if (threads.data[0]) setActive(threads.data[0].id);
+    if (active || !threadList) return;
+    if (threadList[0]) setActive(threadList[0].id);
     else void newThread();
-  }, [threads.data, active, newThread]);
+  }, [threadList, active, newThread]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -198,18 +199,26 @@ function CopilotPanel({ onClose, closing, onActivity }: { onClose: () => void; c
 
   const groups = useMemo(() => {
     const term = q.trim().toLowerCase();
-    const out = new Map<string, NonNullable<typeof threads.data>>();
-    for (const t of threads.data ?? []) {
+    const out = new Map<string, NonNullable<typeof threadList>>();
+    for (const t of threadList ?? []) {
       if (term && !(t.title ?? "nova conversa").toLowerCase().includes(term)) continue;
       const g = groupOf(t.updated_at);
       out.set(g, [...(out.get(g) ?? []), t]);
     }
     return Array.from(out.entries());
-  }, [threads.data, q]);
+  }, [threadList, q]);
 
   const busy = activity.orb !== "idle";
 
   return (
+    <>
+    {/* tablet e notebook: o Copilot abre por cima (com fundo); só em tela bem larga ele fica ao lado da página */}
+    <div
+      aria-hidden
+      onClick={onClose}
+      data-closing={closing}
+      className="cp-scrim fixed inset-0 z-[54] hidden bg-black/55 backdrop-blur-[2px] lg:block 2xl:hidden"
+    />
     <div
       role="dialog"
       aria-label="Orium Copilot"
@@ -324,5 +333,6 @@ function CopilotPanel({ onClose, closing, onActivity }: { onClose: () => void; c
         )}
       </div>
     </div>
+    </>
   );
 }

@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { AlertTriangle, Check, ShieldAlert, Sparkles, Undo2 } from "lucide-react";
 import { copilotCancel, copilotConfirm, copilotUndo } from "@/lib/copilot.functions";
 import { cn } from "@/lib/utils";
+import { POWER_DONE_TITLE, PowerOutcome, PowerPreview } from "./PowerCards";
 
 const brl = (v: number | null | undefined) =>
   v == null ? "—" : Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -84,6 +85,8 @@ function PriceLineView({ l, compact }: { l: any; compact?: boolean }) {
 }
 
 function PreviewBody({ tool, p }: { tool: string; p: any }) {
+  const power = PowerPreview({ tool, p });
+  if (power) return power;
   switch (tool) {
     case "price_change":
       return <PriceLineView l={p} />;
@@ -305,6 +308,8 @@ function OutcomeBody({ tool, preview, outcome }: { tool: string; preview: any; o
   if (!outcome.ok)
     return <p className="text-sm text-destructive">Não consegui concluir. {outcome.error}</p>;
   const r = outcome.result ?? {};
+  const power = PowerOutcome({ tool, preview, r });
+  if (power) return power;
   if (tool === "stock_change") {
     return (
       <div className="space-y-1.5 text-sm">
@@ -412,7 +417,7 @@ export function ActionCard({
           {outcome?.ok ? <Check className="size-[18px]" strokeWidth={3} /> : critical ? <ShieldAlert className="size-[18px]" /> : <Sparkles className="size-[18px]" />}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[15px] font-bold tracking-[-0.01em]">{outcome?.ok ? (DONE_TITLE[proposal.tool] ?? "Concluído") : proposal.label}</p>
+          <p className="truncate text-[15px] font-bold tracking-[-0.01em]">{outcome?.ok ? (DONE_TITLE[proposal.tool] ?? POWER_DONE_TITLE[proposal.tool] ?? "Concluído") : proposal.label}</p>
           <p className="truncate text-[12.5px] text-[#8C8C8C]">
             {outcome?.ok ? "Feito agora" : canceled ? "Cancelado" : expired ? "Expirou" : critical ? "Confirmação forte · revise com calma" : "Revise e confirme"}
           </p>

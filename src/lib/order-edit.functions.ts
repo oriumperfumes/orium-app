@@ -106,6 +106,12 @@ export const saveOrderEdit = createServerFn({ method: "POST" })
   .inputValidator((data: EditOrderInput) => data)
   .handler(async ({ data, context }): Promise<EditSummary> => {
     const db = await requireStaff(context as never);
+    return runOrderEdit(db, context as never, data);
+  });
+
+/** Núcleo da edição (também usado pelo Copilot, com a mesma prévia e as mesmas regras). */
+export async function runOrderEdit(db: any, context: { supabase: any; userId: string }, data: EditOrderInput): Promise<EditSummary> {
+  {
     const { priceCart } = await import("@/lib/promotions.server");
     const { calculateProductPricing } = await import("@/lib/pricing.server");
 
@@ -449,7 +455,8 @@ export const saveOrderEdit = createServerFn({ method: "POST" })
       restock: { created: restock.created, updated: restock.updated, removed: restock.removed },
       updatedAt: updated?.updated_at ?? now,
     };
-  });
+  }
+}
 
 /** Busca de produtos para adicionar ao pedido (foto, marca, tipo, preço, disponibilidade). */
 export const searchOrderProducts = createServerFn({ method: "POST" })

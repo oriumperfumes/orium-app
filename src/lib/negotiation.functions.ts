@@ -102,7 +102,7 @@ export type NegotiationInput = {
  * Existe só para que Negociação use exatamente o mesmo sistema de informações
  * olfativas dos perfumes do catálogo (mesmas tabelas, editor e importador).
  */
-async function ensureFragranceSubject(
+export async function ensureFragranceSubject(
   db: {
     from: (t: string) => any;
   },
