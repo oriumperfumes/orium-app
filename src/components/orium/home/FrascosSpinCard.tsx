@@ -10,17 +10,25 @@ import { priceUnit } from "@/lib/promotions";
 import { usePromotions } from "@/lib/use-promotions";
 import { usePricesOnRequestAll } from "@/lib/price-on-request";
 import { cn } from "@/lib/utils";
-import { Spin360 } from "@/components/orium/home/Spin360";
+import { Bottle3D, type Bottle3DModel } from "@/components/orium/home/bottles/Bottle3D";
 
 /**
- * Frascos com giro 360° de verdade (fotos reais, recortadas e estabilizadas).
- * Cada um vive em public/spin/<slug>/00.webp … NN.webp. Para pôr outro frasco
- * no card, basta gerar as fotos e acrescentar aqui — preço e nome vêm do banco.
+ * Frascos em 3D de verdade (modelados com as medidas do frasco real e
+ * iluminados pelo estúdio do card). Para pôr outro frasco: um modelo em
+ * bottles/ + uma linha aqui — preço e nome vêm do banco. `still` é um render
+ * do próprio modelo, para aparelhos sem WebGL.
  */
-const SPIN_BOTTLES: { slug: string; frames: number; name: string; brand: string }[] = [
+const SPIN_BOTTLES: {
+  slug: string;
+  model: Bottle3DModel;
+  still: string;
+  name: string;
+  brand: string;
+}[] = [
   {
     slug: "armaf-club-de-nuit-intense-man-edt-5920f9",
-    frames: 72,
+    model: "club-de-nuit",
+    still: "/3d/club-de-nuit-intense-man.webp",
     name: "Club de Nuit Intense Man",
     brand: "Armaf",
   },
@@ -44,9 +52,6 @@ type Row = {
   decant_available: boolean | null;
   price_on_request: boolean | null;
 };
-
-const framesOf = (slug: string, n: number) =>
-  Array.from({ length: n }, (_, i) => `/spin/${slug}/${String(i).padStart(2, "0")}.webp`);
 
 /** troca sozinho de frasco depois deste tempo sem ninguém mexer */
 const AUTO_NEXT_MS = 9000;
@@ -157,9 +162,10 @@ export function FrascosSpinCard({
                     ),
               )}
             >
-              <Spin360
-                frames={framesOf(b.slug, b.frames)}
-                alt={`${b.brand} ${b.name} girando em 360°. Arraste para girar.`}
+              <Bottle3D
+                model={b.model}
+                still={b.still}
+                alt={`${b.brand} ${b.name} em 3D. Arraste para girar.`}
                 active={on}
                 className="h-full w-full"
               />

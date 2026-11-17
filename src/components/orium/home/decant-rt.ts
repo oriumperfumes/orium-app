@@ -37,51 +37,52 @@ type Spec = {
   tubeR: number;
 };
 
-/* Proporções medidas nas fotos: o 10 ml é atarracado (corpo ≈ 1,26× o diâmetro),
-   o fino é alto (≈ 2,1×). O borrifador é o MESMO nos dois: rosca Ø 12 mm, tampa
-   Ø 11,8 × 15 mm. */
+/* Proporções medidas nas fotos e nos vídeos de perto: o 10 ml é atarracado
+   (corpo ≈ 1,26× o diâmetro) com fundo de vidro grosso (≈ 4,4 mm); o fino é alto
+   (≈ 2,1×) de ombro arredondado. O borrifador é o MESMO nos dois: rosca Ø 12 mm,
+   tampa Ø 11,8 × 17,5 mm. Tubinho grosso (Ø ≈ 1,8 mm) com curva forte no fundo. */
 const WIDE: Spec = {
   R: 11,
   H: 28,
-  corner: 1.6,
+  corner: 1.8,
   neck: 4.8,
   wall: 1.1,
-  base: 3.2,
+  base: 4.4,
   collarR: 6.0,
-  collarH: 7.0,
+  collarH: 8.0,
   actH: 8.0,
-  capH: 15,
+  capH: 17.5,
   capR: 5.9,
-  tubeA: 1.6,
-  tubeR: 0.78,
+  tubeA: 2.7,
+  tubeR: 0.92,
 };
 const SLIM: Spec = {
   R: 8.25,
   H: 35,
-  corner: 1.4,
+  corner: 2.4,
   neck: 4.8,
   wall: 0.95,
-  base: 2.8,
+  base: 3.0,
   collarR: 6.0,
-  collarH: 7.0,
+  collarH: 8.0,
   actH: 8.0,
-  capH: 15,
+  capH: 17.5,
   capR: 5.9,
-  tubeA: 1.1,
-  tubeR: 0.72,
+  tubeA: 2.0,
+  tubeR: 0.88,
 };
 
 export const DECANT_SPECS: Record<DecantMl, Spec> = { 2: SLIM, 5: SLIM, 10: WIDE };
 
 /**
- * cor do perfume: âmbar dourado em todos (absorção por mm, R/G/B). O frasco fino
- * tem menos líquido no caminho da luz, então absorve um pouco mais por mm para
- * chegar no mesmo dourado do frasco largo.
+ * cor do perfume: dourado claro e luminoso em todos (absorção por mm, R/G/B),
+ * como o perfume real visto nos vídeos. O frasco fino tem menos líquido no
+ * caminho da luz, então absorve um pouco mais por mm para dar o mesmo dourado.
  */
 const SIGMA: Record<DecantMl, [number, number, number]> = {
-  10: [0.008, 0.085, 0.34],
-  5: [0.011, 0.115, 0.45],
-  2: [0.011, 0.115, 0.45],
+  10: [0.0045, 0.058, 0.2],
+  5: [0.006, 0.079, 0.27],
+  2: [0.006, 0.079, 0.27],
 };
 
 const NECK_H = 2.2;
@@ -121,6 +122,7 @@ uniform vec3 uCapAx;        // eixo da tampa (espaço do frasco)
 uniform vec3 uCapW;         // base da tampa no mundo (sombra na mesa)
 uniform float uCapR;        // raio da tampa
 uniform vec3 uToneFix;
+uniform vec2 uJit;           // deslocamento de subpixel (antisserrilhado temporal)
 uniform int uN4;            // sempre 4 (limite de laço que o compilador não desenrola)      // correção para o fundo sair exatamente na cor do card
 
 #define AIR 0
@@ -156,7 +158,8 @@ float innerS(vec3 p){
 vec2 tubeC(float y){
   float t = clamp((y - uB.y)/(uA.y - uB.y), 0., 1.);
   float k = 1. - t;
-  return vec2(uTube.x*sin(t*2.6 + 0.5)*(0.3 + 0.9*k*k), uTube.x*0.45*sin(t*1.9 + 1.2)*k);
+  // quase reto em cima, curva forte embaixo (o tubo é mais comprido que o frasco)
+  return vec2(uTube.x*(0.3*sin(t*3.1 + 0.4) + 1.15*k*k*k), uTube.x*0.32*sin(t*2.2 + 1.0)*k);
 }
 float rodS(vec3 p){
   float y0 = uB.y + 0.35, y1 = uA.y + 0.5;
@@ -462,7 +465,7 @@ vec3 render(vec3 ro, vec3 rd){
 vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14), 0., 1.); }
 
 void main(){
-  vec2 q = (gl_FragCoord.xy - 0.5*uRes) / uRes.y;
+  vec2 q = (gl_FragCoord.xy + uJit - 0.5*uRes) / uRes.y;
   vec3 rdw = normalize(uCam * vec3(q, uFocal));
   vec3 col = render(W2L(uEye - uPivot), W2L(rdw));
   // mesmo mapeamento de tons para tudo + correção: a cor do card sai exata,
@@ -604,7 +607,75 @@ export function createDecantRT(
     capR: U("uCapR"),
     toneFix: U("uToneFix"),
     n4: U("uN4"),
+    jit: U("uJit"),
   };
+
+  /* ── antisserrilhado temporal: cada quadro sai com um deslocamento de
+     subpixel diferente e é acumulado com os anteriores (peso que se adapta ao
+     movimento: parado = acumula muito, arrastando = quase só o quadro novo) ── */
+  const BLEND_FS = `#version 300 es
+precision mediump float;
+in vec2 vUv; out vec4 o;
+uniform sampler2D uCur, uHist; uniform float uA;
+void main(){ o = mix(texture(uHist, vUv), texture(uCur, vUv), uA); }`;
+  const bfs = sh(gl.FRAGMENT_SHADER, BLEND_FS);
+  const bvs = sh(gl.VERTEX_SHADER, VS);
+  if (!bfs || !bvs) return null;
+  const blendProg = gl.createProgram()!;
+  gl.attachShader(blendProg, bvs);
+  gl.attachShader(blendProg, bfs);
+  gl.bindAttribLocation(blendProg, 0, "aP");
+  gl.linkProgram(blendProg);
+  const bu = {
+    cur: gl.getUniformLocation(blendProg, "uCur"),
+    hist: gl.getUniformLocation(blendProg, "uHist"),
+    a: gl.getUniformLocation(blendProg, "uA"),
+  };
+  type Target = { tex: WebGLTexture; fb: WebGLFramebuffer };
+  let targets: Target[] = [];
+  let tw = 0,
+    th = 0,
+    histIdx = 0,
+    histValid = false;
+  const makeTarget = (w: number, h: number): Target => {
+    const tex = gl.createTexture()!;
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    const fb = gl.createFramebuffer()!;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return { tex, fb };
+  };
+  const ensureTargets = (w: number, h: number) => {
+    if (w === tw && h === th && targets.length) return;
+    targets.forEach((t) => {
+      gl.deleteTexture(t.tex);
+      gl.deleteFramebuffer(t.fb);
+    });
+    targets = [makeTarget(w, h), makeTarget(w, h), makeTarget(w, h)];
+    tw = w;
+    th = h;
+    histValid = false;
+  };
+  // sequência de Halton (2, 3): 16 posições de subpixel bem espalhadas
+  const halton = (i: number, b: number) => {
+    let f = 1,
+      r = 0;
+    while (i > 0) {
+      f /= b;
+      r += f * (i % b);
+      i = Math.floor(i / b);
+    }
+    return r;
+  };
+  let jitIdx = 0;
+  /** movimento na tela (px por quadro, aproximado) — decide o peso do quadro novo */
+  let motionPx = 0;
   const vbo = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
@@ -747,6 +818,7 @@ export function createDecantRT(
     running = false,
     first = true,
     last = performance.now();
+  let converge = 0;
   let frameMs = 16,
     frames = 0,
     tick = 0;
@@ -826,7 +898,21 @@ export function createDecantRT(
     w2Amp *= Math.exp(-dt * 0.55);
     w2Phase += dt * 7.2;
     if (energy > 0.05) w2Dir = waveDir + 0.6;
+    // velocidade das bordas na tela (px/s): decide o peso do antisserrilhado
+    const pxPerMm = (canvas.height || 300) / 78;
+    const sizeMoving = Object.values(specV).reduce((a2, v) => a2 + Math.abs(v), 0);
+    const capMoving = capOpen ? (capT < 1 ? 40 : 0) : capT > 0 ? 40 : 0;
+    motionRate =
+      (Math.abs(yawV) * spec.R +
+        (Math.abs(tiltXV) + Math.abs(tiltZV)) * spec.H +
+        (Math.abs(sxv) + Math.abs(szv)) * spec.R * 0.6 +
+        (waveAmp + w2Amp) * 8 +
+        sizeMoving * 0.5 +
+        capMoving) *
+      pxPerMm;
   };
+  let motionRate = 0;
+  let lastShapeKey = 0;
 
   const settled = () =>
     !dragging &&
@@ -876,10 +962,15 @@ export function createDecantRT(
       first = false;
       opts.onFirstFrame?.();
     }
+    // parado de verdade: ainda desenha ~20 quadros para a imagem convergir
+    // (bordas lisas), depois para de gastar bateria
     if (settled()) {
-      running = false;
-      return;
-    }
+      if (++converge > 20) {
+        running = false;
+        converge = 0;
+        return;
+      }
+    } else converge = 0;
     raf = requestAnimationFrame(frame);
   };
   const wake = () => {
@@ -891,7 +982,12 @@ export function createDecantRT(
 
   const draw = () => {
     resize();
+    gl.useProgram(prog);
+    ensureTargets(canvas.width, canvas.height);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, targets[2]!.fb);
     gl.viewport(0, 0, canvas.width, canvas.height);
+    jitIdx = (jitIdx % 16) + 1;
+    gl.uniform2f(u.jit, halton(jitIdx, 2) - 0.5, halton(jitIdx, 3) - 0.5);
     const R = rotMat(yaw, tiltX, tiltZ);
     // o frasco rola sobre a borda da base: sobe o pivô para a quina tocar a mesa
     // ponto mais baixo da quina arredondada (raio 1,1 mm) toca exatamente a mesa
@@ -962,6 +1058,34 @@ export function createDecantRT(
     gl.uniform3f(u.bg, bg[0], bg[1], bg[2]);
     gl.uniform3f(u.sigma, spec.sr, spec.sg, spec.sb);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    // acumula: parado ≈ média dos últimos ~10 quadros (bordas lisas); em
+    // movimento o quadro novo pesa mais (sem rastro)
+    motionPx = motionRate / 60;
+    // mudança brusca de forma (troca de tamanho): recomeça o acúmulo, sem fantasma
+    const shapeKey = spec.R * 7 + spec.H + spec.fill * 3;
+    if (Math.abs(shapeKey - lastShapeKey) > 0.6) histValid = false;
+    lastShapeKey = shapeKey;
+    const a = histValid ? Math.min(1, 0.1 + motionPx * 0.45) : 1;
+    const src = targets[histIdx]!,
+      dst = targets[1 - histIdx]!;
+    gl.useProgram(blendProg);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fb);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, targets[2]!.tex);
+    gl.uniform1i(bu.cur, 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, src.tex);
+    gl.uniform1i(bu.hist, 1);
+    gl.uniform1f(bu.a, a);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    // mostra
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, dst.fb);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+    gl.blitFramebuffer(0, 0, tw, th, 0, 0, tw, th, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    histIdx = 1 - histIdx;
+    histValid = true;
   };
 
   wake();
