@@ -1,16 +1,18 @@
 import type { ReactNode } from "react";
 import { Check, Loader2, Mic, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /** Superfície padrão de todo card gerado por ferramenta do Copilot: nunca passa da largura da conversa. */
 export function CopilotActionCard({ className, done, children }: { className?: string; done?: boolean; children: ReactNode }) {
   return (
-    <div className={cn("copilot-card copilot-msg-in w-full min-w-0 max-w-md rounded-2xl p-4", done && "copilot-card-done", className)}>
+    <div className={cn("copilot-card cp-card copilot-msg-in w-full min-w-0 max-w-md rounded-[24px] p-4", done && "copilot-card-done", className)}>
       {children}
     </div>
   );
 }
+
+const secondary =
+  "press inline-flex h-11 min-w-0 items-center justify-center gap-2 rounded-full bg-[#232323] px-3 text-[14px] font-semibold text-white transition-colors hover:bg-[#2E2E2E] disabled:opacity-50";
 
 /** Ações de confirmação: principal dourada em largura total; secundárias em grade igual abaixo. */
 export function CopilotConfirmationActions({
@@ -29,19 +31,24 @@ export function CopilotConfirmationActions({
   onCorrect?: (() => void) | undefined;
 }) {
   return (
-    <div className="mt-4 grid w-full min-w-0 gap-2">
-      <Button className="h-11 w-full min-w-0 rounded-full" onClick={onConfirm} disabled={disabled}>
-        {busy ? <Loader2 className="size-4 shrink-0 animate-spin" /> : <Check className="size-4 shrink-0" />}
+    <div className="mt-5 grid w-full min-w-0 gap-2">
+      <button
+        type="button"
+        className="press inline-flex h-12 w-full min-w-0 items-center justify-center gap-2 rounded-full bg-[#FFD599] px-4 text-[15px] font-bold text-[#15130F] transition-colors hover:bg-[#FFDDAA] disabled:opacity-50"
+        onClick={onConfirm}
+        disabled={disabled}
+      >
+        {busy ? <Loader2 className="size-[18px] shrink-0 animate-spin" /> : <Check className="size-[18px] shrink-0" strokeWidth={2.6} />}
         <span className="truncate">{busy ? "Executando…" : confirmLabel}</span>
-      </Button>
+      </button>
       <div className={cn("grid min-w-0 gap-2", onCorrect ? "grid-cols-2" : "grid-cols-1")}>
-        <Button variant="outline" className="h-11 min-w-0 rounded-full px-3" disabled={disabled} onClick={onCancel}>
+        <button type="button" className={secondary} disabled={disabled} onClick={onCancel}>
           <X className="size-4 shrink-0" /> <span className="truncate">Cancelar</span>
-        </Button>
+        </button>
         {onCorrect ? (
-          <Button variant="outline" className="h-11 min-w-0 rounded-full px-3" disabled={disabled} onClick={onCorrect} aria-label="Corrigir falando">
-            <Mic className="size-4 shrink-0" /> <span className="truncate">Corrigir</span>
-          </Button>
+          <button type="button" className={secondary} disabled={disabled} onClick={onCorrect} aria-label="Corrigir falando">
+            <Mic className="size-4 shrink-0 text-[#FFD599]" /> <span className="truncate">Corrigir</span>
+          </button>
         ) : null}
       </div>
     </div>
@@ -64,8 +71,8 @@ export function CopilotProductResult({
     <div className="flex min-w-0 items-center gap-3">
       {image}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{title}</p>
-        {subtitle ? <p className="truncate text-xs text-muted-foreground">{subtitle}</p> : null}
+        <p className="truncate text-[14.5px] font-semibold">{title}</p>
+        {subtitle ? <p className="truncate text-[12.5px] text-[#8C8C8C]">{subtitle}</p> : null}
       </div>
       {trailing ? <span className="shrink-0 text-sm tabular-nums">{trailing}</span> : null}
     </div>

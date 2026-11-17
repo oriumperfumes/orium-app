@@ -5,10 +5,11 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowRight, ArrowDown, Check, Mic, Plus, X, Loader2 } from "lucide-react";
+import { ArrowRight, ArrowDown, Boxes, ChartNoAxesColumn, Check, Command, Eye, Loader2, Mic, Percent, Plus, Receipt, RefreshCw, ShoppingBag, Sparkles, Tag, Ticket, Truck, X } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai-elements/conversation";
-import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
+import { MessageResponse } from "@/components/ai-elements/message";
 import { PromptInput, PromptInputFooter, PromptInputSubmit, PromptInputTextarea } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { startVoiceRecording, type VoiceRecording } from "@/lib/voice/recorder";
@@ -108,6 +109,24 @@ type ItemProps = {
   onCorrect?: (() => void) | undefined;
 };
 
+/** Ícone de cada sugestão, pelo assunto. */
+function SuggestionIcon({ text }: { text: string }) {
+  const t = text.toLowerCase();
+  const I =
+    /venda/.test(t) ? Receipt
+    : /dia|resumo/.test(t) ? ChartNoAxesColumn
+    : /estoque|pronta/.test(t) ? Boxes
+    : /cupom/.test(t) ? Ticket
+    : /promo/.test(t) ? Percent
+    : /pre[cç]o/.test(t) ? Tag
+    : /fornecedor/.test(t) ? Truck
+    : /reposi/.test(t) ? RefreshCw
+    : /pedido/.test(t) ? ShoppingBag
+    : /comando/.test(t) ? Command
+    : Sparkles;
+  return <I className="size-[18px]" strokeWidth={2} />;
+}
+
 /** Uma mensagem. Memoizada: durante o streaming só a última re-renderiza. */
 const MessageItem = memo(function MessageItem({ m, outcomes, setOutcome, submit, onCorrect }: ItemProps) {
   const renderPart = (p: Part, i: number) => {
@@ -122,15 +141,15 @@ const MessageItem = memo(function MessageItem({ m, outcomes, setOutcome, submit,
     const done = p.state === "output-available" || p.state === "output-error";
     const o = p.output;
     const step = (
-      <p key={`s${i}`} className="copilot-msg-in flex items-center gap-2 text-xs text-muted-foreground">
-        {done ? <Check className="size-3.5 text-gold" strokeWidth={2} /> : <span className="size-3 rounded-full border border-gold/60 border-t-transparent animate-spin" />}
-        {done ? toolLabel(name, true) : <Shimmer className="text-xs">{toolLabel(name, false)}</Shimmer>}
+      <p key={`s${i}`} className={cn("cp-step copilot-msg-in", done && "is-done")}>
+        <span className="cp-step-dot">{done ? <Check className="size-3" strokeWidth={3} /> : null}</span>
+        {done ? toolLabel(name, true) : <Shimmer className="text-[13px]">{toolLabel(name, false)}</Shimmer>}
       </p>
     );
     if (!done) return step;
     if (p.state === "output-error" || o?.error)
       return (
-        <p key={i} className="copilot-msg-in rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p key={i} className="copilot-msg-in rounded-[16px] bg-[#FF9A8A]/10 px-4 py-3 text-[14px] text-[#FF9A8A]">
           Não consegui: {o?.error ?? p.errorText}
         </p>
       );
@@ -149,19 +168,26 @@ const MessageItem = memo(function MessageItem({ m, outcomes, setOutcome, submit,
       }
       if (o?.kind === "needs" && o.candidates?.length)
         return (
-          <div key={i} className="copilot-msg-in grid gap-1.5">
-            {o.candidates.map((c: any) => (
+          <div key={i} className="copilot-msg-in grid gap-1.5 rounded-[22px] bg-[#161616] p-1.5">
+            {o.candidates.map((c: any, k: number) => (
               <button
                 key={c.id}
                 onClick={() => submit(`O ${c.name}${c.brand ? ` (${c.brand})` : ""}`)}
-                className="press flex min-h-12 items-center gap-3 rounded-xl px-2 text-left text-sm transition-colors hover:bg-muted/50"
+                className="cp-rise press flex min-h-14 items-center gap-3 rounded-[16px] p-2 text-left transition-colors hover:bg-[#222]"
+                style={{ ["--i" as string]: k }}
               >
-                {c.image_url ? <img src={c.image_url} alt="" className="size-10 shrink-0 rounded-lg object-cover" /> : <span className="size-10 shrink-0 rounded-lg bg-muted" />}
+                {c.image_url ? (
+                  <img src={c.image_url} alt="" className="size-11 shrink-0 rounded-[12px] bg-white object-contain p-0.5" />
+                ) : (
+                  <span className="size-11 shrink-0 rounded-[12px] bg-[#232323]" />
+                )}
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium">{c.name}</span>
-                  {c.brand ? <span className="block truncate text-xs text-muted-foreground">{c.brand}</span> : null}
+                  <span className="block truncate text-[14.5px] font-semibold">{c.name}</span>
+                  {c.brand ? <span className="block truncate text-[12.5px] text-[#8C8C8C]">{c.brand}</span> : null}
                 </span>
-                <ArrowRight className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.6} />
+                <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[#232323] text-[#D4D4D4]">
+                  <ArrowRight className="size-4" />
+                </span>
               </button>
             ))}
           </div>
@@ -169,8 +195,13 @@ const MessageItem = memo(function MessageItem({ m, outcomes, setOutcome, submit,
       if (o?.kind === "needs" && o.options?.length)
         return (
           <div key={i} className="copilot-msg-in flex flex-wrap gap-2">
-            {o.options.map((op: string) => (
-              <button key={op} onClick={() => submit(op)} className="press copilot-glass min-h-10 max-w-full rounded-full px-4 text-left text-sm break-words">
+            {o.options.map((op: string, k: number) => (
+              <button
+                key={op}
+                onClick={() => submit(op)}
+                className="cp-rise press min-h-10 max-w-full rounded-full bg-[#1F1F1F] px-4 text-left text-[14px] font-semibold break-words transition-colors hover:bg-white hover:text-[#15130F]"
+                style={{ ["--i" as string]: k }}
+              >
                 {op}
               </button>
             ))}
@@ -180,12 +211,16 @@ const MessageItem = memo(function MessageItem({ m, outcomes, setOutcome, submit,
     }
     if (name === "get_product" && o?.name)
       return (
-        <div key={i} className="copilot-card copilot-msg-in flex w-full min-w-0 max-w-md gap-3 rounded-2xl p-3">
-          {o.image_url ? <img src={o.image_url} alt={o.name} className="size-16 shrink-0 rounded-xl object-cover" loading="lazy" /> : null}
-          <div className="min-w-0 flex-1 text-sm">
-            <p className="truncate font-medium">{o.name}</p>
-            {o.brand ? <p className="truncate text-xs text-muted-foreground">{o.brand}</p> : null}
-            {o.orium_stock != null ? <p className="mt-1 text-xs text-muted-foreground">Estoque local · <span className="text-foreground">{o.orium_stock}</span></p> : null}
+        <div key={i} className="copilot-card copilot-msg-in flex w-full min-w-0 max-w-md gap-3 rounded-[22px] p-3">
+          {o.image_url ? <img src={o.image_url} alt={o.name} className="size-16 shrink-0 rounded-[14px] bg-white object-contain p-1" loading="lazy" /> : null}
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[12.5px] text-[#8C8C8C]">{o.brand ?? ""}</p>
+            <p className="truncate text-[15px] font-bold">{o.name}</p>
+            {o.orium_stock != null ? (
+              <p className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-[#232323] px-2.5 py-0.5 text-[12.5px] font-semibold">
+                Estoque <span className="text-[#FFD599] tabular-nums">{o.orium_stock}</span>
+              </p>
+            ) : null}
           </div>
         </div>
       );
@@ -193,25 +228,30 @@ const MessageItem = memo(function MessageItem({ m, outcomes, setOutcome, submit,
       return (
         <div key={i} className="copilot-msg-in flex flex-wrap gap-1.5">
           {o.candidates.slice(0, 5).map((c: any) => (
-            <span key={c.id} className="flex min-w-0 max-w-full items-center gap-2 rounded-full bg-muted/50 py-1 pr-3 pl-1 text-xs">
-              {c.image_url ? <img src={c.image_url} alt="" className="size-6 rounded-full object-cover" /> : null}
-              {c.name}
+            <span key={c.id} className="flex min-w-0 max-w-full items-center gap-2 rounded-full bg-[#1A1A1A] py-1 pr-3 pl-1 text-[12.5px] font-medium">
+              {c.image_url ? <img src={c.image_url} alt="" className="size-6 rounded-full bg-white object-contain" /> : null}
+              <span className="truncate">{c.name}</span>
             </span>
           ))}
         </div>
       );
     return step;
   };
+  if (m.role === "user")
+    return (
+      <div className="copilot-msg-in flex min-w-0 justify-end">
+        <div className="cp-user max-w-[85%] rounded-[22px] rounded-br-[8px] px-4 py-2.5 text-[15px] leading-relaxed break-words [overflow-wrap:anywhere]">
+          {m.parts.map((p, i) => renderPart(p, i))}
+        </div>
+      </div>
+    );
   return (
-    <Message from={m.role} className="copilot-msg-in min-w-0">
-      <MessageContent
-        className={cn(
-          m.role === "assistant" ? cn("w-full max-w-full space-y-3 bg-transparent px-0 text-[15px] leading-relaxed", copilotMessageContentClass) : "copilot-user-bubble rounded-2xl rounded-br-md text-[15px] break-words [overflow-wrap:anywhere]",
-        )}
-      >
+    <div className="copilot-msg-in flex min-w-0 gap-3">
+      <CopilotOrb size={26} className="mt-0.5" />
+      <div className={cn("min-w-0 flex-1 space-y-3 text-[15px] leading-relaxed text-[#E6E6E6] [&>.size-full]:h-auto", copilotMessageContentClass)}>
         {m.parts.map((p, i) => renderPart(p, i))}
-      </MessageContent>
-    </Message>
+      </div>
+    </div>
   );
 });
 
@@ -232,6 +272,7 @@ export function CopilotChat({
   pageRef.current = pageContext(loc.pathname, loc.search);
   const confirmLatest = useServerFn(copilotConfirmLatest);
   const vv = useVisualViewport(true);
+  const { session } = useAuth();
 
   const transport = useMemo(
     () =>
@@ -449,34 +490,70 @@ export function CopilotChat({
   }, [activity, onState]);
 
   const suggestions = contextSuggestions(loc.pathname);
+  const page = pageName(loc.pathname);
+  const hourNow = new Date().getHours();
+  const greeting = hourNow < 5 ? "Boa noite" : hourNow < 12 ? "Bom dia" : hourNow < 18 ? "Boa tarde" : "Boa noite";
+  const first = firstName(session);
 
   return (
     <div className="flex h-full min-h-0 flex-col" style={{ paddingBottom: vv.keyboardOffset || undefined }}>
       <Conversation className="min-h-0 flex-1">
-        <ConversationContent className="min-w-0 gap-6 overflow-x-hidden px-4 pt-4 pb-8 sm:px-5">
+        <ConversationContent className="min-w-0 gap-7 overflow-x-hidden px-4 pt-3 pb-8 sm:px-5">
           {messages.length === 0 ? (
-            <div className="copilot-msg-in mx-auto mt-[8vh] w-full max-w-sm">
-              <CopilotOrb state={activity.orb} level={level} size={44} />
-              <h2 className="mt-6 font-display text-[28px] leading-tight">O que você precisa?</h2>
-              <p className="mt-1.5 text-sm text-muted-foreground">Você pode falar ou escrever.</p>
-              <p className="mt-9 mb-2 text-[11px] tracking-[0.14em] text-muted-foreground/80 uppercase">Sugestões</p>
-              <ul className="divide-y divide-border/40">
-                {(more ? ALL_ACTIONS : suggestions).map((q, i) => (
-                  <li key={q.label} className="copilot-msg-in" style={{ animationDelay: `${i * 35}ms` }}>
+            <div className="mx-auto flex w-full max-w-[440px] flex-col items-center pt-[4vh] text-center">
+              <div className="cp-hero-orb">
+                <CopilotOrb state={activity.orb} level={level} size={112} />
+              </div>
+              <p className="cp-rise mt-8 text-[15px] font-semibold text-[#8C8C8C]" style={{ ["--i" as string]: 1 }}>
+                {greeting}
+                {first ? `, ${first}` : ""}
+              </p>
+              <h2 className="cp-rise mt-1 text-[30px] leading-[1.08] font-bold tracking-[-0.04em]" style={{ ["--i" as string]: 2 }}>
+                Como posso ajudar <span className="cp-gold-text">hoje?</span>
+              </h2>
+              <p className="cp-rise mt-2 max-w-[320px] text-[14.5px] leading-snug text-[#8C8C8C]" style={{ ["--i" as string]: 3 }}>
+                Fale ou escreva. Eu consulto, preparo e você só confirma.
+              </p>
+              <div className="mt-8 grid w-full grid-cols-2 gap-2.5">
+                {suggestions.map((q, i) => (
+                  <button
+                    key={q.label}
+                    type="button"
+                    onClick={() => submit(q.text)}
+                    className="cp-suggest cp-rise press group flex min-h-[104px] flex-col items-start justify-between gap-3 rounded-[22px] p-4 text-left"
+                    style={{ ["--i" as string]: i + 4 }}
+                  >
+                    <span className="grid size-9 place-items-center rounded-full bg-[#232323] text-[#FFD599] transition-colors duration-300 group-hover:bg-[#FFD599] group-hover:text-[#15130F]">
+                      <SuggestionIcon text={q.text} />
+                    </span>
+                    <span className="text-[14.5px] leading-snug font-semibold">{q.label}</span>
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setMore((v) => !v)}
+                className="cp-rise press mt-4 inline-flex h-10 items-center gap-1.5 rounded-full bg-[#161616] px-4 text-[13.5px] font-semibold text-[#BABABA] hover:bg-[#1F1F1F] hover:text-white"
+                style={{ ["--i" as string]: 9 }}
+              >
+                <Plus className={cn("size-4 transition-transform duration-300", more && "rotate-45")} />
+                {more ? "Menos" : "Mais ações"}
+              </button>
+              {more ? (
+                <div className="mt-3 flex flex-wrap justify-center gap-2">
+                  {ALL_ACTIONS.filter((a) => !suggestions.some((s) => s.label === a.label)).map((q, i) => (
                     <button
+                      key={q.label}
+                      type="button"
                       onClick={() => submit(q.text)}
-                      className="group flex min-h-12 w-full items-center gap-3 text-left text-[15px] transition-colors hover:text-gold"
+                      className="cp-rise press inline-flex h-10 items-center gap-2 rounded-full bg-[#1A1A1A] pr-4 pl-3 text-[13.5px] font-semibold hover:bg-white hover:text-[#15130F]"
+                      style={{ ["--i" as string]: i }}
                     >
-                      <ArrowRight className="size-4 text-gold/70 transition-transform duration-200 group-hover:translate-x-0.5" strokeWidth={1.6} />
+                      <SuggestionIcon text={q.text} />
                       {q.label}
                     </button>
-                  </li>
-                ))}
-              </ul>
-              {!more ? (
-                <button onClick={() => setMore(true)} className="mt-2 text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">
-                  Mais ações
-                </button>
+                  ))}
+                </div>
               ) : null}
             </div>
           ) : null}
@@ -484,79 +561,117 @@ export function CopilotChat({
             <MessageItem key={m.id} m={m} outcomes={outcomes} setOutcome={setOutcome} submit={submit} onCorrect={correctBySpeaking} />
           ))}
           {status === "submitted" ? (
-            <div className="copilot-msg-in flex items-center gap-2.5 text-sm text-muted-foreground">
-              <CopilotOrb state="thinking" size={20} />
-              <Shimmer className="text-sm">{heard ? "Entendendo…" : "Analisando…"}</Shimmer>
+            <div className="copilot-msg-in flex items-center gap-3">
+              <CopilotOrb state="thinking" size={26} />
+              <Shimmer className="text-[14px]">{heard ? "Entendendo…" : "Pensando…"}</Shimmer>
             </div>
           ) : null}
-          {error ? <p className="copilot-msg-in rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p> : null}
+          {error ? <p className="copilot-msg-in rounded-[16px] bg-[#FF9A8A]/10 px-4 py-3 text-[14px] text-[#FF9A8A]">{error}</p> : null}
         </ConversationContent>
-        <ConversationScrollButton className="copilot-glass bottom-3 h-9 w-auto gap-1.5 px-4 text-xs">
+        <ConversationScrollButton className="bottom-3 h-9 w-auto gap-1.5 rounded-full border-0 bg-[#232323] px-4 text-[12.5px] font-semibold text-white hover:bg-[#2E2E2E]">
           Nova mensagem <ArrowDown className="size-3.5" />
         </ConversationScrollButton>
       </Conversation>
 
-      <div className="relative px-3 pt-1" style={{ paddingBottom: vv.isKeyboardOpen ? 8 : "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}>
+      <div className="relative px-3 pt-1 lg:px-4" style={{ paddingBottom: vv.isKeyboardOpen ? 8 : "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}>
         {heard && voice === "idle" ? (
-          <p className="copilot-msg-in mb-2 truncate px-2 text-xs text-muted-foreground">
-            Você disse: <span className="text-foreground">“{heard}”</span>
+          <p className="copilot-msg-in mb-2 truncate px-2 text-[12.5px] text-[#8C8C8C]">
+            Você disse: <span className="text-white">“{heard}”</span>
           </p>
         ) : null}
         {more && messages.length > 0 ? (
-          <div className="copilot-glass copilot-msg-in absolute right-3 bottom-full left-3 mb-2 max-h-72 overflow-y-auto rounded-2xl p-1.5">
+          <div className="cp-pop absolute right-3 bottom-full left-3 mb-2 max-h-72 overflow-y-auto rounded-[22px] bg-[#1A1A1A] p-1.5 ring-1 ring-white/[0.06] lg:right-4 lg:left-4">
             {ALL_ACTIONS.map((q) => (
-              <button key={q.label} onClick={() => submit(q.text)} className="flex min-h-11 w-full items-center gap-2.5 rounded-xl px-3 text-left text-sm hover:bg-muted/50">
-                <ArrowRight className="size-3.5 text-gold/70" strokeWidth={1.6} /> {q.label}
+              <button
+                key={q.label}
+                type="button"
+                onClick={() => submit(q.text)}
+                className="flex min-h-11 w-full items-center gap-3 rounded-[14px] px-3 text-left text-[14px] font-medium hover:bg-[#242424]"
+              >
+                <span className="text-[#FFD599]">
+                  <SuggestionIcon text={q.text} />
+                </span>
+                {q.label}
               </button>
             ))}
           </div>
         ) : null}
 
         {voice !== "idle" ? (
-          <div className="copilot-glass copilot-msg-in flex min-h-14 items-center gap-3 rounded-[26px] px-3" aria-live="polite">
-            <CopilotOrb state={voice === "listening" ? "listening" : "thinking"} level={level} size={28} />
-            <span className="copilot-wave flex h-6 flex-1 items-center gap-[3px]" aria-hidden>
-              {Array.from({ length: 22 }).map((_, i) => {
-                const k = 0.45 + Math.abs(Math.sin(i * 1.7)) * 0.9;
-                return <span key={i} className="w-[3px] rounded-full bg-gold/80" style={{ height: `${voice === "listening" ? Math.max(3, Math.min(24, level * 90 * k)) : 3}px` }} />;
+          <div className="cp-voice copilot-msg-in rounded-[28px] p-4" aria-live="polite">
+            <div className="flex items-center gap-3.5">
+              <CopilotOrb state={voice === "listening" ? "listening" : "thinking"} level={level} size={48} halo />
+              <div className="min-w-0 flex-1">
+                <p className="text-[15px] font-bold">{voice === "listening" ? "Estou ouvindo" : "Entendendo…"}</p>
+                <p className="truncate text-[12.5px] text-[#8C8C8C]">{voice === "listening" ? "Fale naturalmente. Toque em Pronto ao terminar." : "Só um instante."}</p>
+              </div>
+            </div>
+            <span className="copilot-wave mt-4 flex h-9 items-center justify-center gap-[3px]" aria-hidden>
+              {Array.from({ length: 36 }).map((_, i) => {
+                const k = 0.4 + Math.abs(Math.sin(i * 1.7)) * 0.95;
+                return (
+                  <span
+                    key={i}
+                    className="w-[3px] rounded-full bg-[#FFD599]"
+                    style={{ height: `${voice === "listening" ? Math.max(4, Math.min(36, level * 140 * k)) : 4}px`, opacity: 0.35 + k * 0.5 }}
+                  />
+                );
               })}
             </span>
-            <span className="hidden text-xs text-muted-foreground sm:inline">{voice === "listening" ? "Estou ouvindo…" : "Entendendo…"}</span>
-            {voice === "listening" ? (
-              <>
-                <button onClick={cancelVoice} aria-label="Cancelar" className="press grid size-10 place-items-center rounded-full text-muted-foreground hover:bg-muted/60">
-                  <X className="size-4" />
-                </button>
-                <button onClick={finish} aria-label="Concluir" className="press grid size-10 place-items-center rounded-full bg-gold text-background">
-                  <Check className="size-4" strokeWidth={2.2} />
-                </button>
-              </>
-            ) : (
-              <Loader2 className="size-4 animate-spin text-muted-foreground" />
-            )}
+            <div className="mt-4 flex gap-2">
+              {voice === "listening" ? (
+                <>
+                  <button type="button" onClick={cancelVoice} className="press inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-[#232323] text-[15px] font-semibold hover:bg-[#2E2E2E]">
+                    <X className="size-[18px]" /> Cancelar
+                  </button>
+                  <button type="button" onClick={finish} className="press inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-[#FFD599] text-[15px] font-bold text-[#15130F]">
+                    <Check className="size-[18px]" strokeWidth={2.6} /> Pronto
+                  </button>
+                </>
+              ) : (
+                <span className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-[#1F1F1F] text-[14px] text-[#A9A9A9]">
+                  <Loader2 className="size-4 animate-spin" /> Transcrevendo
+                </span>
+              )}
+            </div>
           </div>
         ) : (
-          <PromptInput onSubmit={(msg) => submit(msg.text ?? "")} className="copilot-glass copilot-composer rounded-[26px] border-0 [&_[data-slot=input-group]]:rounded-[26px] [&_[data-slot=input-group]]:border-0 [&_[data-slot=input-group]]:bg-transparent [&_[data-slot=input-group]]:shadow-none">
+          <PromptInput
+            onSubmit={(msg) => submit(msg.text ?? "")}
+            className="cp-composer rounded-[28px] border-0 [&_[data-slot=input-group]]:rounded-[28px] [&_[data-slot=input-group]]:border-0 [&_[data-slot=input-group]]:bg-transparent [&_[data-slot=input-group]]:shadow-none"
+          >
             <PromptInputTextarea
               ref={textareaRef}
               value={text}
               onChange={(e) => setText(e.currentTarget.value)}
-              placeholder="Digite ou fale com o Copilot…"
-              className="min-h-11 bg-transparent text-base"
+              placeholder="Pergunte ou peça qualquer coisa…"
+              className="min-h-12 bg-transparent px-4 pt-3.5 text-[16px] placeholder:text-[#6F6F6F]"
             />
-            <PromptInputFooter className="justify-between pt-0">
-              <button
-                type="button"
-                aria-label="Mais ações"
-                onClick={() => setMore((v) => !v)}
-                className={cn("press grid size-9 place-items-center rounded-full text-muted-foreground transition-transform hover:bg-muted/60", more && "rotate-45 text-foreground")}
-              >
-                <Plus className="size-[18px]" strokeWidth={1.6} />
-              </button>
-              <div className="flex items-center gap-1">
+            <PromptInputFooter className="items-center justify-between gap-2 px-2.5 pt-0 pb-2.5">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  aria-label="Mais ações"
+                  onClick={() => setMore((v) => !v)}
+                  className={cn(
+                    "press grid size-9 shrink-0 place-items-center rounded-full bg-[#232323] text-[#D4D4D4] transition-[transform,background-color] duration-300 hover:bg-[#2E2E2E]",
+                    more && "rotate-45 bg-white text-[#15130F]",
+                  )}
+                >
+                  <Plus className="size-[18px]" />
+                </button>
+                {page ? (
+                  <span className="inline-flex h-9 min-w-0 items-center gap-1.5 rounded-full bg-[#1F1F1F] px-3 text-[12.5px] font-semibold text-[#A9A9A9]" title="O Copilot sabe em que tela você está">
+                    <Eye className="size-3.5 shrink-0" />
+                    <span className="truncate">{page}</span>
+                  </span>
+                ) : null}
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
                 <button
                   type="button"
                   aria-label="Falar (toque, ou segure e solte)"
+                  title="Falar"
                   onPointerDown={() => {
                     pressAt.current = Date.now();
                     void begin();
@@ -565,16 +680,43 @@ export function CopilotChat({
                     if (Date.now() - pressAt.current > 350) finish(); // segurar = soltar encerra
                   }}
                   disabled={busy}
-                  className="press grid size-9 place-items-center rounded-full text-gold transition-colors hover:bg-gold/10 disabled:opacity-40"
+                  className="press grid size-10 place-items-center rounded-full bg-[#232323] text-[#FFD599] transition-colors hover:bg-[#2E2E2E] disabled:opacity-40"
                 >
-                  <Mic className="size-[18px]" strokeWidth={1.7} />
+                  <Mic className="size-[18px]" strokeWidth={2.1} />
                 </button>
-                <PromptInputSubmit status={status} onStop={stop} disabled={!busy && !text.trim()} className="rounded-full" />
+                <PromptInputSubmit
+                  status={status}
+                  onStop={stop}
+                  disabled={!busy && !text.trim()}
+                  className="size-10 rounded-full bg-[#FFD599] text-[#15130F] hover:bg-[#FFDDAA] disabled:bg-[#232323] disabled:text-[#6F6F6F] disabled:opacity-100"
+                />
               </div>
             </PromptInputFooter>
           </PromptInput>
         )}
+        <p className="mt-2 hidden text-center text-[11.5px] text-[#5A5A5A] lg:block">Ctrl J abre e fecha · nada é feito sem você confirmar</p>
       </div>
     </div>
   );
+}
+
+const PAGE_NAMES: Array<[RegExp, string]> = [
+  [/^\/admin\/?$/, "Início"],
+  [/^\/admin\/pedidos/, "Pedidos"],
+  [/^\/admin\/produtos\/[0-9a-f-]{36}/i, "Este perfume"],
+  [/^\/admin\/produtos/, "Produtos"],
+  [/^\/admin\/estoque/, "Estoque"],
+  [/^\/admin\/vendas-loja/, "Vendas da loja"],
+  [/^\/admin\/negociacao/, "Negociação"],
+  [/^\/admin\/reposicao/, "Reposição"],
+  [/^\/admin\/fornecedores/, "Fornecedores"],
+  [/^\/admin\/clientes/, "Clientes"],
+  [/^\/admin\/precificacao/, "Preços"],
+];
+const pageName = (path: string) => PAGE_NAMES.find(([re]) => re.test(path))?.[1] ?? null;
+
+function firstName(session: ReturnType<typeof useAuth>["session"]) {
+  const meta = (session?.user.user_metadata ?? {}) as Record<string, unknown>;
+  const name = String(meta["name"] ?? meta["full_name"] ?? "").trim();
+  return name.split(/\s+/)[0] ?? "";
 }

@@ -1,8 +1,7 @@
 import { CopilotActionCard, CopilotConfirmationActions } from "./CopilotUI";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Check, AlertTriangle, Undo2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { AlertTriangle, Check, ShieldAlert, Sparkles, Undo2 } from "lucide-react";
 import { copilotCancel, copilotConfirm, copilotUndo } from "@/lib/copilot.functions";
 import { cn } from "@/lib/utils";
 
@@ -26,9 +25,9 @@ export type ActionOutcome = { ok: boolean; partial?: boolean; error?: string; re
 
 function Thumb({ src, alt }: { src?: string | null; alt: string }) {
   return src ? (
-    <img src={src} alt={alt} className="size-12 shrink-0 rounded-lg bg-muted object-cover" loading="lazy" />
+    <img src={src} alt={alt} className="size-12 shrink-0 rounded-[12px] bg-white object-contain p-0.5" loading="lazy" />
   ) : (
-    <div className="size-12 shrink-0 rounded-lg bg-muted" />
+    <div className="size-12 shrink-0 rounded-[12px] bg-[#232323]" />
   );
 }
 
@@ -39,7 +38,7 @@ function Row({ label, from, to, strong }: { label: string; from?: string | numbe
       <span className={cn("min-w-0 text-right tabular-nums break-words", strong && "font-semibold")}>
         {from !== undefined ? (
           <>
-            <span className="text-muted-foreground">{from ?? "—"}</span> <span className="text-primary">→</span>{" "}
+            <span className="text-muted-foreground">{from ?? "—"}</span> <span className="text-[#FFD599]">→</span>{" "}
           </>
         ) : null}
         {to ?? "—"}
@@ -50,7 +49,7 @@ function Row({ label, from, to, strong }: { label: string; from?: string | numbe
 
 function BelowCost({ text }: { text: string }) {
   return (
-    <p className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/15 px-3 py-2 text-sm font-semibold text-destructive">
+    <p className="flex items-center gap-2 rounded-[14px] bg-[#FF9A8A]/12 px-3 py-2.5 text-[13.5px] font-semibold text-[#FF9A8A]">
       <AlertTriangle className="size-4 shrink-0" /> {text}
     </p>
   );
@@ -261,12 +260,12 @@ function PreviewBody({ tool, p }: { tool: string; p: any }) {
     case "command_save":
       return (
         <div className="space-y-3">
-          <p className="font-display text-xl">“{p.name}”</p>
+          <p className="text-[19px] font-bold tracking-[-0.02em]">“{p.name}”</p>
           <div>
             <p className="text-xs text-muted-foreground">Quando você disser</p>
             <p className="mt-1 flex flex-wrap gap-1.5">
               {(p.phrases ?? []).map((ph: string) => (
-                <span key={ph} className="rounded-md bg-muted px-2 py-0.5 text-xs">{ph}</span>
+                <span key={ph} className="rounded-full bg-[#232323] px-2.5 py-0.5 text-[12px] font-medium">{ph}</span>
               ))}
             </p>
           </div>
@@ -285,7 +284,7 @@ function PreviewBody({ tool, p }: { tool: string; p: any }) {
     case "supplier_catalog":
       return (
         <div className="space-y-1">
-          <p className="font-display text-xl break-words">{p.supplier}</p>
+          <p className="text-[19px] font-bold tracking-[-0.02em] break-words">{p.supplier}</p>
           <Row label="Catálogo público" from={p.from} to={p.to} strong />
           <p className="text-sm text-muted-foreground">Preços, disponibilidade e comparação continuam sincronizando{p.sync_continues ? "" : " (sincronização automática está pausada)"}. Escolhas por produto são mantidas.</p>
         </div>
@@ -293,7 +292,7 @@ function PreviewBody({ tool, p }: { tool: string; p: any }) {
     case "command_delete":
       return (
         <div className="space-y-1">
-          <p className="font-display text-xl">“{p.name}”</p>
+          <p className="text-[19px] font-bold tracking-[-0.02em]">“{p.name}”</p>
           <p className="text-sm text-muted-foreground">O comando deixa de funcionar. Dá para desfazer logo depois.</p>
         </div>
       );
@@ -403,11 +402,21 @@ export function ActionCard({
 
   return (
     <CopilotActionCard done={!!outcome?.ok}>
-      <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1">
-        <p className={cn("min-w-0 text-[11px] font-semibold tracking-[0.14em] uppercase", outcome?.ok ? "text-gold" : "text-muted-foreground")}>
-          {outcome?.ok ? `✓ ${DONE_TITLE[proposal.tool] ?? "Concluído"}` : proposal.label}
-        </p>
-        {critical ? <span className="text-[11px] font-medium text-destructive">Confirmação forte</span> : null}
+      <div className="mb-4 flex min-w-0 items-center gap-3">
+        <span
+          className={cn(
+            "grid size-9 shrink-0 place-items-center rounded-full",
+            outcome?.ok ? "cp-done-pop bg-[#7FCF9F] text-[#0F1A13]" : critical ? "bg-[#FF9A8A]/15 text-[#FF9A8A]" : "bg-[#FFD599]/12 text-[#FFD599]",
+          )}
+        >
+          {outcome?.ok ? <Check className="size-[18px]" strokeWidth={3} /> : critical ? <ShieldAlert className="size-[18px]" /> : <Sparkles className="size-[18px]" />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[15px] font-bold tracking-[-0.01em]">{outcome?.ok ? (DONE_TITLE[proposal.tool] ?? "Concluído") : proposal.label}</p>
+          <p className="truncate text-[12.5px] text-[#8C8C8C]">
+            {outcome?.ok ? "Feito agora" : canceled ? "Cancelado" : expired ? "Expirou" : critical ? "Confirmação forte · revise com calma" : "Revise e confirme"}
+          </p>
+        </div>
       </div>
       <div className="min-w-0 break-words">
         {outcome ? <OutcomeBody tool={proposal.tool} preview={proposal.preview} outcome={outcome} /> : <PreviewBody tool={proposal.tool} p={proposal.preview} />}
@@ -427,13 +436,12 @@ export function ActionCard({
           }}
         />
       ) : null}
-      {canceled ? <p className="mt-3 text-sm text-muted-foreground">Cancelado. Nada foi alterado.</p> : null}
-      {expired && !canceled ? <p className="mt-3 text-sm text-muted-foreground">Confirmação expirada. Peça de novo.</p> : null}
+      {canceled ? <p className="mt-3 text-[13.5px] text-[#8C8C8C]">Cancelado. Nada foi alterado.</p> : null}
+      {expired && !canceled ? <p className="mt-3 text-[13.5px] text-[#8C8C8C]">Confirmação expirada. Peça de novo.</p> : null}
       {outcome?.ok && undoLeft > 0 && !undone ? (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="mt-3 rounded-full"
+        <button
+          type="button"
+          className="press mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-[#232323] pr-4 pl-1.5 text-[13.5px] font-semibold transition-colors hover:bg-[#2E2E2E] disabled:opacity-50"
           disabled={busy != null}
           onClick={async () => {
             setBusy("undo");
@@ -447,10 +455,17 @@ export function ActionCard({
             }
           }}
         >
-          <Undo2 className="size-4" /> Desfazer ({undoLeft}s)
-        </Button>
+          <span className="relative grid size-7 place-items-center">
+            <svg viewBox="0 0 28 28" className="absolute inset-0 -rotate-90" aria-hidden>
+              <circle cx="14" cy="14" r="12" fill="none" stroke="#3A3A3A" strokeWidth="2" />
+              <circle cx="14" cy="14" r="12" fill="none" stroke="#FFD599" strokeWidth="2" strokeLinecap="round" strokeDasharray={75.4} strokeDashoffset={75.4 * (1 - undoLeft / 20)} className="transition-[stroke-dashoffset] duration-1000 ease-linear" />
+            </svg>
+            <Undo2 className="size-3.5" />
+          </span>
+          Desfazer · {undoLeft}s
+        </button>
       ) : null}
-      {undone ? <p className="mt-3 text-sm text-muted-foreground">Desfeito. A alteração foi revertida e registrada.</p> : null}
+      {undone ? <p className="mt-3 text-[13.5px] text-[#8C8C8C]">Desfeito. A alteração foi revertida e registrada.</p> : null}
     </CopilotActionCard>
   );
 }

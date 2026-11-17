@@ -13,6 +13,8 @@ import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import symbolLight from "@/assets/orium-symbol-light.png.asset.json";
 import { AdminAvatar, NAV_GROUPS, displayName, isActive, type NavItem } from "@/components/orium/AdminShell";
+import { useCopilot } from "@/components/orium/copilot/CopilotPanel";
+import { CopilotOrb } from "@/components/orium/copilot/CopilotOrb";
 
 const PRIMARY = ["/admin", "/admin/pedidos", "/admin/produtos", "/admin/estoque", "/admin/clientes"];
 /** lido na hora (AdminShell importa este arquivo: nada de NAV_GROUPS no topo do módulo) */
@@ -62,6 +64,7 @@ export function AdminTopBar({ pathname, orders }: { pathname: string; orders: nu
         </nav>
 
         <div className="ml-auto flex shrink-0 items-center gap-2.5">
+          <CopilotPill />
           <button type="button" onClick={openAdminSearch} className="adm-search press" aria-label="Procurar (Ctrl K)">
             <span className="grid size-9 place-items-center rounded-full bg-[#232323]">
               <Search className="size-[17px]" strokeWidth={2.2} />
@@ -91,6 +94,29 @@ export function AdminTopBar({ pathname, orders }: { pathname: string; orders: nu
         </div>
       </div>
     </header>
+  );
+}
+
+/** Entrada do Copilot no computador: pílula com o orbe vivo (Ctrl/⌘ J). */
+function CopilotPill() {
+  const { open, toggle, activity } = useCopilot();
+  const busy = activity.orb !== "idle";
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      data-open={open}
+      aria-expanded={open}
+      aria-label="Orium Copilot (Ctrl J)"
+      title="Orium Copilot · Ctrl J"
+      className="cp-pill press"
+    >
+      <CopilotOrb state={activity.orb} size={34} />
+      <span className="hidden max-w-[150px] truncate 2xl:inline xl:inline">{busy && activity.label ? activity.label : "Copilot"}</span>
+      <kbd className={cn("hidden rounded-md border px-1.5 py-0.5 font-sans text-[11px] font-semibold xl:block", open ? "border-black/15 text-[#15130F]/60" : "border-white/10 text-[#8C8C8C]")}>
+        Ctrl J
+      </kbd>
+    </button>
   );
 }
 

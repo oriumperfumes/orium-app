@@ -4,6 +4,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -37,6 +38,7 @@ import { OriumLogo } from "@/components/orium/OriumLogo";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 import symbolLight from "@/assets/orium-symbol-light.png.asset.json";
 import { CopilotProvider, useCopilot } from "@/components/orium/copilot/CopilotPanel";
+import { CopilotOrb } from "@/components/orium/copilot/CopilotOrb";
 import { AdminTopBar, CommandPalette } from "@/components/orium/admin/AdminTopBar";
 
 /**
@@ -140,7 +142,7 @@ function AdminChromeInner({ children }: { children: ReactNode }) {
         <div
           className={cn(
             "flex min-w-0 flex-col transition-[padding] duration-200",
-            copilotOpen && "lg:pr-[var(--copilot-w)]",
+            copilotOpen && "lg:pr-[calc(var(--copilot-w)+12px)]",
           )}
         >
           {/* barra de cima (computador): pílulas, busca, novo pedido e perfil */}
@@ -343,8 +345,51 @@ const TABS: NavItem[] = [
   { to: "/admin", label: "Início", icon: House, exact: true },
   { to: "/admin/pedidos", label: "Pedidos", icon: ShoppingBag, badge: "orders" },
   { to: "/admin/produtos", label: "Produtos", icon: Package },
-  { to: "/admin/estoque", label: "Estoque", icon: Boxes },
 ];
+
+/** Orbe do Copilot no centro da barra do celular: tocar abre; segurar já ouve. */
+function CopilotTab() {
+  const { open, setOpen, listen, activity } = useCopilot();
+  const [holding, setHolding] = useState(false);
+  const timer = useRef<number | null>(null);
+  const fired = useRef(false);
+  const clear = () => {
+    if (timer.current) window.clearTimeout(timer.current);
+    timer.current = null;
+    setHolding(false);
+  };
+  return (
+    <button
+      type="button"
+      aria-label="Orium Copilot (segure para falar)"
+      aria-expanded={open}
+      onPointerDown={() => {
+        fired.current = false;
+        setHolding(true);
+        timer.current = window.setTimeout(() => {
+          fired.current = true;
+          setHolding(false);
+          navigator.vibrate?.(12);
+          listen();
+        }, 420);
+      }}
+      onPointerUp={() => {
+        const longPress = fired.current;
+        clear();
+        if (!longPress) setOpen(!open);
+      }}
+      onPointerLeave={clear}
+      onPointerCancel={clear}
+      onContextMenu={(e) => e.preventDefault()}
+      className="press relative flex flex-col items-center justify-start gap-1 text-[#8C8C8C] [touch-action:manipulation] select-none"
+    >
+      <span className="cp-tab-orb" data-holding={holding}>
+        <CopilotOrb state={holding ? "listening" : activity.orb} level={holding ? 0.12 : 0} size={44} />
+      </span>
+      <span className={cn("text-[10.5px] leading-none font-semibold", open && "text-white")}>Copilot</span>
+    </button>
+  );
+}
 
 function AdminTabBar({
   pathname,
@@ -368,10 +413,10 @@ function AdminTabBar({
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
       <div className="mx-auto grid h-[60px] max-w-[460px] grid-cols-5 px-2">
-        {TABS.map((t) => {
+        {TABS.flatMap((t, ti) => {
           const active = isActive(pathname, t);
           const count = t.badge === "orders" ? orders : 0;
-          return (
+          const tab = (
             <Link key={t.to} to={t.to} preload="intent" activeOptions={{ exact: true }} data-active={active} className={item}>
               <span className="relative">
                 <t.icon className="size-[22px]" strokeWidth={active ? 2.1 : 1.8} />
@@ -387,6 +432,7 @@ function AdminTabBar({
               <span className="text-[10.5px] leading-none font-semibold">{t.label}</span>
             </Link>
           );
+          return ti === 1 ? [tab, <CopilotTab key="copilot" />] : [tab];
         })}
         <button
           type="button"
