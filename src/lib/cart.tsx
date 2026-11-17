@@ -20,7 +20,7 @@ import type { CouponFeedback } from "@/lib/promotions.server";
 import { usePublicPricingSettings } from "@/lib/pricing-settings";
 import { track } from "@/lib/analytics";
 import { toast } from "sonner";
-import { ORIUM_WHATSAPP } from "@/lib/price-on-request";
+import { ORIUM_WHATSAPP, useBlackOpen } from "@/lib/price-on-request";
 
 function warnOnRequest() {
   toast("Preços sob consulta", {
@@ -334,23 +334,28 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   // Admin → Precificação → "Preços sob consulta": nada entra na sacola.
   const onRequestAll = settings?.prices_on_request === true;
+  // ...menos os perfumes da Black, que continuam vendendo pelo site
+  const blackOpen = useBlackOpen();
+  const allowed = (productId: string) => !onRequestAll || blackOpen.all || blackOpen.ids.has(productId);
 
   const add: CartContext["add"] = useCallback(
     (item, quantity = 1) => {
-      if (onRequestAll) return warnOnRequest();
+      if (!allowed(item.productId)) return warnOnRequest();
       setItems((prev) => merge(prev, item, quantity));
       trackAdd(item, quantity);
     },
-    [onRequestAll],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [onRequestAll, blackOpen.all, blackOpen.ids.size],
   );
 
   const addMany: CartContext["addMany"] = useCallback(
     (list) => {
-      if (onRequestAll) return warnOnRequest();
+      if (list.some(({ item }) => !allowed(item.productId))) return warnOnRequest();
       setItems((prev) => list.reduce((acc, { item, quantity }) => merge(acc, item, quantity), prev));
       list.forEach(({ item, quantity }) => trackAdd(item, quantity));
     },
-    [onRequestAll],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [onRequestAll, blackOpen.all, blackOpen.ids.size],
   );
 
   const applyCoupon = useCallback((code: string) => {
