@@ -1,20 +1,27 @@
 import { setPriceView } from "@/lib/decant-size";
-import { decantPrice, trackDecant } from "@/lib/decants";
+import { decantPrice } from "@/lib/decants";
 import { track } from "@/lib/analytics";
 import { brl } from "@/lib/format";
 import { useDecantSettings } from "@/lib/use-decant-settings";
 import { useRevealOnce } from "@/components/orium/Reveal";
 import { DecantComboCard, useFeaturedCombo } from "@/components/orium/DecantCombo";
 import { cn } from "@/lib/utils";
-import vialsImg from "@/assets/home-decants-vials.webp";
+import { DecantStageCard } from "@/components/orium/home/DecantStageCard";
+import { FrascosSpinCard } from "@/components/orium/home/FrascosSpinCard";
 import trioImg from "@/assets/home-frascos-trio.webp";
 import { usePricesOnRequestAll } from "@/lib/price-on-request";
 
 /**
- * Dois cartões claros logo abaixo do vídeo: Decants (prove antes) e Frascos
- * (a fragrância completa). Preço mínimo e total de perfumes vêm dos dados reais.
+ * Dois cartões logo abaixo do vídeo: Decants (o decant 3D em tempo real) e
+ * Frascos (o frasco girando em 360° com fotos reais). Preço mínimo e total de perfumes vêm dos dados reais.
  */
-export function HomeShortcuts({ onExplore, total }: { onExplore: () => void; total?: number | undefined }) {
+export function HomeShortcuts({
+  onExplore,
+  total,
+}: {
+  onExplore: () => void;
+  total?: number | undefined;
+}) {
   const settings = useDecantSettings();
   // só mostra o preço depois que a configuração chega: nada de valor provisório
   const onRequestAll = usePricesOnRequestAll();
@@ -42,60 +49,46 @@ export function HomeShortcuts({ onExplore, total }: { onExplore: () => void; tot
           style={{ "--card-d": "0ms" } as React.CSSProperties}
         />
       ) : (
-      <ShortcutCard
-        label="Decants de 2, 5 e 10 ml"
-        hidden={!ready}
-        onClick={() => {
-          setPriceView(2);
-          trackDecant("decant_size_selected", { variant: "DECANT_2", details: { source: "home_atalho" } });
-          onExplore();
-        }}
-        image={vialsImg}
-        imageAlt="Três decants com perfume âmbar, de 2, 5 e 10 ml"
-        imageW={520}
-        imageH={404}
-        imageClass="max-w-[330px]"
-        style={{ "--card-d": "0ms" } as React.CSSProperties}
-      >
-        <span className="text-[36px] leading-[1.04] font-bold tracking-[-0.035em]">
-          2 ml. 5 ml.
-          <br />
-          10 ml.
-        </span>
-        <span className="mt-3 max-w-[280px] text-[17px] leading-[1.4] text-[#5F5A53]">
-          Prove antes do frasco.
-          {from != null ? (
-            <span className="value-in"> A partir de {brl(from)}.</span>
-          ) : null}
-        </span>
-        <span className="mt-5 inline-flex h-[46px] items-center rounded-full bg-[#15130F] px-6 text-[15px] font-semibold text-white transition-transform duration-[var(--motion-fast)] ease-[var(--ease-orium)] group-hover:scale-[1.03]">
-          Escolher decants
-        </span>
-      </ShortcutCard>
+        <DecantStageCard
+          onExplore={onExplore}
+          style={
+            { "--card-d": "0ms", visibility: ready ? undefined : "hidden" } as React.CSSProperties
+          }
+        />
       )}
 
-      <ShortcutCard
-        label="Frascos completos"
-        onClick={() => {
-          setPriceView("frasco");
-          track("discovery_clicked", { meta: { card: "frascos" } });
-          onExplore();
-        }}
-        image={trioImg}
-        imageAlt="9AM Dive, 9PM e 9PM Night Out, da Afnan"
-        imageW={642}
-        imageH={272}
-        imageClass="max-w-[420px]"
+      <FrascosSpinCard
+        onExplore={onExplore}
+        total={total}
         style={{ "--card-d": "90ms" } as React.CSSProperties}
-      >
-        <span className="text-[36px] leading-[1.04] font-bold tracking-[-0.035em]">Frascos</span>
-        <span className="mt-3 text-[17px] text-[#5F5A53]">
-          A fragrância completa.{total ? <span className="value-in"> {total} perfumes.</span> : null}
-        </span>
-        <span className="mt-5 inline-flex h-[46px] items-center rounded-full bg-[#15130F] px-6 text-[15px] font-semibold text-white transition-transform duration-[var(--motion-fast)] ease-[var(--ease-orium)] group-hover:scale-[1.03]">
-          Ver frascos
-        </span>
-      </ShortcutCard>
+        fallback={
+          <ShortcutCard
+            label="Frascos completos"
+            onClick={() => {
+              setPriceView("frasco");
+              track("discovery_clicked", { meta: { card: "frascos" } });
+              onExplore();
+            }}
+            image={trioImg}
+            imageAlt="9AM Dive, 9PM e 9PM Night Out, da Afnan"
+            imageW={642}
+            imageH={272}
+            imageClass="max-w-[420px]"
+            style={{ "--card-d": "90ms" } as React.CSSProperties}
+          >
+            <span className="text-[36px] leading-[1.04] font-bold tracking-[-0.035em]">
+              Frascos
+            </span>
+            <span className="mt-3 text-[17px] text-[#5F5A53]">
+              A fragrância completa.
+              {total ? <span className="value-in"> {total} perfumes.</span> : null}
+            </span>
+            <span className="mt-5 inline-flex h-[46px] items-center rounded-full bg-[#15130F] px-6 text-[15px] font-semibold text-white transition-transform duration-[var(--motion-fast)] ease-[var(--ease-orium)] group-hover:scale-[1.03]">
+              Ver frascos
+            </span>
+          </ShortcutCard>
+        }
+      />
     </div>
   );
 }
