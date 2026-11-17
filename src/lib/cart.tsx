@@ -3,6 +3,8 @@
  * - guardado no navegador (volta depois de atualizar a página);
  * - quando o cliente está logado, também é salvo na conta e sincronizado ao entrar;
  * - frascos: de 1 a 5 unidades = varejo; 6 ou mais = atacado em todos os frascos;
+ *   perfume em promoção (ex.: Black) vende pelo preço da promoção sobre o varejo:
+ *   não recebe atacado e não conta para o mínimo (mesma regra do servidor);
  * - decants: preço fixo por tamanho (2ml, 5ml, 10ml), cada tamanho é um item próprio;
  * - promoções e cupons: valor exibido é sempre confirmado pelo servidor.
  */
@@ -14,7 +16,7 @@ import { useAuth } from "@/lib/auth";
 import { variantKey, type DecantMl } from "@/lib/decants";
 import { useDecantCombos, usePromotions } from "@/lib/use-promotions";
 import { applyDecantCombos, type ComboApplied, type ComboProgress } from "@/lib/decant-combos";
-import { deviceId, money, priceUnit, type Promotion } from "@/lib/promotions";
+import { bestPromotion, deviceId, money, priceUnit, type Promotion } from "@/lib/promotions";
 import { quoteCart } from "@/lib/promotions.functions";
 import type { CouponFeedback } from "@/lib/promotions.server";
 import { usePublicPricingSettings } from "@/lib/pricing-settings";
@@ -68,8 +70,12 @@ type CartContext = {
   decants: CartItem[];
   bottles: CartItem[];
   totalQuantity: number;
-  /** só frascos contam para o atacado */
+  /** frascos que contam para o atacado (os em promoção não contam) */
   bottleQuantity: number;
+  /** itens com promoção/desconto em vigor (ex.: Black November) */
+  promoItems: CartItem[];
+  /** quanto as promoções economizam na Sacola (preço cheio − preço da promoção) */
+  promoSavings: number;
   decantQuantity: number;
   tier: "varejo" | "atacado";
   minQty: number;
@@ -218,17 +224,25 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const bottles = useMemo(() => items.filter((i) => i.variant === "FULL"), [items]);
   const decants = useMemo(() => items.filter((i) => i.variant === "DECANT"), [items]);
 
-  const bottleQuantity = bottles.reduce((s, i) => s + i.quantity, 0);
+  // perfume em promoção vende pelo preço da promoção (sobre o varejo): fica fora do atacado
+  const onPromo = useCallback(
+    (i: CartItem) =>
+      !!bestPromotion(promotions, { productId: i.productId, variant: i.variant, decantMl: i.decantMl }),
+    [promotions],
+  );
+  const bottleQuantity = bottles.filter((i) => !onPromo(i)).reduce((s, i) => s + i.quantity, 0);
   const decantQuantity = decants.reduce((s, i) => s + i.quantity, 0);
-  const totalQuantity = bottleQuantity + decantQuantity;
+  // itens na Sacola: TODOS os frascos (inclusive os em promoção) + decants
+  const totalQuantity = bottles.reduce((s, i) => s + i.quantity, 0) + decantQuantity;
   const tier: "varejo" | "atacado" = bottleQuantity >= minQty ? "atacado" : "varejo";
 
   const baseUnitPrice = useCallback(
     (item: CartItem) => {
       if (item.variant === "DECANT") return item.retailPrice || 0;
+      if (onPromo(item)) return item.retailPrice || 0;
       return (bottleQuantity >= minQty ? item.wholesalePrice : item.retailPrice) || 0;
     },
-    [bottleQuantity, minQty],
+    [bottleQuantity, minQty, onPromo],
   );
 
   const promotionOf = useCallback(
@@ -277,6 +291,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const afterPromotions = money(bottleTotal + decantTotal);
   const promotionDiscount = money(Math.max(0, subtotal - afterPromotions));
   const retailTotal = money(items.reduce((s, i) => s + (i.retailPrice || 0) * i.quantity, 0));
+  const promoItems = useMemo(() => items.filter((i) => promotionOf(i)), [items, promotionOf]);
+  const promoSavings = money(
+    promoItems.reduce((s, i) => s + (baseUnitPrice(i) - unitPrice(i)) * i.quantity, 0),
+  );
 
   // confirmação oficial de promoção + cupom no servidor
   const quoteKey = useMemo(
@@ -382,6 +400,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
       bottles,
       totalQuantity,
       bottleQuantity,
+      promoItems,
+      promoSavings,
       decantQuantity,
       tier,
       minQty,
@@ -435,6 +455,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
       bottles,
       totalQuantity,
       bottleQuantity,
+      promoItems,
+      promoSavings,
       decantQuantity,
       tier,
       minQty,

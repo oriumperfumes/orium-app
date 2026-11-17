@@ -38,6 +38,8 @@ import { navigatingFromLayer, useBackToClose } from "@/hooks/use-back-to-close";
 import { track } from "@/lib/analytics";
 import { useLead } from "@/lib/lead";
 import { ReadyTag } from "@/components/orium/badges";
+import { BlackCountdown, BlackOff, BlackTag } from "@/components/orium/black/Black";
+import { isBlack } from "@/lib/black";
 import { DecantComboBag } from "@/components/orium/DecantCombo";
 import { OrderSuccess, type OrderDone } from "@/components/orium/OrderSuccess";
 import { StepBar } from "@/components/orium/StepProgress";
@@ -488,9 +490,11 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
 
         <ul className="mt-5">{cart.items.map((item) => renderItem(item))}</ul>
 
+        {cart.promoItems.length > 0 ? <PromoSavingsCard /> : null}
+
         <DecantComboBag />
 
-        {cart.bottles.length > 0 ? <WholesaleLine /> : null}
+        {cart.bottles.some((b) => !cart.promotionOf(b)) ? <WholesaleLine /> : null}
 
         <TryMore />
 
@@ -508,7 +512,13 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
             <Row label="Subtotal" value={brl(cart.subtotal)} />
           )}
           {cart.comboDiscount > 0 ? <Row label="Combo de decants" value={`– ${brl(cart.comboDiscount)}`} gold /> : null}
-          {cart.promotionDiscount - cart.comboDiscount > 0.004 ? <Row label="Promoção" value={`– ${brl(cart.promotionDiscount - cart.comboDiscount)}`} gold /> : null}
+          {cart.promotionDiscount - cart.comboDiscount > 0.004 ? (
+            <Row
+              label={cart.promoItems.some((i) => isBlack(cart.promotionOf(i))) ? "Black November" : "Promoção"}
+              value={`– ${brl(cart.promotionDiscount - cart.comboDiscount)}`}
+              gold
+            />
+          ) : null}
           {cart.couponDiscount > 0 ? <Row label={`Cupom ${cart.couponCode}`} value={`– ${brl(cart.couponDiscount)}`} gold /> : null}
           <Row label="Entrega" value="escolhida no próximo passo" muted />
           <div className="mt-3 flex items-baseline justify-between border-t border-white/10 pt-4">
@@ -517,6 +527,12 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
               {brl(cart.total)}
             </span>
           </div>
+          {cart.promoItems.length > 0 && cart.savings > 0.004 ? (
+            <p className="mt-3 flex items-center justify-end gap-1.5 text-[14px] font-semibold text-[#FFD599]">
+              <Check className="size-4" strokeWidth={2.6} />
+              Você economiza <span className="tabular-nums">{brl(cart.savings)}</span> nesta compra
+            </p>
+          ) : null}
         </div>
 
         <button
@@ -553,6 +569,21 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
           <p className="text-[14px] text-[#FFD599]">
             {isDecant ? `Decant · ${item.decantMl} ml` : `Frasco${item.volumeMl ? ` · ${item.volumeMl} ml` : ""}`}
           </p>
+          {promo ? (
+            <span className="mt-1.5 flex items-center gap-2">
+              {isBlack(promo) ? (
+                <BlackTag promotion={promo} size="xs" />
+              ) : (
+                <span className="rounded-[5px] bg-[#FFD599] px-1.5 py-[3px] text-[8.5px] font-black tracking-[0.06em] text-[#15130F] uppercase">
+                  Promoção
+                </span>
+              )}
+              <BlackOff
+                percent={(1 - cart.unitPrice(item) / Math.max(0.01, cart.baseUnitPrice(item))) * 100}
+                className="text-[12px]"
+              />
+            </span>
+          ) : null}
           {!isDecant ? <ReadyTag productId={item.productId} /> : null}
           <div className="mt-auto flex items-center justify-between gap-2 pt-2.5">
             <div className="flex h-9 items-center rounded-full bg-[#1F1F1F]">
@@ -582,6 +613,11 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
               </p>
               {promo || cart.comboOf(item) > 0 ? (
                 <p className="text-[12px] text-[#8C8C8C] line-through tabular-nums">{brl(cart.baseUnitPrice(item) * item.quantity)}</p>
+              ) : null}
+              {promo ? (
+                <p className="text-[11.5px] font-semibold text-[#FFD599] tabular-nums">
+                  economiza {brl((cart.baseUnitPrice(item) - cart.unitPrice(item)) * item.quantity)}
+                </p>
               ) : null}
             </div>
           </div>
@@ -1053,7 +1089,8 @@ function WholesaleLine() {
   const cart = useCart();
   const n = Math.min(cart.bottleQuantity, cart.minQty);
   const unlocked = cart.tier === "atacado";
-  const only = cart.bottles.length === 1 ? cart.bottles[0] : null;
+  const eligible = cart.bottles.filter((b) => !cart.promotionOf(b));
+  const only = eligible.length === 1 ? eligible[0] : null;
   const missing = cart.missingForWholesale;
 
   return (
@@ -1078,6 +1115,11 @@ function WholesaleLine() {
         </span>
       </div>
       <StepBar value={n} total={cart.minQty} className="mt-3" />
+      {cart.promoItems.some((i) => i.variant === "FULL") ? (
+        <p className="mt-2.5 text-[12.5px] leading-snug text-[#8C8C8C]">
+          Perfumes em promoção não entram no atacado: já estão com o menor preço.
+        </p>
+      ) : null}
       <p className="mt-2.5 text-[13px] leading-snug text-[#A9A9A9]">
         {unlocked ? (
           only ? (
@@ -1099,6 +1141,55 @@ function WholesaleLine() {
           </>
         )}
       </p>
+    </div>
+  );
+}
+
+/**
+ * Promoção na Sacola — só aparece quando há perfume com desconto em vigor.
+ * Selo da campanha, quanto a pessoa está economizando (subindo na tela), a
+ * contagem até o fim e um confete na primeira vez que cada item entra.
+ * Preço de atacado não se aplica a esses perfumes (já estão no menor preço).
+ */
+function PromoSavingsCard() {
+  const cart = useCart();
+  const promos = cart.promoItems.map((i) => cart.promotionOf(i)).filter(Boolean) as NonNullable<
+    ReturnType<typeof cart.promotionOf>
+  >[];
+  const black = promos.find((p) => isBlack(p)) ?? null;
+  const lead = black ?? promos[0] ?? null;
+  const units = cart.promoItems.reduce((s, i) => s + i.quantity, 0);
+  const maxOff = cart.promoItems.reduce(
+    (m, i) => Math.max(m, (1 - cart.unitPrice(i) / Math.max(0.01, cart.baseUnitPrice(i))) * 100),
+    0,
+  );
+  // confete uma vez por combinação de itens em promoção (entrou um novo = festa de novo)
+  const celebrate = useCelebrateOnce(
+    cart.promoSavings > 0 ? `promo-bag:${cart.promoItems.map((i) => i.key).sort().join("|")}` : null,
+    CELEBRATION.micro,
+  );
+  if (!lead || !(cart.promoSavings > 0)) return null;
+  return (
+    <div className="promo-bag relative my-4 overflow-hidden rounded-[22px] bg-black p-5 ring-1 ring-white/15">
+      <ConfettiBurst active={celebrate} intensity="medium" />
+      <div className="flex items-center justify-between gap-3">
+        {black ? (
+          <BlackTag promotion={black} size="md" />
+        ) : (
+          <span className="rounded-[7px] bg-[#FFD599] px-2 py-[5px] text-[11px] font-black tracking-[0.06em] text-[#15130F] uppercase">
+            Promoção
+          </span>
+        )}
+        <BlackOff percent={maxOff} className="text-[15px]" />
+      </div>
+      <p className="mt-4 text-[14px] font-semibold text-[#A9A9A9]">Você está economizando</p>
+      <p className="mt-0.5 text-[38px] leading-none font-extrabold tracking-[-0.035em] text-[#FFD599] tabular-nums">
+        <CountUp value={cart.promoSavings} format={brl} />
+      </p>
+      <p className="mt-2 text-[13.5px] leading-snug text-[#CFCFCF]">
+        {units === 1 ? "1 perfume" : `${units} perfumes`} com preço {black ? "de Black November" : "de promoção"}.
+      </p>
+      {lead.ends_at ? <BlackCountdown endsAt={lead.ends_at} className="mt-3" label="Acaba em" /> : null}
     </div>
   );
 }
