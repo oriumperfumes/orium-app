@@ -63,9 +63,11 @@ export function BlackShowcase({
   const endsAt = blackEndsAt(black);
   const products = (data ?? []).filter((p) => !isOnRequest(p as never, consultIds));
   const words = MARQUEE(pct);
+  /** Título segue a campanha: "Esquenta Black" enquanto for o esquenta, "Black November" depois. */
+  const headline = black.some((p) => /esquenta/i.test(p.name)) ? ["Esquenta", "Black"] : /friday/i.test(black[0]!.name) ? ["Black", "Friday"] : ["Black", "November"];
 
   return (
-    <section aria-label="Esquenta Black" className="black-in relative mx-[calc(-1*var(--page-gutter))] overflow-hidden bg-black tab:mx-0 tab:rounded-[28px] tab:ring-1 tab:ring-white/10">
+    <section aria-label={headline.join(" ")} className="black-in relative mx-[calc(-1*var(--page-gutter))] overflow-hidden bg-black tab:mx-0 tab:rounded-[28px] tab:ring-1 tab:ring-white/10">
       {/* letreiro */}
       <div className="overflow-hidden border-b border-white/10 bg-white py-2 text-black" aria-hidden>
         <div className="black-marquee">
@@ -87,9 +89,9 @@ export function BlackShowcase({
           <div className="min-w-0">
             <BlackTag promotion={black[0]} size="md" />
             <h2 className="black-in mt-3 text-[44px] leading-[0.92] font-black tracking-[-0.045em] text-white uppercase tab:text-[56px]" style={{ "--d": "80ms" } as React.CSSProperties}>
-              Esquenta
+              {headline[0]}
               <br />
-              Black
+              {headline[1]}
             </h2>
             {pct > 0 ? (
               <p className="black-in mt-3 text-[16px] font-semibold text-[#CFCFCF]" style={{ "--d": "160ms" } as React.CSSProperties}>
@@ -98,7 +100,7 @@ export function BlackShowcase({
             ) : null}
           </div>
           {endsAt ? (
-            <BlackCountdown endsAt={endsAt} variant="boxes" label="Termina em" className="black-in" />
+            <BlackCountdown endsAt={endsAt} variant="boxes" label="Acaba em" showDate className="black-in" />
           ) : null}
         </div>
 

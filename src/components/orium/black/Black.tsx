@@ -63,6 +63,18 @@ export function BlackOff({ percent, className }: { percent: number; className?: 
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
+/** "sexta, 20/11 às 09:00" no relógio de São Paulo — o fim real, por extenso. */
+export function blackEndText(endsAt: string | number | null | undefined): string | null {
+  if (endsAt == null) return null;
+  const d = new Date(endsAt);
+  if (Number.isNaN(d.getTime())) return null;
+  const tz = { timeZone: "America/Sao_Paulo" } as const;
+  const day = d.toLocaleDateString("pt-BR", { ...tz, weekday: "long" }).replace("-feira", "");
+  const date = d.toLocaleDateString("pt-BR", { ...tz, day: "2-digit", month: "2-digit" });
+  const time = d.toLocaleTimeString("pt-BR", { ...tz, hour: "2-digit", minute: "2-digit" });
+  return `${day}, ${date} às ${time}`;
+}
+
 /**
  * Contagem regressiva até o fim REAL da promoção. Sem data de fim, não aparece.
  * `variant="boxes"`: dígitos em caixinhas (página do perfume e Home);
@@ -72,11 +84,14 @@ export function BlackCountdown({
   endsAt,
   variant = "inline",
   label = "Acaba em",
+  showDate = false,
   className,
 }: {
   endsAt: string | number | null | undefined;
   variant?: "inline" | "boxes";
   label?: string;
+  /** Linha extra com dia e hora reais do fim ("Termina sexta, 20/11 às 09:00"). */
+  showDate?: boolean;
   className?: string;
 }) {
   const now = useNowSeconds();
@@ -105,7 +120,8 @@ export function BlackCountdown({
     [r.s, "seg"],
   ];
   return (
-    <div className={cn("flex items-center gap-2.5", className)} role="timer" aria-live="off">
+    <div className={cn("flex flex-col items-start gap-1.5", className)}>
+    <div className="flex items-center gap-2.5" role="timer" aria-live="off">
       <span className="text-[12px] font-semibold text-[#A9A9A9]">{label}</span>
       <span className="flex items-start gap-1">
         {parts.map(([v, unit], i) => (
@@ -126,6 +142,10 @@ export function BlackCountdown({
           </span>
         ))}
       </span>
+    </div>
+    {showDate && blackEndText(end) ? (
+      <p className="text-[11.5px] font-semibold text-[#8C8C8C]">Termina {blackEndText(end)}</p>
+    ) : null}
     </div>
   );
 }

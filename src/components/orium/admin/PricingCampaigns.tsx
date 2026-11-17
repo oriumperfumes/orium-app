@@ -34,7 +34,7 @@ import {
   AdminMore,
   AdminTechDetails,
 } from "@/components/orium/admin/AdminUI";
-import { PercentInput } from "@/components/orium/admin/PriceBits";
+import { MoneyInput, PercentInput } from "@/components/orium/admin/PriceBits";
 import {
   PxCard,
   PxCardBody,
@@ -455,6 +455,15 @@ export function PromotionsPanel({
   );
 }
 
+/** Próxima sexta-feira às 09:00 (relógio de São Paulo), no formato do campo de data. */
+function nextFridayMorning() {
+  const sp = new Date(Date.now() - 3 * 3600_000); // "agora" em São Paulo, lido como UTC
+  const add = (5 - sp.getUTCDay() + 7) % 7 || (sp.getUTCHours() < 9 ? 0 : 7);
+  const d = new Date(sp.getTime() + add * 86400_000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T09:00`;
+}
+
 const PERCENT_QUICK = [5, 10, 15, 20, 25, 30].map((v) => ({ value: v, label: `${v}%` }));
 const END_QUICK = [
   { value: 0, label: "Sem fim" },
@@ -507,14 +516,9 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
   const [badgeLabel, setBadgeLabel] = useState("");
   const [copy, setCopy] = useState<CampaignCopyValue>(emptyCampaignCopy());
   const [busy, setBusy] = useState(false);
-
-  const pct = Number(percent) || 0;
-  const promoVars: CampaignVars = {
-    discount: String(pct),
-    product: name.trim() || "seus perfumes",
-    category:
-      appliesTo === "DECANT" ? "decants" : appliesTo === "FULL" ? "frascos" : "todo o catálogo",
-  };
+  /** "percent" = X% OFF · "price" = de R$ 400 por R$ 299,90 (vira o percentual exato). */
+  const [priceMode, setPriceMode] = useState<"percent" | "price">("percent");
+  const [target, setTarget] = useState<number | null>(null);
 
   const { data: preview } = useQuery({
     queryKey: ["promo-preview", ids[0] ?? ""],
@@ -530,6 +534,23 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
   });
   const single = ids.length === 1 ? preview : null;
   const base = single?.retail_price != null ? Number(single.retail_price) : null;
+  /** Preço final → percentual com 5 casas: o preço volta exato ao centavo. */
+  const priceOk = priceMode === "price" && base != null && base > 0 && target != null && target > 0 && target < base;
+  const pct =
+    priceMode === "price"
+      ? priceOk
+        ? Math.round((1 - target! / base!) * 100 * 1e5) / 1e5
+        : 0
+      : Number(percent) || 0;
+  /** Na loja o percentual aparece inteiro ("25% OFF"); o preço é que fica exato. */
+  const pctLabel = String(Math.round(pct));
+  const promoVars: CampaignVars = {
+    discount: pctLabel,
+    product: name.trim() || "seus perfumes",
+    category:
+      appliesTo === "DECANT" ? "decants" : appliesTo === "FULL" ? "frascos" : "todo o catálogo",
+  };
+
   const promoPrice = base != null ? applyPercent(base, pct) : null;
 
   const reset = () => {
@@ -544,6 +565,8 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
     setEndPick(0);
     setBadgeLabel("");
     setCopy(emptyCampaignCopy());
+    setPriceMode("percent");
+    setTarget(null);
   };
   const close = () => {
     reset();
@@ -556,12 +579,12 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
    * Desconto, produtos e datas continuam editáveis nos próximos passos.
    */
   const black = isBlack({ name });
-  const applyBlackPreset = () => {
+  const applyBlackPreset = (kind: "esquenta" | "november") => {
     const year = new Date().getFullYear();
-    setName("Black November");
-    if (!(pct >= 15)) setPercent(30);
+    setName(kind === "esquenta" ? "Esquenta Black" : "Black November");
+    if (priceMode === "percent" && !(pct >= 10)) setPercent(15);
     setEndPick(null);
-    setEnds(`${year}-11-30T23:59`);
+    setEnds(kind === "esquenta" ? nextFridayMorning() : `${year}-11-30T23:59`);
     setAppExclusive(false);
     setAnnounce(true);
     setCopy({
@@ -587,7 +610,11 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
       return;
     }
     if (!(pct > 0 && pct <= 90)) {
-      toast.error("O desconto deve ficar entre 1% e 90%.");
+      toast.error(
+        priceMode === "price"
+          ? "Escolha um perfume e um preço final menor que o atual (até 90% OFF)."
+          : "O desconto deve ficar entre 1% e 90%.",
+      );
       setStep(0);
       return;
     }
@@ -612,7 +639,20 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
         active: true,
       });
       if (error) throw error;
-      toast.success("Promoção criada.");
+      if (priceMode === "price" && base != null && target != null) {
+        // confere o preço que o banco realmente vai cobrar
+        const { data: saved } = await supabase
+          .from("promotions")
+          .select("discount_percent")
+          .eq("name", name.trim())
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const real = saved ? applyPercent(base, Number(saved.discount_percent)) : target;
+        if (Math.abs(real - target) >= 0.01) {
+          toast.warning(`Promoção criada, mas o preço ficou ${brl(real)} (o banco ainda arredonda o desconto).`);
+        } else toast.success(`Promoção criada: de ${brl(base)} por ${brl(target)}.`);
+      } else toast.success("Promoção criada.");
       qc.invalidateQueries();
       close();
     } catch (err) {
@@ -639,7 +679,7 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
       </div>
       <p className="mt-4 truncate text-[15px] font-bold text-[#A9A9A9]">{name.trim()}</p>
       <p className="text-[46px] leading-none font-black tracking-[-0.05em] tabular-nums">
-        {pct}% <span className="text-[22px] tracking-[-0.02em] text-[#FFD599]">OFF</span>
+        {pctLabel}% <span className="text-[22px] tracking-[-0.02em] text-[#FFD599]">OFF</span>
       </p>
       {base != null ? (
         <div className="mt-4 flex min-w-0 items-center gap-3 rounded-[18px] bg-white/[0.06] p-2.5">
@@ -681,7 +721,7 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
         {name.trim() || "Nome da promoção"}
       </p>
       <p className="text-[46px] leading-none font-bold tracking-[-0.05em] tabular-nums">
-        {pct}% <span className="text-[22px] tracking-[-0.02em]">OFF</span>
+        {pctLabel}% <span className="text-[22px] tracking-[-0.02em]">OFF</span>
       </p>
       {base != null ? (
         <div className="mt-4 flex min-w-0 items-center gap-3 rounded-[18px] bg-[#15130F]/[0.06] p-2.5">
@@ -715,7 +755,7 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
       onStep={setStep}
       preview={card}
       summary={[
-        { label: "Desconto", value: `${pct}% OFF` },
+        { label: "Desconto", value: priceOk ? `de ${brl(base)} por ${brl(target)}` : `${pctLabel}% OFF` },
         { label: "Produtos", value: scope },
         {
           label: "Vale para",
@@ -734,21 +774,35 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
     >
       {step === 0 ? (
         <>
-          <button
-            type="button"
-            onClick={applyBlackPreset}
-            className={cn(
-              "press flex w-full min-w-0 items-center gap-3 rounded-[18px] bg-black p-3.5 text-left ring-1 transition-colors",
-              black ? "ring-white" : "ring-white/15 hover:ring-white/40",
-            )}
-          >
-            <BlackTag size="sm" />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[14px] font-bold text-white">Campanha Black November</span>
-              <span className="block truncate text-[12px] text-[#A9A9A9]">Visual de vitrine, contagem e “Comprar agora” — até 30/11</span>
-            </span>
-            {black ? <span className="shrink-0 text-[12px] font-bold text-white">Ativo ✓</span> : null}
-          </button>
+          <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+            {(
+              [
+                { kind: "esquenta", title: "Esquenta Black", sub: "Curta: termina sexta às 09:00" },
+                { kind: "november", title: "Black November", sub: "Até 30/11 às 23:59" },
+              ] as const
+            ).map((o) => {
+              const on = name.trim().toLowerCase() === o.title.toLowerCase();
+              return (
+                <button
+                  key={o.kind}
+                  type="button"
+                  onClick={() => applyBlackPreset(o.kind)}
+                  className={cn(
+                    "press flex w-full min-w-0 flex-col items-start gap-2 rounded-[18px] bg-black p-3.5 text-left ring-1 transition-colors",
+                    on ? "ring-white" : "ring-white/15 hover:ring-white/40",
+                  )}
+                >
+                  <BlackTag size="xs" />
+                  <span className="block w-full min-w-0">
+                    <span className="block truncate text-[14px] font-bold text-white">
+                      {o.title} {on ? "✓" : ""}
+                    </span>
+                    <span className="block truncate text-[12px] text-[#A9A9A9]">{o.sub}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
           <PxField label="Nome da campanha" htmlFor="promo-name" hint="Qualquer nome com “Black” liga o visual Black na loja.">
             <PxInput
               id="promo-name"
@@ -758,25 +812,55 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
               placeholder="Ex.: Semana dos decants"
             />
           </PxField>
-          <PxField label="Desconto">
-            <PxQuick options={PERCENT_QUICK} value={pct} onPick={(v) => setPercent(v)} />
-            <PercentInput id="promo-pct" value={percent} onChange={setPercent} />
+          <PxField label="Vale para">
+            <PxSeg label="O que entra na promoção" value={appliesTo} onChange={setAppliesTo} options={APPLIES_OPTIONS} />
           </PxField>
-          {!(pct > 0 && pct <= 90) ? (
+          <PxField label="Desconto">
+            <PxSeg
+              label="Tipo de desconto"
+              value={priceMode}
+              onChange={setPriceMode}
+              options={[
+                { value: "percent", label: "% de desconto" },
+                { value: "price", label: "De / por (R$)" },
+              ]}
+            />
+          </PxField>
+          {priceMode === "percent" ? (
+            <PxField label="Percentual">
+              <PxQuick options={PERCENT_QUICK} value={pct} onPick={(v) => setPercent(v)} />
+              <PercentInput id="promo-pct" value={percent} onChange={setPercent} />
+            </PxField>
+          ) : (
+            <>
+              <ProductPicker ids={ids} setIds={(v) => setIds(v.slice(-1))} />
+              {ids.length !== 1 ? (
+                <PxNote>Escolha um perfume: o “de” é o preço atual do frasco dele.</PxNote>
+              ) : base != null ? (
+                <PxField label={`De ${brl(base)} por`} htmlFor="promo-target">
+                  <MoneyInput id="promo-target" value={target} onChange={setTarget} />
+                  {priceOk ? (
+                    <p className="text-[12.5px] text-[#A9A9A9]">
+                      Equivale a <strong className="text-white">{pct.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}% OFF</strong>
+                      {appliesTo !== "FULL" ? " — os decants recebem o mesmo percentual." : "."}
+                    </p>
+                  ) : null}
+                </PxField>
+              ) : (
+                <PxNote tone="warning">Este perfume não tem preço de frasco cadastrado.</PxNote>
+              )}
+              {target != null && base != null && target >= base ? (
+                <PxNote tone="warning">O “por” precisa ser menor que {brl(base)}.</PxNote>
+              ) : null}
+            </>
+          )}
+          {priceMode === "percent" && !(pct > 0 && pct <= 90) ? (
             <PxNote tone="warning">O desconto deve ficar entre 1% e 90%.</PxNote>
           ) : null}
         </>
       ) : step === 1 ? (
         <>
-          <ProductPicker ids={ids} setIds={setIds} />
-          <PxField label="Vale para">
-            <PxSeg
-              label="O que entra na promoção"
-              value={appliesTo}
-              onChange={setAppliesTo}
-              options={APPLIES_OPTIONS}
-            />
-          </PxField>
+          <ProductPicker ids={ids} setIds={priceMode === "price" ? (v) => setIds(v.slice(-1)) : setIds} />
           {appliesTo !== "FULL" ? (
             <PxField label="Tamanhos de decant" hint="Nenhum marcado = todos os tamanhos.">
               <div className="flex min-w-0 gap-2">
@@ -858,8 +942,8 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
               value={copy}
               onChange={setCopy}
               vars={promoVars}
-              badge={`${pct}% OFF`}
-              fallbackMessage={`${pct}% OFF em ${name.trim() || "seus perfumes"}`}
+              badge={`${pctLabel}% OFF`}
+              fallbackMessage={`${pctLabel}% OFF em ${name.trim() || "seus perfumes"}`}
             />
           ) : null}
         </>

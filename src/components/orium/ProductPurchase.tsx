@@ -294,7 +294,7 @@ export function ProductPurchase({
           <div key={`black-${mode}-${ml}`} className="pd-price rounded-[22px] bg-[#0A0A0A] p-4 ring-1 ring-white/10">
             <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-3">
               <BlackTag promotion={black} size="md" />
-              <BlackCountdown endsAt={black.ends_at} variant="boxes" />
+              <BlackCountdown endsAt={black.ends_at} variant="boxes" showDate />
             </div>
             <BlackPrice
               size="page"
