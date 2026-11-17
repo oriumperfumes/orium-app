@@ -8,7 +8,9 @@ import { track } from "@/lib/analytics";
 import { brl } from "@/lib/format";
 import { priceUnit } from "@/lib/promotions";
 import { usePromotions } from "@/lib/use-promotions";
-import { usePricesOnRequestAll } from "@/lib/price-on-request";
+import { isOnRequest, useConsultIds } from "@/lib/price-on-request";
+import { isBlack } from "@/lib/black";
+import { BlackOff, BlackTag } from "@/components/orium/black/Black";
 import { cn } from "@/lib/utils";
 import { Bottle3D, type Bottle3DModel } from "@/components/orium/home/bottles/Bottle3D";
 
@@ -87,7 +89,8 @@ export function FrascosSpinCard({
     },
   });
   const promotions = usePromotions();
-  const onRequestAll = usePricesOnRequestAll();
+  // mesma regra dos cartões do catálogo: loja sob consulta, menos os perfumes da Black em vigor
+  const consultIds = useConsultIds();
 
   // só frascos que existem e estão à venda (enquanto carrega, mostra todos)
   const bottles = useMemo(
@@ -121,11 +124,14 @@ export function FrascosSpinCard({
 
   const row = cur.row;
   // loja (ou este perfume) em "preços sob consulta": igual ao card de produto
-  const consult = !!row && (onRequestAll || row.price_on_request === true);
+  const consult = !!row && isOnRequest(row, consultIds);
   const priced =
-    row && !onRequestAll && !row.price_on_request && row.retail_price != null
+    row && !consult && row.retail_price != null
       ? priceUnit(Number(row.retail_price), promotions, { productId: row.id, variant: "FULL" })
       : null;
+  // em promoção de verdade: preço cheio riscado, preço da promoção e o % real
+  const promo = priced?.promotion && priced.basePrice > priced.finalPrice ? priced : null;
+  const off = promo ? (1 - promo.finalPrice / promo.basePrice) * 100 : 0;
 
   return (
     <section
@@ -199,22 +205,29 @@ export function FrascosSpinCard({
         <span className="mt-0.5 text-[17px] leading-tight font-semibold text-white">
           {cur.name}
         </span>
-        <span className="mt-1.5 flex items-baseline gap-2 text-[14px] text-[#A9A9A9]">
-          {priced ? (
-            <>
-              {priced.promotion && priced.basePrice > priced.finalPrice ? (
-                <s className="tabular-nums">{brl(priced.basePrice)}</s>
-              ) : null}
-              <strong className="text-[16px] font-bold text-white tabular-nums">
-                {brl(priced.finalPrice)}
-              </strong>
-            </>
+        {promo ? (
+          <span className="mt-2 flex flex-col items-center gap-1.5">
+            {isBlack(promo.promotion) ? (
+              <BlackTag promotion={promo.promotion} size="sm" />
+            ) : (
+              <span className="rounded-full bg-[#FFD599] px-2.5 py-0.5 text-[11px] font-bold tracking-wide text-[#15130F] uppercase">Promoção</span>
+            )}
+            <span className="flex items-baseline gap-2 text-[14px] text-[#8C8C8C]">
+              <s className="tabular-nums">{brl(promo.basePrice)}</s>
+              <strong className="text-[20px] font-extrabold tracking-tight text-white tabular-nums">{brl(promo.finalPrice)}</strong>
+              <BlackOff percent={off} className="text-[14px]" />
+            </span>
+          </span>
+        ) : null}
+        <span className={cn("flex items-baseline gap-2 text-[14px] text-[#A9A9A9]", promo ? "mt-1" : "mt-1.5")}>
+          {promo ? null : priced ? (
+            <strong className="text-[16px] font-bold text-white tabular-nums">{brl(priced.finalPrice)}</strong>
           ) : consult ? (
             <strong className="text-[16px] font-bold text-[#FFD599]">Sob consulta</strong>
           ) : null}
           {row?.volume_ml ? (
             <span>
-              {priced || consult ? "· " : ""}
+              {(priced && !promo) || consult ? "· " : ""}
               {row.volume_ml} ml
             </span>
           ) : null}
