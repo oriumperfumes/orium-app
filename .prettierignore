@@ -7,3 +7,4 @@ package-lock.json
 bun.lock
 routeTree.gen.ts
 src/components/orium/home/bottles/club-de-nuit-glyphs.json
+src/components/orium/home/bottles/asad-bourbon-glyphs.json
