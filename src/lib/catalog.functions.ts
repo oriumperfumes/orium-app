@@ -252,9 +252,6 @@ export const placeCatalogOrder = createServerFn({ method: "POST" })
     }
     const minQty = settings?.wholesale_min_quantity ?? 6;
     const totalQuantity = items.reduce((s, i) => s + i.quantity, 0);
-    // atacado é regra de FRASCOS: decants nunca contam nem recebem desconto
-    const bottleQuantity = items.filter((i) => i.variant === "FULL").reduce((s, i) => s + i.quantity, 0);
-    const tier: "varejo" | "atacado" = bottleQuantity >= minQty ? "atacado" : "varejo";
 
     // preço oficial: base recalculada + promoção + cupom (o navegador só manda o código)
     const priced = await priceCart(
@@ -267,6 +264,12 @@ export const placeCatalogOrder = createServerFn({ method: "POST" })
       })),
       { couponCode: data.couponCode ?? null, userId: viewerId, deviceId: data.deviceId ?? null },
     );
+    // atacado é regra de FRASCOS sem promoção: decants e perfumes em promoção
+    // (ex.: Black) nunca contam nem recebem atacado — mesma regra do priceCart
+    const bottleQuantity = priced.lines
+      .filter((l) => l.variant === "FULL" && !l.promotionId)
+      .reduce((s, l) => s + l.quantity, 0);
+    const tier: "varejo" | "atacado" = bottleQuantity >= minQty ? "atacado" : "varejo";
     const key = (productId: string, variant: string, ml: number | null) => `${productId}:${variant}:${ml ?? ""}`;
     const pricedByKey = new Map(priced.lines.map((l) => [key(l.productId, l.variant, l.decantMl), l]));
 

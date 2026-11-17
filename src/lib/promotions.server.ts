@@ -198,7 +198,14 @@ export async function priceCart(
     loadActiveCombos(db),
   ]);
 
-  const bottleQty = lines.filter((l) => l.variant === "FULL").reduce((s, l) => s + Number(l.quantity), 0);
+  // Perfume em promoção (ex.: Black November) vende pelo preço da promoção,
+  // calculado sobre o VAREJO: não recebe atacado e não conta para o mínimo de
+  // frascos do atacado. Mesma regra da Sacola (cart.tsx) e do Copilot.
+  const promoOf = (l: CartLineInput) =>
+    bestPromotion(promotions, { productId: l.productId, variant: l.variant, decantMl: l.variant === "DECANT" ? Number(l.decantMl) : null });
+  const bottleQty = lines
+    .filter((l) => l.variant === "FULL" && !promoOf(l))
+    .reduce((s, l) => s + Number(l.quantity), 0);
   const wholesale = bottleQty >= minQty;
 
   const unavailable: string[] = [];
@@ -224,7 +231,8 @@ export async function priceCart(
       }
       base = decantBasePrice(p, decantSettings, ml!);
     } else {
-      base = money(Number((wholesale ? p.wholesale_price : p.retail_price) ?? 0));
+      const onPromo = !!promoOf(l);
+      base = money(Number((wholesale && !onPromo ? p.wholesale_price : p.retail_price) ?? 0));
       if (!p.in_stock) unavailable.push(p.canonical_name);
     }
 
