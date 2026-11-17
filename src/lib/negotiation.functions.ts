@@ -411,3 +411,87 @@ export const searchCatalogForNegotiation = createServerFn({ method: "POST" })
 
     return { items };
   });
+
+export type NegotiationSaleInput = {
+  itemId: string;
+  /** quanto a peça foi vendida (valor recebido) */
+  price: number;
+  /** quanto a peça custou (opcional, para o lucro) */
+  cost?: number | null;
+  paymentMethod: string;
+  customerId?: string | null;
+  customerName?: string | null;
+  soldAt?: string | null;
+  idempotencyKey: string;
+};
+
+/**
+ * Vende uma peça do mostruário da Negociação.
+ *
+ * A venda entra em Vendas da loja pelo mesmo `store_sale_commit` (faturamento,
+ * lucro, histórico e cancelamento iguais aos outros), usando a ficha interna
+ * do item como produto. Depois a peça sai da vitrine como Vendida.
+ */
+export const sellNegotiationItem = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: NegotiationSaleInput) => {
+    if (!data.itemId) throw new Error("Escolha a peça vendida.");
+    if (!(Number(data.price) > 0)) throw new Error("Informe por quanto a peça foi vendida.");
+    if (!data.paymentMethod) throw new Error("Escolha a forma de pagamento.");
+    if (data.cost != null && !(Number(data.cost) >= 0)) throw new Error("Custo inválido.");
+    return data;
+  })
+  .handler(async ({ data, context }) => {
+    const ctx = context as unknown as Ctx & { supabase: any };
+    await staffOnly(ctx);
+    const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
+
+    const { data: item, error: itemErr } = await db
+      .from("negotiation_items")
+      .select("id, name, brand, volume_ml, image_url, product_id, status")
+      .eq("id", data.itemId)
+      .maybeSingle();
+    if (itemErr) throw new Error(itemErr.message);
+    if (!item) throw new Error("Peça não encontrada.");
+
+    const productId =
+      item.product_id ??
+      (await ensureFragranceSubject(db as never, item.id, {
+        name: item.name,
+        brand: item.brand,
+        volume_ml: item.volume_ml,
+        image_url: item.image_url,
+      }));
+    if (!productId) throw new Error("Não foi possível preparar a peça para a venda.");
+
+    // a foto real da peça vai junto no histórico da venda; o custo, para o lucro
+    const photo = item.image_url
+      ? /^https?:\/\//i.test(item.image_url)
+        ? item.image_url
+        : `/api/public/negociacao-foto?path=${encodeURIComponent(item.image_url)}`
+      : null;
+    const patch: Record<string, unknown> = {};
+    if (photo) patch.image_url = photo;
+    if (data.cost != null) patch.manual_cost = Number(data.cost);
+    if (Object.keys(patch).length) await db.from("products").update(patch as never).eq("id", productId);
+
+    const price = Math.round(Number(data.price) * 100) / 100;
+    const { data: result, error } = await ctx.supabase.rpc("store_sale_commit", {
+      p_payload: {
+        idempotency_key: data.idempotencyKey,
+        entry_method: "manual",
+        payment_method: data.paymentMethod,
+        customer_id: data.customerId ?? null,
+        customer_name: data.customerName ?? null,
+        sold_at: data.soldAt ?? null,
+        transcript: "Mostruário da Negociação",
+        discount: null,
+        total: price,
+        items: [{ product_id: productId, variant: "FULL", decant_ml: null, quantity: 1, unit_price: price }],
+      },
+    });
+    if (error) throw new Error(error.message);
+
+    await db.from("negotiation_items").update({ status: "SOLD" }).eq("id", item.id);
+    return result as { id: string; duplicate: boolean };
+  });

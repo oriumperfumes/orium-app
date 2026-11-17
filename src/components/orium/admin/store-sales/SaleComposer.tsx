@@ -3,42 +3,22 @@
  *
  * A IA sugere, o Admin revisa e confirma. Nada é registrado antes de
  * "Confirmar venda", e o registro final é idempotente (dois toques = uma venda).
+ *
+ * Visual: corpo da janela lateral (SidePanel + PanelHeader ficam com quem abre),
+ * cartões #1A1A1A, controles #232323, branco = escolhido, dourado na ação final.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
-import {
-  Check,
-  Loader2,
-  Mic,
-  Minus,
-  Plus,
-  Search,
-  Trash2,
-  X,
-  AlertTriangle,
-  Pencil,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { AlertTriangle, CalendarClock, Check, Minus, Pencil, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
+import { GoldButton, SoftButton } from "@/components/orium/admin/PanelKit";
+import { AnimatedNumber, Collapse } from "@/components/orium/admin/motion";
 import { brl } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { decantPrice, DECANT_SIZES, type DecantMl } from "@/lib/decants";
 import { useDecantSettings } from "@/lib/use-decant-settings";
-import {
-  storeSaleProductSearch,
-  storeSaleCommit,
-  storeSaleUpdate,
-  storeSaleCustomerSearch,
-} from "@/lib/store-sales.functions";
-
-/** ISO → valor aceito por <input type="datetime-local"> no fuso local. */
-const toLocalInput = (iso: string) => {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-};
-
+import { storeSaleProductSearch, storeSaleCommit, storeSaleUpdate } from "@/lib/store-sales.functions";
+import { CustomerField, PaymentPicker, SaleThumb, SectionLabel, parseMoney, saleUid, toLocalInput } from "./parts";
 
 type Candidate = {
   product_id: string;
@@ -76,43 +56,43 @@ type Item = {
   corrected?: boolean;
 };
 
-const PAYMENTS = [
-  { value: "PIX", label: "Pix" },
-  { value: "CARTAO", label: "Cartão" },
-  { value: "DINHEIRO", label: "Dinheiro" },
-];
-
-const uid = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-
 /** comparação simples de nomes, só para saber se vale mostrar "você disse…" */
 const searchish = (s: string) =>
-  (s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "");
-
+  (s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "");
 
 const canDecant = (c: Candidate | null) =>
   !!c && c.product_type === "PERFUME" && c.decant_available && String(c.sale_mode ?? "BOTH").toUpperCase() !== "FULL_ONLY";
 const canFull = (c: Candidate | null) =>
   !!c && String(c.sale_mode ?? "BOTH").toUpperCase() !== "DECANT_ONLY" && c.retail_price != null;
 
-function Thumb({ url, name }: { url: string | null; name: string }) {
-  if (!url)
-    return (
-      <div className="grid size-14 shrink-0 place-items-center rounded-xl bg-muted text-[10px] text-muted-foreground">
-        sem foto
-      </div>
-    );
-  return <img src={url} alt={name} className="size-14 shrink-0 rounded-xl object-cover" loading="lazy" />;
+/** pílula pequena de escolha (frasco / tamanhos) */
+function Chip({ on, children, onClick }: { on: boolean; children: React.ReactNode; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      onClick={onClick}
+      className={cn(
+        "press h-9 rounded-full px-3.5 text-[13.5px] font-semibold transition-colors duration-200",
+        on ? "bg-white text-[#15130F]" : "bg-[#2A2A2A] text-[#D4D4D4] hover:bg-[#333]",
+      )}
+    >
+      {children}
+    </button>
+  );
 }
 
 /* ------------------------------------------------------------------ itens */
 
 function ItemCard({
   item,
+  index,
   settings,
   onChange,
   onRemove,
 }: {
   item: Item;
+  index: number;
   settings: ReturnType<typeof useDecantSettings>;
   onChange: (patch: Partial<Item>) => void;
   onRemove: () => void;
@@ -171,197 +151,175 @@ function ItemCard({
   const heardDifferent =
     resolved && item.spoken_name && searchish(item.spoken_name) !== searchish(item.name) ? item.spoken_name : null;
 
-  // qual seleção de variante mostrar: só o necessário
   const showFull = item.variant === "FULL" || item.variant === "UNKNOWN" || switching;
   const showSizes = item.variant === "DECANT" || item.variant === "UNKNOWN" || switching;
+  const needs = !resolved || item.needs_variant || item.needs_size;
 
   return (
-    <div className="rounded-2xl border border-border/60 bg-card p-3">
+    <article
+      className={cn("sale-item pk-in min-w-0 rounded-[24px] bg-[#1A1A1A] p-3.5 transition-shadow duration-300", needs && "shadow-[inset_0_0_0_1.5px_rgba(255,213,153,0.45)]")}
+      style={{ ["--i" as string]: index }}
+    >
       <div className="flex min-w-0 gap-3">
-        <Thumb url={resolved || item.confidence === "medium" ? item.image_url : null} name={item.name} />
-        <div className="min-w-0 flex-1">
-          {resolved ? (
-            <p className="truncate text-[11px] tracking-wide text-muted-foreground uppercase">{item.brand ?? "—"}</p>
-          ) : null}
-          <p className="line-clamp-2 text-sm font-medium">
+        <SaleThumb url={resolved || item.confidence === "medium" ? item.image_url : null} name={item.name} size={64} />
+        <div className="min-w-0 flex-1 pt-0.5">
+          {resolved ? <p className="truncate text-[12.5px] font-medium text-[#8C8C8C]">{item.brand ?? "—"}</p> : null}
+          <p className="line-clamp-2 text-[15.5px] leading-snug font-bold tracking-[-0.01em]">
             {resolved ? item.name : item.confidence === "medium" && suggestion ? suggestion.name : `“${item.spoken_name}”`}
           </p>
-          {resolved ? (
-            <p className="text-[12px] text-muted-foreground">
-              {item.variant === "FULL"
-                ? "Frasco"
-                : item.variant === "DECANT"
-                  ? item.decant_ml
-                    ? `Decant ${item.decant_ml}ml`
-                    : "Decant · tamanho pendente"
-                  : "Frasco ou decant?"}
-              {" · "}
-              {item.quantity}x
-            </p>
-          ) : null}
           {heardDifferent ? (
-            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-              Você disse “{heardDifferent}” · entendi <span className="text-gold">{item.name}</span>
+            <p className="mt-0.5 truncate text-[12px] text-[#8C8C8C]">
+              Você disse “{heardDifferent}” · entendi <span className="text-[#FFD599]">{item.name}</span>
             </p>
           ) : null}
 
           {!resolved && item.confidence === "medium" && suggestion ? (
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <span className="text-[12px] text-muted-foreground">É este produto?</span>
-              <Button size="sm" className="h-8 rounded-full px-3" onClick={() => pick(suggestion, false)}>
-                Confirmar
-              </Button>
-              <Button size="sm" variant="outline" className="h-8 rounded-full px-3" onClick={() => setPicking(true)}>
+              <span className="text-[12.5px] text-[#A9A9A9]">É este?</span>
+              <button type="button" className="press h-8 rounded-full bg-white px-3 text-[13px] font-bold text-[#15130F]" onClick={() => pick(suggestion, false)}>
+                Sim, é esse
+              </button>
+              <button type="button" className="press h-8 rounded-full bg-[#2A2A2A] px-3 text-[13px] font-semibold" onClick={() => setPicking(true)}>
                 Trocar
-              </Button>
+              </button>
             </div>
           ) : null}
           {!resolved && item.confidence === "low" ? (
             <button
-              className="press mt-1 inline-flex items-center gap-1.5 rounded-full bg-gold/12 px-2.5 py-1 text-[11px] text-gold"
+              type="button"
+              className="press mt-2 inline-flex h-8 items-center gap-1.5 rounded-full bg-[#FFD599]/12 px-3 text-[12.5px] font-semibold text-[#FFD599]"
               onClick={() => setPicking((v) => !v)}
             >
-              <AlertTriangle className="size-3" strokeWidth={2} />
+              <AlertTriangle className="size-3.5" strokeWidth={2.2} />
               {item.candidates.length ? "Qual deles você vendeu?" : "Não encontrei com segurança"}
             </button>
           ) : null}
           {resolved ? (
-            <button className="press mt-1 text-[11px] text-muted-foreground underline" onClick={() => setPicking((v) => !v)}>
-              Trocar perfume
+            <button type="button" className="press mt-1 text-[12.5px] font-medium text-[#8C8C8C] hover:text-white" onClick={() => setPicking((v) => !v)}>
+              {picking ? "Fechar opções" : "Trocar perfume"}
             </button>
           ) : null}
         </div>
-        <button className="press grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground" onClick={onRemove} aria-label="Remover item">
-          <Trash2 className="size-4" strokeWidth={1.75} />
+        <button
+          type="button"
+          className="press grid size-9 shrink-0 place-items-center rounded-full bg-[#232323] text-[#8C8C8C] transition-colors hover:bg-[#2E2E2E] hover:text-[#FF9A8A]"
+          onClick={onRemove}
+          aria-label="Remover item"
+        >
+          <Trash2 className="size-4" />
         </button>
       </div>
 
-      {picking ? (
-        <div className="mt-3 space-y-1.5 rounded-xl bg-muted/40 p-2">
+      <Collapse open={picking}>
+        <div className="mt-3 space-y-1 rounded-[18px] bg-[#232323] p-1.5">
           {item.candidates.length === 0 ? (
-            <p className="px-1 py-2 text-xs text-muted-foreground">
-              Nenhum perfume parecido no catálogo. Use a busca acima para escolher.
-            </p>
+            <p className="px-2 py-2.5 text-[13px] text-[#8C8C8C]">Nenhum perfume parecido no catálogo. Use a busca acima.</p>
           ) : (
             item.candidates.map((c) => (
               <button
+                type="button"
                 key={c.product_id}
                 onClick={() => pick(c, c.product_id !== suggestion?.product_id)}
                 className={cn(
-                  "press flex w-full min-w-0 items-center gap-2.5 rounded-lg p-2 text-left",
-                  c.product_id === item.product_id ? "bg-gold/12" : "hover:bg-card",
+                  "press flex w-full min-w-0 items-center gap-3 rounded-[14px] p-2 text-left transition-colors",
+                  c.product_id === item.product_id ? "bg-white text-[#15130F]" : "hover:bg-[#2E2E2E]",
                 )}
               >
-                <Thumb url={c.image_url} name={c.name} />
+                <SaleThumb url={c.image_url} name={c.name} size={44} />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm">{c.name}</span>
-                  <span className="block truncate text-[11px] text-muted-foreground">{c.brand ?? "—"}</span>
+                  <span className="block truncate text-[14px] font-semibold">{c.name}</span>
+                  <span className={cn("block truncate text-[12px]", c.product_id === item.product_id ? "text-[#15130F]/60" : "text-[#8C8C8C]")}>{c.brand ?? "—"}</span>
                 </span>
-                {c.product_id === item.product_id ? <Check className="size-4 text-gold" strokeWidth={2} /> : null}
+                {c.product_id === item.product_id ? <Check className="size-4" strokeWidth={2.6} /> : null}
               </button>
             ))
           )}
         </div>
-      ) : null}
+      </Collapse>
 
       {resolved ? (
         <>
-          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <div className="mt-3.5 flex flex-wrap items-center gap-1.5">
             {showFull && (canFull(chosen) || !chosen) ? (
-              <button
-                onClick={() => setVariant("FULL", null)}
-                className={cn(
-                  "press h-9 rounded-full px-3 text-[13px]",
-                  item.variant === "FULL" ? "bg-foreground text-background" : "bg-muted/50 text-muted-foreground",
-                )}
-              >
+              <Chip on={item.variant === "FULL"} onClick={() => setVariant("FULL", null)}>
                 Frasco
-              </button>
+              </Chip>
             ) : null}
             {showSizes && (canDecant(chosen) || !chosen)
               ? DECANT_SIZES.map((ml) => (
-                  <button
-                    key={ml}
-                    onClick={() => setVariant("DECANT", ml)}
-                    className={cn(
-                      "press h-9 rounded-full px-3 text-[13px]",
-                      item.variant === "DECANT" && item.decant_ml === ml
-                        ? "bg-foreground text-background"
-                        : "bg-muted/50 text-muted-foreground",
-                    )}
-                  >
-                    {ml}ml
-                  </button>
+                  <Chip key={ml} on={item.variant === "DECANT" && item.decant_ml === ml} onClick={() => setVariant("DECANT", ml)}>
+                    Decant {ml}ml
+                  </Chip>
                 ))
               : null}
             {!switching && item.variant !== "UNKNOWN" ? (
-              <button className="press h-9 px-2 text-[12px] text-muted-foreground underline" onClick={() => setSwitching(true)}>
-                {item.variant === "FULL" ? "Era decant" : "Era frasco"}
+              <button type="button" className="press h-9 px-2 text-[12.5px] font-medium text-[#8C8C8C] hover:text-white" onClick={() => setSwitching(true)}>
+                {item.variant === "FULL" ? "Era decant?" : "Era frasco?"}
               </button>
             ) : null}
           </div>
 
-          {item.needs_variant ? <p className="mt-2 text-[11px] text-gold">Foi frasco ou decant?</p> : null}
-          {item.needs_size ? <p className="mt-2 text-[11px] text-gold">Qual tamanho do decant?</p> : null}
+          {item.needs_variant ? <p className="mt-2 text-[12.5px] font-semibold text-[#FFD599]">Foi frasco ou decant?</p> : null}
+          {item.needs_size ? <p className="mt-2 text-[12.5px] font-semibold text-[#FFD599]">Qual o tamanho do decant?</p> : null}
 
-          <div className="mt-3 flex min-w-0 flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-1">
+          <div className="mt-3.5 flex min-w-0 items-center justify-between gap-3 border-t border-white/[0.06] pt-3">
+            <div className="flex items-center gap-1 rounded-full bg-[#232323] p-1">
               <button
-                className="press grid size-9 place-items-center rounded-full bg-muted/60"
+                type="button"
+                className="press grid size-8 place-items-center rounded-full text-[#D4D4D4] hover:bg-[#2E2E2E] disabled:opacity-30"
                 onClick={() => onChange({ quantity: Math.max(1, item.quantity - 1) })}
+                disabled={item.quantity <= 1}
                 aria-label="Menos um"
               >
-                <Minus className="size-4" strokeWidth={2} />
+                <Minus className="size-4" strokeWidth={2.2} />
               </button>
-              <span className="w-8 text-center text-sm tabular-nums">{item.quantity}</span>
+              <span className="w-7 text-center text-[15px] font-bold tabular-nums">{item.quantity}</span>
               <button
-                className="press grid size-9 place-items-center rounded-full bg-muted/60"
+                type="button"
+                className="press grid size-8 place-items-center rounded-full text-[#D4D4D4] hover:bg-[#2E2E2E]"
                 onClick={() => onChange({ quantity: Math.min(99, item.quantity + 1) })}
                 aria-label="Mais um"
               >
-                <Plus className="size-4" strokeWidth={2} />
+                <Plus className="size-4" strokeWidth={2.2} />
               </button>
             </div>
 
             <div className="min-w-0 text-right">
               {editingPrice ? (
-                <Input
-                  type="number"
+                <input
+                  type="text"
                   inputMode="decimal"
                   autoFocus
-                  className="h-10 w-28 text-base"
-                  defaultValue={item.unit_price ?? ""}
+                  className="pk-field h-10 w-32 rounded-[14px] bg-[#2A2A2A] px-3 text-right text-[16px] font-bold text-white tabular-nums outline-none"
+                  defaultValue={item.unit_price != null ? String(item.unit_price).replace(".", ",") : ""}
+                  onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
                   onBlur={(e) => {
-                    const v = Number(e.target.value.replace(",", "."));
+                    const v = parseMoney(e.target.value) ?? 0;
                     setEditingPrice(false);
                     onChange({ unit_price: v > 0 ? v : null, price_source: v > 0 ? "spoken" : "none" });
                   }}
                 />
               ) : (
                 <button
-                  className="press inline-flex items-center gap-1.5 text-sm"
+                  type="button"
+                  className="press inline-flex items-center gap-1.5 rounded-full px-1 text-[16px] font-bold tabular-nums disabled:opacity-40"
                   onClick={() => setEditingPrice(true)}
                   disabled={item.variant === "UNKNOWN" || (item.variant === "DECANT" && !item.decant_ml)}
                 >
-                  {item.unit_price != null ? `${brl(item.unit_price)} cada` : "Definir preço"}
-                  <Pencil className="size-3 text-muted-foreground" strokeWidth={1.75} />
+                  {item.unit_price != null ? brl(item.unit_price) : "Definir preço"}
+                  <Pencil className="size-3.5 text-[#8C8C8C]" />
                 </button>
               )}
-              <p className="text-[11px] text-muted-foreground">
-                {!complete
-                  ? "—"
-                  : item.price_source === "current"
-                    ? `Preço atual · ${brl(subtotal)}`
-                    : brl(subtotal)}
+              <p className="text-[12px] text-[#8C8C8C]">
+                {!complete ? "cada" : item.quantity > 1 ? `cada · ${brl(subtotal)} no total` : item.price_source === "current" ? "preço do catálogo" : "preço combinado"}
               </p>
             </div>
           </div>
         </>
       ) : null}
-    </div>
+    </article>
   );
 }
-
 
 /* --------------------------------------------------------------- composer */
 
@@ -388,30 +346,25 @@ export function SaleComposer({
   mode: "manual" | "edit";
   initial?: SaleComposerInitial;
   onClose: () => void;
-  onSaved: (saleId: string) => void;
+  onSaved: (saleId: string, total: number) => void;
 }) {
   const editing = mode === "edit" && !!initial;
   const settings = useDecantSettings();
   const [items, setItems] = useState<Item[]>(initial?.items ?? []);
   const [payment, setPayment] = useState<string | null>(initial?.payment_method ?? null);
-  const [customer, setCustomer] = useState<{ id: string | null; name: string | null }>(
-    initial?.customer ?? { id: null, name: null },
-  );
-  const [customerQuery, setCustomerQuery] = useState("");
-  const [customerResults, setCustomerResults] = useState<Array<{ id: string; name: string | null; phone: string | null }>>([]);
+  const [customer, setCustomer] = useState<{ id: string | null; name: string | null }>(initial?.customer ?? { id: null, name: null });
   const [spokenTotal, setSpokenTotal] = useState<number | null>(initial?.total ?? null);
   const [editingTotal, setEditingTotal] = useState(false);
   const [soldAt, setSoldAt] = useState<string | null>(initial?.sold_at ?? null);
-  const [transcript, setTranscript] = useState<string | null>(initial?.transcript ?? null);
-  const [editingTranscript, setEditingTranscript] = useState(false);
+  const [showDate, setShowDate] = useState(editing);
+  const transcript = initial?.transcript ?? null;
   const entryMethod: "voice" | "manual" = initial?.entry_method ?? "manual";
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Candidate[]>([]);
   const [searching, setSearching] = useState(false);
-  const idempotency = useRef(uid());
+  const idempotency = useRef(saleUid());
   const seq = useRef(initial?.expected_seq ?? 0);
-
-
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const commit = useMutation({
     mutationFn: () =>
@@ -437,15 +390,11 @@ export function SaleComposer({
             entryMethod === "voice"
               ? items
                   .filter((i) => i.product_id && i.spoken_name && searchish(i.spoken_name) !== searchish(i.name))
-                  .map((i) => ({
-                    spoken_name: i.spoken_name,
-                    product_id: i.product_id!,
-                    corrected: i.corrected === true,
-                  }))
+                  .map((i) => ({ spoken_name: i.spoken_name, product_id: i.product_id!, corrected: i.corrected === true }))
               : [],
         },
       }),
-    onSuccess: (res) => onSaved(res.id),
+    onSuccess: (res) => onSaved(res.id, total),
     onError: (e) => toast.error(e instanceof Error ? e.message : "Não consegui registrar a venda."),
   });
 
@@ -472,15 +421,12 @@ export function SaleComposer({
       }),
     onSuccess: (res) => {
       seq.current = res.edit_seq;
-      onSaved(res.id);
+      onSaved(res.id, total);
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Não consegui salvar as alterações."),
   });
 
-
-
-
-  // busca de produto (venda manual e adição rápida)
+  // busca de produto
   useEffect(() => {
     const q = query.trim();
     if (q.length < 2) {
@@ -503,39 +449,20 @@ export function SaleComposer({
     };
   }, [query]);
 
-  useEffect(() => {
-    const q = customerQuery.trim();
-    if (q.length < 2) {
-      setCustomerResults([]);
-      return;
-    }
-    let alive = true;
-    const timer = setTimeout(() => {
-      void storeSaleCustomerSearch({ data: { q } })
-        .then((r) => alive && setCustomerResults(r))
-        .catch(() => undefined);
-    }, 250);
-    return () => {
-      alive = false;
-      clearTimeout(timer);
-    };
-  }, [customerQuery]);
-
   const addCandidate = (c: Candidate) => {
     const variant: Item["variant"] = canFull(c) ? "FULL" : canDecant(c) ? "DECANT" : "UNKNOWN";
-    const ml = null;
     const price = variant === "FULL" ? c.retail_price : null;
     setItems((prev) => [
       ...prev,
       {
-        key: uid(),
+        key: saleUid(),
         spoken_name: c.name,
         product_id: c.product_id,
         name: c.name,
         brand: c.brand,
         image_url: c.image_url,
         variant,
-        decant_ml: ml,
+        decant_ml: null,
         quantity: 1,
         unit_price: price ?? null,
         price_source: price != null ? "current" : "none",
@@ -552,203 +479,172 @@ export function SaleComposer({
   const incomplete = items.some(
     (i) => !i.product_id || i.variant === "UNKNOWN" || (i.variant === "DECANT" && !i.decant_ml) || i.unit_price == null,
   );
-  const subtotal = useMemo(
-    () => items.reduce((sum, i) => sum + (i.unit_price ?? 0) * i.quantity, 0),
-    [items],
-  );
+  const subtotal = useMemo(() => items.reduce((sum, i) => sum + (i.unit_price ?? 0) * i.quantity, 0), [items]);
   const discount = spokenTotal != null && spokenTotal < subtotal ? Number((subtotal - spokenTotal).toFixed(2)) : 0;
   const total = Number((subtotal - discount).toFixed(2));
   /** enquanto faltar produto ou tamanho, nada de R$ 0,00 na tela */
   const pending = items.length === 0 || incomplete;
-
   const blocked = items.length === 0 || !payment || incomplete;
-
+  const missing = items.length === 0 ? "Adicione um perfume" : incomplete ? "Complete os itens marcados" : !payment ? "Escolha o pagamento" : null;
+  const units = items.reduce((n, i) => n + i.quantity, 0);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 pb-4">
-
+      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-5 pt-1 pb-6 lg:px-6">
         {transcript ? (
-          <div className="rounded-xl bg-muted/40 p-3">
-            <p className="text-[11px] tracking-wide text-muted-foreground uppercase">Transcrição original</p>
-            <p className="mt-1 text-sm text-muted-foreground">“{transcript}”</p>
+          <div className="flex min-w-0 gap-3 rounded-[20px] bg-[#1A1A1A] p-4">
+            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[#FFD599]/12 text-[#FFD599]">
+              <Sparkles className="size-4" />
+            </span>
+            <p className="min-w-0 text-[14px] leading-relaxed text-[#BABABA]">“{transcript}”</p>
           </div>
         ) : null}
 
-
-        {/* busca / adição rápida */}
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="relative min-w-0 flex-1">
-              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" strokeWidth={1.75} />
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Buscar perfume ou marca"
-                className="h-12 pl-9 text-base"
-              />
-            </div>
-
+        {/* 1 · perfumes */}
+        <section>
+          <SectionLabel right={items.length ? <span className="text-[12.5px] font-semibold text-[#8C8C8C] tabular-nums">{units} {units === 1 ? "item" : "itens"}</span> : null}>
+            Perfumes vendidos
+          </SectionLabel>
+          <div className="relative">
+            <Search className="pointer-events-none absolute top-1/2 left-4 size-[18px] -translate-y-1/2 text-[#6F6F6F]" />
+            <input
+              ref={searchRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar perfume ou marca"
+              autoFocus={!editing && items.length === 0}
+              className="pk-field h-[52px] w-full min-w-0 rounded-[18px] bg-[#232323] pr-11 pl-11 text-[16px] text-white outline-none transition-colors duration-200 placeholder:text-[#6F6F6F] hover:bg-[#262626] focus:bg-[#2A2A2A]"
+            />
+            {query ? (
+              <button type="button" aria-label="Limpar busca" onClick={() => setQuery("")} className="press absolute top-1/2 right-2 grid size-9 -translate-y-1/2 place-items-center rounded-full text-[#8C8C8C] hover:text-white">
+                <X className="size-4" />
+              </button>
+            ) : null}
           </div>
 
           {query.trim().length >= 2 ? (
-            <div className="mt-2 space-y-1.5 rounded-xl border border-border/60 bg-card p-2">
+            <div className="ui-pop mt-2 max-h-[320px] overflow-y-auto rounded-[20px] bg-[#1A1A1A] p-1.5">
               {searching && results.length === 0 ? (
-                <p className="px-1 py-2 text-xs text-muted-foreground">Buscando…</p>
+                <div className="space-y-1.5 p-1">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="admin-skeleton h-14 rounded-[14px]" />
+                  ))}
+                </div>
               ) : results.length === 0 ? (
-                <p className="px-1 py-2 text-xs text-muted-foreground">Nenhum perfume encontrado.</p>
+                <p className="px-3 py-4 text-[14px] text-[#8C8C8C]">Nenhum perfume com “{query.trim()}”.</p>
               ) : (
-                results.map((c) => (
+                results.map((c, i) => (
                   <button
+                    type="button"
                     key={c.product_id}
                     onClick={() => addCandidate(c)}
-                    className="press flex w-full min-w-0 items-center gap-2.5 rounded-lg p-2 text-left hover:bg-muted/50"
+                    className="pk-in press flex w-full min-w-0 items-center gap-3 rounded-[16px] p-2 text-left transition-colors hover:bg-[#232323]"
+                    style={{ ["--i" as string]: i }}
                   >
-                    <Thumb url={c.image_url} name={c.name} />
+                    <SaleThumb url={c.image_url} name={c.name} size={48} />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm">{c.name}</span>
-                      <span className="block truncate text-[11px] text-muted-foreground">
+                      <span className="block truncate text-[14.5px] font-semibold">{c.name}</span>
+                      <span className="block truncate text-[12.5px] text-[#8C8C8C]">
                         {c.brand ?? "—"}
                         {c.retail_price != null ? ` · ${brl(c.retail_price)}` : ""}
                       </span>
                     </span>
-                    <Plus className="size-4 text-gold" strokeWidth={2} />
+                    <span className="grid size-9 shrink-0 place-items-center rounded-full bg-white text-[#15130F]">
+                      <Plus className="size-4" strokeWidth={2.6} />
+                    </span>
                   </button>
                 ))
               )}
             </div>
           ) : null}
-        </div>
 
-        {/* itens */}
-        <div className="space-y-2">
-          {items.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-border/60 p-6 text-center text-sm text-muted-foreground">
-              Busque um perfume para começar. Para falar, use o Copilot.
-            </p>
-          ) : null}
-          {items.map((item, index) => (
-            <ItemCard
-              key={item.key}
-              item={item}
-              settings={settings}
-              onChange={(patch) =>
-                setItems((prev) => prev.map((it, i) => (i === index ? { ...it, ...patch } : it)))
-              }
-              onRemove={() => setItems((prev) => prev.filter((_, i) => i !== index))}
-            />
-          ))}
-        </div>
-
-        {/* pagamento */}
-        <div>
-          <p className="mb-2 text-[11px] tracking-wide text-muted-foreground uppercase">Pagamento</p>
-          <div className="flex flex-wrap gap-1.5">
-            {PAYMENTS.map((p) => (
+          <div className="mt-3 space-y-2.5">
+            {items.length === 0 && query.trim().length < 2 ? (
               <button
-                key={p.value}
-                onClick={() => setPayment(p.value)}
-                className={cn(
-                  "press h-10 rounded-full px-4 text-sm",
-                  payment === p.value ? "bg-foreground text-background" : "bg-muted/50 text-muted-foreground",
-                )}
+                type="button"
+                onClick={() => searchRef.current?.focus()}
+                className="press flex w-full flex-col items-center gap-2 rounded-[24px] border-2 border-dashed border-white/[0.08] px-6 py-9 text-center text-[#8C8C8C] hover:border-white/[0.14] hover:text-white"
               >
-                {p.label}
+                <span className="grid size-12 place-items-center rounded-full bg-[#1F1F1F] text-white">
+                  <Search className="size-5" />
+                </span>
+                <span className="text-[15px] font-semibold">Busque o perfume vendido</span>
+                <span className="text-[13px]">Frasco ou decant, quantos quiser.</span>
               </button>
+            ) : null}
+            {items.map((item, index) => (
+              <ItemCard
+                key={item.key}
+                item={item}
+                index={index}
+                settings={settings}
+                onChange={(patch) => setItems((prev) => prev.map((it, i) => (i === index ? { ...it, ...patch } : it)))}
+                onRemove={() => setItems((prev) => prev.filter((_, i) => i !== index))}
+              />
             ))}
           </div>
-          {!payment ? <p className="mt-2 text-[11px] text-gold">Selecione a forma de pagamento.</p> : null}
-        </div>
+        </section>
 
-        {/* cliente opcional */}
-        <div>
-          <p className="mb-2 text-[11px] tracking-wide text-muted-foreground uppercase">Cliente (opcional)</p>
-          {customer.id ? (
-            <div className="flex items-center justify-between gap-2 rounded-xl bg-muted/40 p-3 text-sm">
-              <span className="truncate">{customer.name}</span>
-              <button className="press text-xs text-muted-foreground" onClick={() => setCustomer({ id: null, name: null })}>
-                Remover
-              </button>
-            </div>
-          ) : (
+        {/* 2 · pagamento */}
+        <section>
+          <SectionLabel right={!payment && items.length ? <span className="text-[12.5px] font-semibold text-[#FFD599]">Obrigatório</span> : null}>Pagamento</SectionLabel>
+          <PaymentPicker value={payment} onChange={setPayment} />
+        </section>
+
+        {/* 3 · cliente */}
+        <section>
+          <SectionLabel>Cliente</SectionLabel>
+          <CustomerField value={customer} onChange={setCustomer} />
+        </section>
+
+        {/* 4 · data */}
+        <section>
+          {showDate ? (
             <>
-              {customer.name ? (
-                <p className="mb-2 text-sm">
-                  Cliente mencionado: <span className="font-medium">{customer.name}</span>
-                </p>
-              ) : null}
-              <Input
-                value={customerQuery}
-                onChange={(e) => setCustomerQuery(e.target.value)}
-                placeholder="Buscar cliente por nome ou WhatsApp"
-                className="h-11 text-base"
+              <SectionLabel>Data e hora da venda</SectionLabel>
+              <input
+                type="datetime-local"
+                className="pk-field h-12 w-full min-w-0 rounded-[16px] bg-[#232323] px-4 text-[16px] text-white outline-none [color-scheme:dark] focus:bg-[#2A2A2A]"
+                value={soldAt ? toLocalInput(soldAt) : toLocalInput(new Date().toISOString())}
+                onChange={(e) => setSoldAt(e.target.value ? new Date(e.target.value).toISOString() : soldAt)}
               />
-              {customerResults.length > 0 ? (
-                <div className="mt-2 space-y-1 rounded-xl border border-border/60 bg-card p-2">
-                  {customerResults.map((c) => (
-                    <button
-                      key={c.id}
-                      className="press block w-full truncate rounded-lg p-2 text-left text-sm hover:bg-muted/50"
-                      onClick={() => {
-                        setCustomer({ id: c.id, name: c.name });
-                        setCustomerQuery("");
-                        setCustomerResults([]);
-                      }}
-                    >
-                      {c.name ?? "Sem nome"} {c.phone ? <span className="text-muted-foreground">· {c.phone}</span> : null}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-              <p className="mt-2 text-[11px] text-muted-foreground">Pode registrar sem cliente.</p>
             </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowDate(true)}
+              className="press inline-flex h-10 items-center gap-2 rounded-full bg-[#1A1A1A] px-4 text-[13.5px] font-semibold text-[#BABABA] hover:bg-[#202020] hover:text-white"
+            >
+              <CalendarClock className="size-4" />
+              {soldAt ? `Venda de ${new Date(soldAt).toLocaleDateString("pt-BR")}` : "Agora · mudar data"}
+            </button>
           )}
-        </div>
-
-        {editing ? (
-          <div>
-            <p className="mb-2 text-[11px] tracking-wide text-muted-foreground uppercase">Data e hora da venda</p>
-            <Input
-              type="datetime-local"
-              className="h-11 text-base"
-              value={soldAt ? toLocalInput(soldAt) : ""}
-              onChange={(e) => setSoldAt(e.target.value ? new Date(e.target.value).toISOString() : soldAt)}
-            />
-          </div>
-        ) : soldAt ? (
-          <p className="rounded-xl bg-gold/10 p-3 text-sm text-gold">
-            Data desta venda: {new Date(soldAt).toLocaleDateString("pt-BR")}
-          </p>
-        ) : null}
+        </section>
       </div>
 
       {/* resumo fixo */}
-      <div
-        className="border-t border-white/[0.06] bg-[#0A0A0A] px-4 pt-3"
-        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
-      >
-        <div className="mx-auto w-full max-w-2xl space-y-1 text-sm">
-          <div className="flex justify-between text-muted-foreground">
-            <span>Subtotal</span>
-            <span className="tabular-nums">{pending ? "—" : brl(subtotal)}</span>
-          </div>
-          {!pending && discount > 0 ? (
-            <div className="flex justify-between text-muted-foreground">
-              <span>Desconto</span>
-              <span className="tabular-nums">− {brl(discount)}</span>
-            </div>
-          ) : null}
-          <div className="flex min-w-0 items-center justify-between gap-3 text-base font-semibold">
-            <span>Total pago</span>
+      <footer className="pk-footer shrink-0 border-t border-white/[0.06] bg-[#121212] px-5 pt-3.5 pb-[max(1rem,env(safe-area-inset-bottom))] lg:px-6 lg:pb-5">
+        <div className="flex min-w-0 items-end justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[12.5px] font-semibold text-[#8C8C8C]">
+              {!pending && discount > 0 ? (
+                <>
+                  <s className="tabular-nums">{brl(subtotal)}</s> · desconto {brl(discount)}
+                </>
+              ) : (
+                "Total da venda"
+              )}
+            </p>
             {editingTotal ? (
-              <Input
-                type="number"
+              <input
+                type="text"
                 inputMode="decimal"
                 autoFocus
-                className="h-10 w-32 text-base"
-                defaultValue={spokenTotal ?? (pending ? "" : total)}
+                className="pk-field mt-1 h-11 w-40 rounded-[14px] bg-[#2A2A2A] px-3 text-[22px] font-bold text-white tabular-nums outline-none"
+                defaultValue={spokenTotal ?? (pending ? "" : String(total).replace(".", ","))}
+                onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
                 onBlur={(e) => {
-                  const v = Number(e.target.value.replace(",", "."));
+                  const v = parseMoney(e.target.value) ?? 0;
                   setEditingTotal(false);
                   setSpokenTotal(v > 0 ? v : null);
                 }}
@@ -756,40 +652,39 @@ export function SaleComposer({
             ) : (
               <button
                 type="button"
-                className="press inline-flex items-center gap-1.5 tabular-nums"
+                className="press mt-0.5 inline-flex items-baseline gap-2 text-left disabled:opacity-60"
                 onClick={() => setEditingTotal(true)}
                 disabled={pending}
+                title="Dar desconto / mudar total"
               >
-                {pending ? "—" : brl(total)}
-                {!pending ? <Pencil className="size-3 text-muted-foreground" strokeWidth={1.75} /> : null}
+                <span className="text-[30px] leading-none font-bold tracking-[-0.04em] tabular-nums">
+                  {pending ? "—" : <AnimatedNumber value={total} format={(n) => brl(n)} duration={450} />}
+                </span>
+                {!pending ? <Pencil className="size-3.5 text-[#8C8C8C]" /> : null}
               </button>
             )}
           </div>
-          {pending && items.length > 0 ? (
-            <p className="text-[11px] text-muted-foreground">Aguardando informações do item.</p>
-          ) : null}
-
-          <div className="flex gap-2 pt-2">
-            <Button variant="ghost" className="h-12 rounded-full" onClick={onClose}>
-              <X className="size-4" strokeWidth={1.75} />
-            </Button>
-            <Button
-              className="h-12 min-w-0 flex-1 rounded-full text-base"
-              disabled={blocked || commit.isPending || update.isPending}
-              onClick={() => (editing ? update.mutate() : commit.mutate())}
-            >
-              {commit.isPending || update.isPending ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : editing ? (
-                "Salvar alterações"
-              ) : (
-                "Confirmar venda"
-              )}
-            </Button>
-          </div>
+          <p className={cn("pb-1 text-right text-[12.5px] font-semibold transition-colors", missing ? "text-[#FFD599]" : "text-[#7FCF9F]")}>
+            {missing ?? (
+              <span className="inline-flex items-center gap-1">
+                <Check className="size-3.5" strokeWidth={3} /> Pronto
+              </span>
+            )}
+          </p>
         </div>
-      </div>
+        <div className="mt-3 flex gap-2">
+          <SoftButton aria-label="Cancelar" onClick={onClose} className="w-[52px] px-0" icon={<X />} />
+          <GoldButton
+            className="flex-1"
+            disabled={blocked}
+            loading={commit.isPending || update.isPending}
+            icon={<Check className="size-[18px]" strokeWidth={2.6} />}
+            onClick={() => (editing ? update.mutate() : commit.mutate())}
+          >
+            {editing ? "Salvar alterações" : "Confirmar venda"}
+          </GoldButton>
+        </div>
+      </footer>
     </div>
   );
 }
-

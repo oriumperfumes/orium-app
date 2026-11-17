@@ -6,8 +6,9 @@
  * impacto antigo e aplica o novo na mesma transação.
  */
 import { useQuery } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Pencil } from "lucide-react";
+import { PanelHeader } from "@/components/orium/admin/PanelKit";
+import { SidePanel } from "@/components/orium/admin/orders/model";
 import { SaleComposer, type SaleComposerInitial } from "./SaleComposer";
 import { storeSaleDetail, storeSaleItemCandidates } from "@/lib/store-sales.functions";
 import type { DecantMl } from "@/lib/decants";
@@ -19,7 +20,7 @@ export function SaleEditSheet({
 }: {
   id: string | null;
   onClose: () => void;
-  onSaved: (saleId: string) => void;
+  onSaved: (saleId: string, total: number) => void;
 }) {
   const { data, isLoading } = useQuery({
     queryKey: ["store-sale-edit", id],
@@ -71,19 +72,23 @@ export function SaleEditSheet({
   });
 
   return (
-    <Sheet open={!!id} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent side="bottom" className="flex h-[94vh] flex-col gap-0 rounded-t-3xl p-0">
-        <SheetHeader className="px-4 pt-4 pb-2">
-          <SheetTitle className="text-left">{data ? `Editar venda ${data.number}` : "Editar venda"}</SheetTitle>
-        </SheetHeader>
-        {isLoading || !data ? (
-          <div className="grid flex-1 place-items-center">
-            <Loader2 className="size-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : (
-          <SaleComposer mode="edit" initial={data.initial} onClose={onClose} onSaved={onSaved} />
-        )}
-      </SheetContent>
-    </Sheet>
+    <SidePanel open={!!id} onClose={onClose} label="Editar venda">
+      <PanelHeader
+        image={data?.initial.items[0]?.image_url ?? null}
+        fallback={<Pencil className="size-5" />}
+        title={data ? `Editar venda ${data.number}` : "Editar venda"}
+        subtitle="Estoque e financeiro só mudam ao salvar."
+        onClose={onClose}
+      />
+      {isLoading || !data ? (
+        <div className="space-y-3 px-5 lg:px-6">
+          <div className="admin-skeleton h-12 rounded-[18px]" />
+          <div className="admin-skeleton h-44 rounded-[24px]" />
+          <div className="admin-skeleton h-12 rounded-full" />
+        </div>
+      ) : (
+        <SaleComposer mode="edit" initial={data.initial} onClose={onClose} onSaved={onSaved} />
+      )}
+    </SidePanel>
   );
 }
