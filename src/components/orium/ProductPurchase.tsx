@@ -17,6 +17,8 @@ import { useDecantPrices } from "@/components/orium/DecantPicker";
 import { usePromotions } from "@/lib/use-promotions";
 import { priceUnit } from "@/lib/promotions";
 import { PromotionBadge } from "@/components/orium/PromotionBadge";
+import { isBlack } from "@/lib/black";
+import { BlackCountdown, BlackPrice, BlackScarcity, BlackTag } from "@/components/orium/black/Black";
 import { PixNote } from "@/components/orium/PixNote";
 import { DeliveryEstimate } from "@/components/orium/badges";
 import type { CatalogProduct } from "@/components/orium/ProductCard";
@@ -91,6 +93,10 @@ export function ProductPurchase({
   const bottleWord = isPerfume ? "Frasco" : "Produto";
   const showChooser = decantOk && bottleOk;
   const fromPrice = Math.min(...DECANT_SIZES.map((s) => decantPriced(s).finalPrice));
+  /** Black November na escolha atual: vitrine com contagem, escassez real e "Comprar agora". */
+  const black = isBlack(active.promotion) ? active.promotion : null;
+  const bottleBlack = isBlack(bottlePriced.promotion);
+  const decantBlack = DECANT_SIZES.some((s) => isBlack(decantPriced(s).promotion));
 
   const pickSize = (size: DecantMl) => {
     setMl(size);
@@ -147,6 +153,14 @@ export function ProductPurchase({
     flyToCart(flyFrom?.current ?? null, product.image_url);
     setState("done");
     timers.current.forEach((t) => window.clearTimeout(t));
+    if (black) {
+      // "Comprar agora": a sacola abre logo em seguida, pronta para fechar o pedido.
+      timers.current = [
+        window.setTimeout(() => cart.setOpen(true), 650),
+        window.setTimeout(() => setState("idle"), 1400),
+      ];
+      return;
+    }
     timers.current = [
       window.setTimeout(() => setState("view"), 900),
       window.setTimeout(() => setState("idle"), 5200),
@@ -184,7 +198,7 @@ export function ProductPurchase({
         ) : state === "view" ? (
           <span className="value-in">Ver sacola</span>
         ) : (
-          <span className="value-in">Adicionar à sacola</span>
+          <span className="value-in">{black ? "Comprar agora" : "Adicionar à sacola"}</span>
         )}
       </button>
     </>
@@ -206,9 +220,14 @@ export function ProductPurchase({
                 isDecant ? "is-on bg-[#221C14] ring-1 ring-[#FFD599] ring-inset" : "bg-[#1A1A1A] ring-1 ring-white/10 ring-inset",
               )}
             >
-              <span className="absolute top-3.5 left-3.5 rounded-full bg-[#FFD599] px-2.5 py-1 text-[11px] leading-none font-bold text-[#15130F]">
-                Recomendado
-              </span>
+              {/* na Black o selo da campanha ocupa o lugar do "Recomendado" */}
+              {decantBlack ? (
+                <BlackTag size="sm" className="absolute top-3.5 left-3.5" />
+              ) : (
+                <span className="absolute top-3.5 left-3.5 rounded-full bg-[#FFD599] px-2.5 py-1 text-[11px] leading-none font-bold text-[#15130F]">
+                  Recomendado
+                </span>
+              )}
               <span className="text-[18px] leading-tight font-bold text-white">Decant</span>
               <span className="mt-1 text-[13px] text-[#CFCFCF]">2, 5 ou 10 ml</span>
               <span className="text-[13px] text-[#CFCFCF]">a partir de {brl(fromPrice)}</span>
@@ -219,13 +238,17 @@ export function ProductPurchase({
               aria-checked={!isDecant}
               onClick={() => onModeChange("bottle")}
               className={cn(
-                "pd-choice press flex min-h-[124px] flex-col items-start justify-end rounded-[20px] p-4 text-left",
+                "pd-choice press relative flex min-h-[124px] flex-col items-start justify-end rounded-[20px] p-4 text-left",
                 !isDecant ? "is-on bg-[#221C14] ring-1 ring-[#FFD599] ring-inset" : "bg-[#1A1A1A] ring-1 ring-white/10 ring-inset",
               )}
             >
+              {bottleBlack ? <BlackTag size="sm" className="absolute top-3.5 left-3.5" /> : null}
               <span className="text-[18px] leading-tight font-bold text-white">{bottleWord}</span>
               {product.volume_ml ? <span className="mt-1 text-[13px] text-[#A9A9A9]">{product.volume_ml} ml</span> : null}
-              <span className="text-[13px] text-[#A9A9A9] tabular-nums">{brl(bottlePriced.finalPrice)}</span>
+              <span className="text-[13px] text-[#A9A9A9] tabular-nums">
+                {bottleBlack ? <span className="mr-1.5 text-[#6E6E6E] line-through">{brl(bottlePriced.basePrice)}</span> : null}
+                {brl(bottlePriced.finalPrice)}
+              </span>
             </button>
           </div>
         </section>
@@ -267,6 +290,26 @@ export function ProductPurchase({
 
       {/* preço e o que você leva */}
       <div className={isDecant && comboRow ? "mt-5" : "mt-6"}>
+        {black ? (
+          <div key={`black-${mode}-${ml}`} className="pd-price rounded-[22px] bg-[#0A0A0A] p-4 ring-1 ring-white/10">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-3">
+              <BlackTag promotion={black} size="md" />
+              <BlackCountdown endsAt={black.ends_at} variant="boxes" showDate />
+            </div>
+            <BlackPrice
+              size="page"
+              className="mt-4"
+              base={active.basePrice}
+              final={active.finalPrice}
+              percent={Number(black.discount_percent)}
+            />
+            <p className="mt-1.5 text-[13px] font-semibold text-[#CFCFCF]">
+              Você economiza <span className="text-white tabular-nums">{brl(active.saved)}</span>
+              {isDecant ? <span className="font-medium text-[#8C8C8C]"> · {SIZE_COPY[ml].lasts}</span> : null}
+            </p>
+            {!isDecant ? <BlackScarcity product={product} variant="bar" className="mt-4" /> : null}
+          </div>
+        ) : (
         <div key={`${mode}-${ml}`} className="pd-price flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <span className="text-[32px] leading-none font-bold tracking-[-0.03em] text-white tabular-nums">
             {brl(active.finalPrice)}
@@ -276,7 +319,8 @@ export function ProductPurchase({
           ) : null}
           {isDecant ? <span className="text-[14px] font-semibold text-[#FFD599]">{SIZE_COPY[ml].lasts}</span> : null}
         </div>
-        {active.promotion ? <PromotionBadge promotion={active.promotion} size="sm" className="mt-2.5" /> : null}
+        )}
+        {active.promotion && !black ? <PromotionBadge promotion={active.promotion} size="sm" className="mt-2.5" /> : null}
         <p className="mt-3 text-[15px] leading-relaxed text-[#A9A9A9]">
           {isDecant
             ? SIZE_COPY[ml].text

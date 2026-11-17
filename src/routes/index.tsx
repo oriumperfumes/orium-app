@@ -28,6 +28,8 @@ import { QuickCategories, type QuickItem } from "@/components/orium/QuickCategor
 import { BestSellersRow } from "@/components/orium/BestSellersRow";
 import { NegotiationShowcase, useHasNegotiation } from "@/components/orium/NegotiationShowcase";
 import { HomeCampaigns } from "@/components/orium/HomeCampaigns";
+import { BlackShowcase } from "@/components/orium/black/BlackShowcase";
+import { usePricesOnRequestAll } from "@/lib/price-on-request";
 import { Button } from "@/components/ui/button";
 import { TYPE_LABEL, GENDER_LABEL, type ProductType, type Gender } from "@/lib/catalog/classify";
 import { trackDecant, type DecantMl } from "@/lib/decants";
@@ -939,6 +941,9 @@ function Catalog() {
   const router = useRouter();
   useIdlePrefetch([SearchScreen.prefetch, BuySheet.prefetch, FiltersSheet.prefetch, () => warmProductRoute(router as never)]);
 
+  /** Preços sob consulta em toda a loja: nada de vitrine com preço. */
+  const onRequestAllHome = usePricesOnRequestAll();
+
   const choose = (p: CatalogProduct) => {
     setBuy(p);
     setBuyOpen(true);
@@ -1013,6 +1018,12 @@ function Catalog() {
         {showHero ? (
           <div className={negotiation.has ? "mt-10 tab:mt-12" : undefined}>
             <HomeShortcuts onExplore={scrollToGrid} total={perfumeCount} />
+          </div>
+        ) : null}
+
+        {showHero && !onRequestAllHome ? (
+          <div className="mt-10 empty:hidden tab:mt-12">
+            <BlackShowcase onChoose={choose} onExplore={scrollToGrid} />
           </div>
         ) : null}
 
