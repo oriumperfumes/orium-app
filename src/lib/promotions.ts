@@ -194,3 +194,20 @@ export function saoPauloDateTimeToIso(value: string): string | null {
   const parsed = new Date(`${normalized}-03:00`);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
+
+/** ISO → valor de <input type="datetime-local"> no relógio de São Paulo. */
+export function isoToSaoPauloInput(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(d);
+  return parts.replace(" ", "T");
+}
