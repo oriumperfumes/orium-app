@@ -189,12 +189,11 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
 
   // Pagamento: o total dos produtos é o preço no Pix; o cartão é derivado pela
   // regra central. O frete nunca recebe a diferença.
-  // No lançamento o pagamento é só Pix (regra única em checkout-rules).
-  const paymentMethod: PaymentMethod = "PIX";
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("PIX");
   const paymentSettings = usePaymentSettings();
   const payment = getPaymentPricing(cart.total, paymentSettings);
   const pixOff = pixOffLabel(paymentSettings);
-  const productsTotal = payment.pixPrice;
+  const productsTotal = paymentMethod === "CARD" ? payment.cardPrice : payment.pixPrice;
   const grandTotal = productsTotal + shippingPrice;
 
   const addressComplete =
@@ -283,7 +282,10 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
       const descontos =
         (res.promotionDiscount > 0 ? `Promoção aplicada: -${brl(res.promotionDiscount)}\n` : "") +
         (res.couponDiscount > 0 ? `Cupom ${res.couponCode}: -${brl(res.couponDiscount)}\n` : "");
-      const pagamento = `Vou pagar no Pix${res.paymentDiscountPercent > 0 ? ` (com os ${res.paymentDiscountPercent}% de desconto)` : ""}.`;
+      const pagamento =
+        res.paymentMethod === "PIX"
+          ? `Vou pagar no Pix${res.paymentDiscountPercent > 0 ? ` (com os ${res.paymentDiscountPercent}% de desconto)` : ""}.`
+          : `Vou pagar no cartão.${res.paymentDiscountPercent > 0 ? ` Vi que no Pix sai ${brl(res.pixTotal)}.` : ""}`;
       const entregaPendente = fulfillment === "LOCAL";
 
       const msg =
@@ -737,16 +739,25 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
           </div>
         ) : null}
 
-        {/* pagamento: só Pix no lançamento */}
-        <p className="mt-8 mb-2.5 text-[15px] font-semibold text-[#CFCFCF]">Pagamento</p>
-        <div role="radiogroup" aria-label="Pagamento">
+        {/* pagamento: Pix (com desconto) ou cartão, cobrado depois pela Orium */}
+        <p className="mt-8 mb-2.5 text-[15px] font-semibold text-[#CFCFCF]">Como quer pagar?</p>
+        <div className="grid grid-cols-2 gap-3" role="radiogroup" aria-label="Como quer pagar">
           <ReceiveOption
-            active
-            onClick={() => undefined}
+            active={paymentMethod === "PIX"}
+            onClick={() => setPaymentMethod("PIX")}
             title="Pix"
             subtitle={brl(payment.pixPrice)}
             extra={pixOff ?? "à vista"}
             gold
+            compact
+          />
+          <ReceiveOption
+            active={paymentMethod === "CARD"}
+            onClick={() => setPaymentMethod("CARD")}
+            title="Cartão"
+            subtitle={brl(payment.cardPrice)}
+            extra="crédito ou débito"
+            compact
           />
         </div>
 

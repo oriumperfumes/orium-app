@@ -143,7 +143,7 @@ export const placeCatalogOrder = createServerFn({ method: "POST" })
       });
     if (items.length === 0) throw new Error("Carrinho vazio.");
 
-    // Loja pública no lançamento: só Pix, retirada e entrega combinada pelo WhatsApp.
+    // Loja pública: Pix ou cartão, retirada e entrega combinada pelo WhatsApp.
     // A validação é do servidor: uma tela antiga em cache não consegue abrir outro caminho.
     const { fulfillment, paymentMethod } = assertPublicCheckoutOptions({
       fulfillment: data.fulfillment,
