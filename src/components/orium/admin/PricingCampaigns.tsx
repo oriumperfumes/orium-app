@@ -21,7 +21,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { brl, dateBR, productTitle } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
-import { deviceId, isRunning, saoPauloDateTimeToIso, applyPercent } from "@/lib/promotions";
+import { deviceId, isRunning, isoToSaoPauloInput, saoPauloDateTimeToIso, applyPercent } from "@/lib/promotions";
+import { adminUpdatePromotion } from "@/lib/promotions-admin.functions";
+import type { Tables } from "@/integrations/supabase/types";
 import { normalizeTheme, type CampaignVars } from "@/lib/campaign-message";
 import { getOffers, type OfferDiagnostic } from "@/lib/offers.functions";
 import { OfferPopup } from "@/components/orium/OfferPopup";
@@ -225,6 +227,7 @@ export function PromotionsPanel({
 }) {
   const qc = useQueryClient();
   const [removing, setRemoving] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const { data: list, isPending } = useAdminPromotions();
 
@@ -257,6 +260,8 @@ export function PromotionsPanel({
       desconto: rows.reduce((s, p) => s + Number(p.discount_total ?? 0), 0),
     };
   }, [rows]);
+
+  const editing = editingId ? (rows.find((r) => r.id === editingId) ?? null) : null;
 
   const toggle = async (id: string, active: boolean) => {
     await supabase.from("promotions").update({ active }).eq("id", id);
@@ -327,9 +332,19 @@ export function PromotionsPanel({
               const promoPrice =
                 base != null ? applyPercent(base, Number(p.discount_percent)) : null;
               const status = campaignStatus(p as never);
+              const pctText = pctShow(Number(p.discount_percent));
               return (
                 <li key={p.id} className="ord-in min-w-0" style={{ ["--i" as string]: i }}>
-                  <article className="dash-card flex h-full min-w-0 flex-col gap-4 p-5 lg:p-6">
+                  <article
+                    className="dash-card flex h-full min-w-0 cursor-pointer flex-col gap-4 p-5 lg:p-6"
+                    onClick={(e) => {
+                      // tocar no card abre a edição; botões, menus e a área de comunicação têm ação própria
+                      const t = e.target as HTMLElement;
+                      if (!e.currentTarget.contains(t)) return;
+                      if (t.closest("button, a, input, textarea, select, label, [role=menuitem], [data-no-edit]")) return;
+                      setEditingId(p.id);
+                    }}
+                  >
                     <div className="flex min-w-0 items-start gap-4">
                       {single ? (
                         <span className="shrink-0 overflow-hidden rounded-[20px] bg-white">
@@ -359,6 +374,10 @@ export function PromotionsPanel({
                       <AdminMore
                         actions={[
                           {
+                            label: "Editar promoção",
+                            onSelect: () => setEditingId(p.id),
+                          },
+                          {
                             label: p.active ? "Pausar promoção" : "Ativar promoção",
                             onSelect: () => void toggle(p.id, !p.active),
                           },
@@ -385,13 +404,13 @@ export function PromotionsPanel({
                           </>
                         ) : (
                           <p className="text-[26px] leading-none font-bold tracking-[-0.03em] text-[#FFD599]">
-                            {Number(p.discount_percent)}% OFF
+                            {pctText}% OFF
                           </p>
                         )}
                       </div>
                       {base != null ? (
                         <span className="rounded-full bg-[#FFD599] px-3 py-1 text-[13px] font-bold text-[#15130F]">
-                          −{Number(p.discount_percent)}%
+                          −{pctText}%
                         </span>
                       ) : null}
                     </div>
@@ -407,7 +426,7 @@ export function PromotionsPanel({
                       </PxTag>
                     </div>
 
-                    <div className="mt-auto">
+                    <div className="mt-auto" data-no-edit>
                       <AdminTechDetails label="Comunicação e desempenho">
                         <div className="mb-3 grid grid-cols-3 gap-2">
                           <PxStat label="Pedidos" value={p.orders_count ?? 0} />
@@ -417,9 +436,9 @@ export function PromotionsPanel({
                         <ExistingCampaignCopy
                           table="promotions"
                           row={p as never}
-                          badge={`${Number(p.discount_percent)}% OFF`}
+                          badge={`${Math.round(Number(p.discount_percent))}% OFF`}
                           vars={{
-                            discount: String(Number(p.discount_percent)),
+                            discount: String(Math.round(Number(p.discount_percent))),
                             product: String(p.name),
                             category:
                               p.applies_to === "DECANT"
@@ -428,7 +447,7 @@ export function PromotionsPanel({
                                   ? "frascos"
                                   : "todo o catálogo",
                           }}
-                          fallbackMessage={`${Number(p.discount_percent)}% OFF em ${p.name}`}
+                          fallbackMessage={`${Math.round(Number(p.discount_percent))}% OFF em ${p.name}`}
                         />
                         <PromotionPopupTools promotionId={p.id} />
                       </AdminTechDetails>
@@ -442,6 +461,14 @@ export function PromotionsPanel({
       </section>
 
       <NewPromotionSheet open={creating} onClose={() => onCreatingChange(false)} />
+      {editing ? (
+        <EditPromotionSheet
+          key={editing.id}
+          row={editing}
+          siblings={rows.filter((r) => r.id !== editing.id && r.name === editing.name).length}
+          onClose={() => setEditingId(null)}
+        />
+      ) : null}
       <AdminConfirm
         open={!!removing}
         onOpenChange={(v) => !v && setRemoving(null)}
@@ -499,6 +526,112 @@ const PROMO_STEPS: PxStep[] = [
 /** Período em texto curto, para prévia e resumo. */
 const periodText = (starts: string, ends: string) =>
   `${starts ? `de ${pxShortDate(starts)}` : "começa agora"} · ${ends ? `até ${pxShortDate(ends)}` : "sem data final"}`;
+
+/** Prévia do card da promoção (criação e edição). */
+function PromoPreviewCard({
+  black,
+  name,
+  appliesTo,
+  pctLabel,
+  base,
+  promoPrice,
+  single,
+  scope,
+  starts,
+  ends,
+  appExclusive,
+  badgeLabel,
+}: {
+  black: boolean;
+  name: string;
+  appliesTo: AppliesTo;
+  pctLabel: string;
+  base: number | null;
+  promoPrice: number | null;
+  single: { canonical_name: string | null; image_url: string | null } | null | undefined;
+  scope: string;
+  starts: string;
+  ends: string;
+  appExclusive: boolean;
+  badgeLabel: string;
+}) {
+  return black ? (
+    <div className="min-w-0 overflow-hidden rounded-[26px] bg-black p-5 text-white ring-1 ring-white/15">
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <BlackTag promotion={{ name }} size="md" />
+        <span className="shrink-0 text-[12.5px] font-bold text-[#8C8C8C]">
+          {APPLIES_OPTIONS.find((o) => o.value === appliesTo)?.label}
+        </span>
+      </div>
+      <p className="mt-4 truncate text-[15px] font-bold text-[#A9A9A9]">{name.trim()}</p>
+      <p className="text-[46px] leading-none font-black tracking-[-0.05em] tabular-nums">
+        {pctLabel}% <span className="text-[22px] tracking-[-0.02em] text-[#FFD599]">OFF</span>
+      </p>
+      {base != null ? (
+        <div className="mt-4 flex min-w-0 items-center gap-3 rounded-[18px] bg-white/[0.06] p-2.5">
+          {single?.image_url ? (
+            <span className="shrink-0 overflow-hidden rounded-[12px] bg-white">
+              <ItemThumb src={single.image_url} alt={single.canonical_name ?? ""} size={44} />
+            </span>
+          ) : null}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13.5px] font-semibold">{scope}</span>
+            <span className="flex items-baseline gap-2 tabular-nums">
+              <span className="text-[12.5px] text-[#8C8C8C] line-through">{brl(base)}</span>
+              <span className="text-[17px] font-bold">{brl(promoPrice)}</span>
+            </span>
+          </span>
+        </div>
+      ) : (
+        <p className="mt-3 truncate text-[14px] font-semibold text-[#A9A9A9]">{scope}</p>
+      )}
+      <p className="mt-3 text-[12.5px] font-semibold text-[#8C8C8C]">{periodText(starts, ends)}</p>
+      <p className="mt-3 border-t border-white/10 pt-3 text-[12px] leading-snug text-[#A9A9A9]">
+        Na loja: selo Black nos cards, preço riscado, contagem até o fim, aviso de estoque baixo real e botão “Comprar agora”.
+      </p>
+    </div>
+  ) : (
+    <div className="min-w-0 overflow-hidden rounded-[26px] bg-[#FFD599] p-5 text-[#15130F]">
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <span className="inline-flex min-w-0 items-center gap-2 truncate rounded-full bg-[#15130F] px-3 py-1 text-[12px] font-semibold text-[#FFD599]">
+          <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-[#FFD599]" />
+          <span className="truncate">
+            {appExclusive ? badgeLabel.trim() || "Exclusivo no app" : "Promoção"}
+          </span>
+        </span>
+        <span className="shrink-0 text-[12.5px] font-bold opacity-60">
+          {APPLIES_OPTIONS.find((o) => o.value === appliesTo)?.label}
+        </span>
+      </div>
+      <p className="mt-4 truncate text-[15px] font-bold opacity-70">
+        {name.trim() || "Nome da promoção"}
+      </p>
+      <p className="text-[46px] leading-none font-bold tracking-[-0.05em] tabular-nums">
+        {pctLabel}% <span className="text-[22px] tracking-[-0.02em]">OFF</span>
+      </p>
+      {base != null ? (
+        <div className="mt-4 flex min-w-0 items-center gap-3 rounded-[18px] bg-[#15130F]/[0.06] p-2.5">
+          {single?.image_url ? (
+            <span className="shrink-0 overflow-hidden rounded-[12px] bg-white">
+              <ItemThumb src={single.image_url} alt={single.canonical_name ?? ""} size={44} />
+            </span>
+          ) : null}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13.5px] font-semibold">{scope}</span>
+            <span className="flex items-baseline gap-2 tabular-nums">
+              <span className="text-[12.5px] line-through opacity-55">{brl(base)}</span>
+              <span className="text-[17px] font-bold">{brl(promoPrice)}</span>
+            </span>
+          </span>
+        </div>
+      ) : (
+        <p className="mt-3 truncate text-[14px] font-semibold opacity-70">{scope}</p>
+      )}
+      <p className="mt-3 text-[12.5px] font-semibold opacity-60">{periodText(starts, ends)}</p>
+    </div>
+  );
+
+}
 
 function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient();
@@ -695,80 +828,21 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
         ? productTitle(single?.canonical_name ?? "1 perfume")
         : `${ids.length} perfumes`;
 
-  const card = black ? (
-    <div className="min-w-0 overflow-hidden rounded-[26px] bg-black p-5 text-white ring-1 ring-white/15">
-      <div className="flex min-w-0 items-center justify-between gap-2">
-        <BlackTag promotion={{ name }} size="md" />
-        <span className="shrink-0 text-[12.5px] font-bold text-[#8C8C8C]">
-          {APPLIES_OPTIONS.find((o) => o.value === appliesTo)?.label}
-        </span>
-      </div>
-      <p className="mt-4 truncate text-[15px] font-bold text-[#A9A9A9]">{name.trim()}</p>
-      <p className="text-[46px] leading-none font-black tracking-[-0.05em] tabular-nums">
-        {pctLabel}% <span className="text-[22px] tracking-[-0.02em] text-[#FFD599]">OFF</span>
-      </p>
-      {base != null ? (
-        <div className="mt-4 flex min-w-0 items-center gap-3 rounded-[18px] bg-white/[0.06] p-2.5">
-          {single?.image_url ? (
-            <span className="shrink-0 overflow-hidden rounded-[12px] bg-white">
-              <ItemThumb src={single.image_url} alt={single.canonical_name ?? ""} size={44} />
-            </span>
-          ) : null}
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13.5px] font-semibold">{scope}</span>
-            <span className="flex items-baseline gap-2 tabular-nums">
-              <span className="text-[12.5px] text-[#8C8C8C] line-through">{brl(base)}</span>
-              <span className="text-[17px] font-bold">{brl(promoPrice)}</span>
-            </span>
-          </span>
-        </div>
-      ) : (
-        <p className="mt-3 truncate text-[14px] font-semibold text-[#A9A9A9]">{scope}</p>
-      )}
-      <p className="mt-3 text-[12.5px] font-semibold text-[#8C8C8C]">{periodText(starts, ends)}</p>
-      <p className="mt-3 border-t border-white/10 pt-3 text-[12px] leading-snug text-[#A9A9A9]">
-        Na loja: selo Black nos cards, preço riscado, contagem até o fim, aviso de estoque baixo real e botão “Comprar agora”.
-      </p>
-    </div>
-  ) : (
-    <div className="min-w-0 overflow-hidden rounded-[26px] bg-[#FFD599] p-5 text-[#15130F]">
-      <div className="flex min-w-0 items-center justify-between gap-2">
-        <span className="inline-flex min-w-0 items-center gap-2 truncate rounded-full bg-[#15130F] px-3 py-1 text-[12px] font-semibold text-[#FFD599]">
-          <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-[#FFD599]" />
-          <span className="truncate">
-            {appExclusive ? badgeLabel.trim() || "Exclusivo no app" : "Promoção"}
-          </span>
-        </span>
-        <span className="shrink-0 text-[12.5px] font-bold opacity-60">
-          {APPLIES_OPTIONS.find((o) => o.value === appliesTo)?.label}
-        </span>
-      </div>
-      <p className="mt-4 truncate text-[15px] font-bold opacity-70">
-        {name.trim() || "Nome da promoção"}
-      </p>
-      <p className="text-[46px] leading-none font-bold tracking-[-0.05em] tabular-nums">
-        {pctLabel}% <span className="text-[22px] tracking-[-0.02em]">OFF</span>
-      </p>
-      {base != null ? (
-        <div className="mt-4 flex min-w-0 items-center gap-3 rounded-[18px] bg-[#15130F]/[0.06] p-2.5">
-          {single?.image_url ? (
-            <span className="shrink-0 overflow-hidden rounded-[12px] bg-white">
-              <ItemThumb src={single.image_url} alt={single.canonical_name ?? ""} size={44} />
-            </span>
-          ) : null}
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13.5px] font-semibold">{scope}</span>
-            <span className="flex items-baseline gap-2 tabular-nums">
-              <span className="text-[12.5px] line-through opacity-55">{brl(base)}</span>
-              <span className="text-[17px] font-bold">{brl(promoPrice)}</span>
-            </span>
-          </span>
-        </div>
-      ) : (
-        <p className="mt-3 truncate text-[14px] font-semibold opacity-70">{scope}</p>
-      )}
-      <p className="mt-3 text-[12.5px] font-semibold opacity-60">{periodText(starts, ends)}</p>
-    </div>
+  const card = (
+    <PromoPreviewCard
+      black={black}
+      name={name}
+      appliesTo={appliesTo}
+      pctLabel={pctLabel}
+      base={base}
+      promoPrice={promoPrice}
+      single={single}
+      scope={scope}
+      starts={starts}
+      ends={ends}
+      appExclusive={appExclusive}
+      badgeLabel={badgeLabel}
+    />
   );
 
   return (
@@ -992,6 +1066,433 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
               fallbackMessage={`${pctLabel}% OFF em ${name.trim() || "seus perfumes"}`}
             />
           ) : null}
+        </>
+      )}
+    </PxWizard>
+  );
+}
+
+/* ---------------------- editar promoção existente ---------------------- */
+
+type PromotionRow = Tables<"promotions">;
+
+const EDIT_STEPS: PxStep[] = [
+  { key: "desconto", label: "Desconto", hint: "Nome, o que entra e o preço final ou o percentual." },
+  { key: "produtos", label: "Produtos", hint: "Perfumes e tamanhos de decant da promoção." },
+  { key: "periodo", label: "Período", hint: "Estenda ou antecipe as datas, pause ou ative." },
+  { key: "loja", label: "Na loja", hint: "Selo do app, cupom junto e o aviso ao cliente." },
+];
+
+/** Percentual para mostrar: inteiro quando dá, senão no máximo 1 casa ("37,4"). */
+const pctShow = (v: number) => {
+  const r = Math.round(Number(v) * 10) / 10;
+  return Number.isInteger(r) ? String(r) : r.toFixed(1).replace(".", ",");
+};
+
+function EditPromotionSheet({
+  row,
+  siblings,
+  onClose,
+}: {
+  row: PromotionRow;
+  /** outras promoções com o mesmo nome (ex.: os outros perfumes da Esquenta Black) */
+  siblings: number;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const save = useServerFn(adminUpdatePromotion);
+  const [step, setStep] = useState(0);
+  const [name, setName] = useState(row.name);
+  const [appliesTo, setAppliesTo] = useState<AppliesTo>((row.applies_to as AppliesTo) ?? "BOTH");
+  const [sizes, setSizes] = useState<number[]>(row.decant_sizes ?? []);
+  const [ids, setIds] = useState<string[]>(row.product_ids ?? []);
+  const storedPct = Number(row.discount_percent);
+  const [percent, setPercent] = useState<number | null>(storedPct);
+  const [starts, setStarts] = useState(isoToSaoPauloInput(row.starts_at));
+  const [ends, setEnds] = useState(isoToSaoPauloInput(row.ends_at));
+  const [active, setActive] = useState(row.active);
+  const [sameName, setSameName] = useState(siblings > 0);
+  const [stackable, setStackable] = useState(row.stackable);
+  const [appExclusive, setAppExclusive] = useState(row.app_exclusive);
+  const [badgeLabel, setBadgeLabel] = useState(row.app_badge_label ?? "");
+  const [announce, setAnnounce] = useState(row.announce);
+  const [headline, setHeadline] = useState(row.headline ?? "");
+  const [ctaLabel, setCtaLabel] = useState(row.cta_label ?? "");
+  const [copy, setCopy] = useState<CampaignCopyValue>({
+    title: row.announce_title ?? "",
+    message: row.announce_message ?? "",
+    cta: row.announce_cta ?? "",
+    footnote: row.announce_footnote ?? "",
+    theme: normalizeTheme(row.announce_theme),
+    showAgain: false,
+  });
+  const [busy, setBusy] = useState(false);
+
+  const { data: preview } = useQuery({
+    queryKey: ["promo-preview", ids[0] ?? ""],
+    enabled: ids.length === 1,
+    queryFn: async () =>
+      (
+        await supabase
+          .from("products")
+          .select("canonical_name, brand, image_url, retail_price")
+          .eq("id", ids[0]!)
+          .maybeSingle()
+      ).data,
+  });
+  const single = ids.length === 1 ? preview : null;
+  const base =
+    single?.retail_price != null && Number(single.retail_price) > 0 ? Number(single.retail_price) : null;
+
+  /** Um perfume com preço → começa no "preço final" (o jeito como a campanha foi pensada). */
+  const [priceMode, setPriceMode] = useState<"percent" | "price">(
+    (row.product_ids ?? []).length === 1 ? "price" : "percent",
+  );
+  const [target, setTarget] = useState<number | null>(null);
+  const [targetTouched, setTargetTouched] = useState(false);
+  /** Antes de digitar, o preço final é o que a loja cobra hoje. */
+  const shownTarget = targetTouched ? target : base != null ? applyPercent(base, storedPct) : null;
+  const usePrice = priceMode === "price" && ids.length === 1 && base != null;
+
+  const pricePct =
+    usePrice && shownTarget != null && shownTarget > 0 && shownTarget < base!
+      ? Math.round((1 - shownTarget / base!) * 100 * 1e5) / 1e5
+      : 0;
+  const pct = usePrice ? (targetTouched ? pricePct : storedPct) : Number(percent) || 0;
+  const pctLabel = String(Math.round(pct));
+  const promoPrice =
+    base != null ? (usePrice && shownTarget != null ? shownTarget : applyPercent(base, pct)) : null;
+  const priceIssue = usePrice
+    ? shownTarget == null || !(shownTarget > 0)
+      ? "Digite o preço final."
+      : shownTarget >= base!
+        ? `O preço final precisa ser menor que ${brl(base)}.`
+        : !(pricePct > 0 && pricePct <= 90)
+          ? "O desconto deve ficar entre 1% e 90%."
+          : null
+    : !(pct > 0 && pct <= 90)
+      ? "O desconto deve ficar entre 1% e 90%."
+      : null;
+  const periodIssue = starts && ends && ends <= starts ? "O fim precisa ser depois do começo." : null;
+
+  const promoVars: CampaignVars = {
+    discount: pctLabel,
+    product: name.trim() || "seus perfumes",
+    category:
+      appliesTo === "DECANT" ? "decants" : appliesTo === "FULL" ? "frascos" : "todo o catálogo",
+  };
+  const scope =
+    ids.length === 0
+      ? "Catálogo inteiro"
+      : ids.length === 1
+        ? productTitle(single?.canonical_name ?? "1 perfume")
+        : `${ids.length} perfumes`;
+
+  const endsIso = saoPauloDateTimeToIso(ends);
+  const liveAfter = active && (!endsIso || new Date(endsIso).getTime() > Date.now());
+
+  const submit = async () => {
+    if (!name.trim()) {
+      toast.error("Dê um nome para a promoção.");
+      setStep(0);
+      return;
+    }
+    if (priceIssue) {
+      toast.error(priceIssue);
+      setStep(0);
+      return;
+    }
+    if (periodIssue) {
+      toast.error(periodIssue);
+      setStep(2);
+      return;
+    }
+    if (announce && campaignCopyIssues(copy, promoVars).length > 0) {
+      toast.error("Há variáveis sem valor na comunicação da campanha.");
+      setStep(3);
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await save({
+        data: {
+          id: row.id,
+          name: name.trim(),
+          applies_to: appliesTo,
+          decant_sizes: appliesTo === "FULL" ? [] : sizes,
+          product_ids: ids,
+          discount_percent: pct,
+          final_price: usePrice && targetTouched ? shownTarget : null,
+          starts_at: saoPauloDateTimeToIso(starts),
+          ends_at: endsIso,
+          active,
+          stackable,
+          app_exclusive: appExclusive,
+          app_badge_label: badgeLabel.trim() || null,
+          announce,
+          headline: headline.trim() || null,
+          cta_label: ctaLabel.trim() || null,
+          ...campaignCopyPayload(copy),
+          show_again: copy.showAgain,
+          same_name_period: siblings > 0 && sameName,
+        },
+      });
+      toast.success(
+        res.siblings > 0
+          ? `Promoção salva. Período aplicado a mais ${res.siblings} perfume${res.siblings === 1 ? "" : "s"}.`
+          : "Promoção salva.",
+      );
+      qc.invalidateQueries();
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Não foi possível salvar.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <PxWizard
+      open
+      onClose={onClose}
+      title="Editar promoção"
+      steps={EDIT_STEPS}
+      step={step}
+      onStep={setStep}
+      freeNav
+      preview={
+        <PromoPreviewCard
+          black={isBlack({ name })}
+          name={name}
+          appliesTo={appliesTo}
+          pctLabel={pctLabel}
+          base={base}
+          promoPrice={promoPrice}
+          single={single}
+          scope={scope}
+          starts={starts}
+          ends={ends}
+          appExclusive={appExclusive}
+          badgeLabel={badgeLabel}
+        />
+      }
+      summary={[
+        {
+          label: "Preço",
+          value: base != null ? `de ${brl(base)} por ${brl(promoPrice)}` : `${pctLabel}% OFF`,
+        },
+        { label: "Desconto", value: `${pctShow(pct)}%` },
+        { label: "Produtos", value: scope },
+        { label: "Período", value: periodText(starts, ends) },
+        { label: "Situação", value: liveAfter ? "no ar" : active ? "encerrada" : "pausada" },
+      ]}
+      canNext={step === 0 ? !priceIssue && !!name.trim() : step === 2 ? !periodIssue : true}
+      onNext={() => void submit()}
+      finishLabel="Salvar alterações"
+      busy={busy}
+    >
+      {step === 0 ? (
+        <>
+          <PxField
+            label="Nome da campanha"
+            htmlFor="edit-promo-name"
+            hint="Qualquer nome com “Black” liga o visual Black na loja."
+          >
+            <PxInput id="edit-promo-name" value={name} onChange={(e) => setName(e.target.value)} />
+          </PxField>
+          <PxField label="Vale para">
+            <PxSeg
+              label="O que entra na promoção"
+              value={appliesTo}
+              onChange={setAppliesTo}
+              options={APPLIES_OPTIONS}
+            />
+          </PxField>
+          {ids.length === 1 && base != null ? (
+            <PxField label="Desconto">
+              <PxSeg
+                label="Tipo de desconto"
+                value={priceMode}
+                onChange={(v) => {
+                  if (v === "percent") setPercent(Math.round(pct * 100) / 100);
+                  setPriceMode(v);
+                }}
+                options={[
+                  { value: "price", label: "Preço final (R$)" },
+                  { value: "percent", label: "% de desconto" },
+                ]}
+              />
+            </PxField>
+          ) : null}
+          {usePrice ? (
+            <PxField
+              label="Preço final do frasco"
+              hint={
+                <>
+                  Preço cheio <span className="line-through tabular-nums">{brl(base)}</span>
+                  {pricePct > 0 ? (
+                    <span className="ml-1.5 font-bold text-[#FFD599]">
+                      {pctShow(targetTouched ? pricePct : storedPct)}% OFF
+                    </span>
+                  ) : null}
+                </>
+              }
+            >
+              <MoneyInput
+                id="edit-promo-price"
+                value={shownTarget}
+                onChange={(v) => {
+                  setTarget(v);
+                  setTargetTouched(true);
+                }}
+              />
+            </PxField>
+          ) : (
+            <PxField
+              label="Percentual"
+              hint={base != null ? `O frasco fica ${brl(applyPercent(base, pct))}.` : undefined}
+            >
+              <PxQuick options={PERCENT_QUICK} value={pct} onPick={(v) => setPercent(v)} />
+              <PercentInput id="edit-promo-pct" value={percent} onChange={setPercent} />
+            </PxField>
+          )}
+          {usePrice && appliesTo !== "FULL" ? (
+            <PxNote>Os decants recebem o mesmo percentual do frasco.</PxNote>
+          ) : null}
+          {priceIssue ? <PxNote tone="warning">{priceIssue}</PxNote> : null}
+        </>
+      ) : step === 1 ? (
+        <>
+          <ProductPicker ids={ids} setIds={setIds} />
+          {ids.length > 1 && priceMode === "price" ? (
+            <PxNote>Com mais de um perfume o desconto vale em percentual para todos.</PxNote>
+          ) : null}
+          {appliesTo !== "FULL" ? (
+            <PxField label="Tamanhos de decant" hint="Nenhum marcado = todos os tamanhos.">
+              <div className="flex min-w-0 gap-2">
+                {SIZES.map((ml) => (
+                  <PxChip
+                    key={ml}
+                    on={sizes.includes(ml)}
+                    onClick={() =>
+                      setSizes(sizes.includes(ml) ? sizes.filter((s) => s !== ml) : [...sizes, ml])
+                    }
+                  >
+                    {ml} ml
+                  </PxChip>
+                ))}
+              </div>
+            </PxField>
+          ) : null}
+        </>
+      ) : step === 2 ? (
+        <>
+          <PxField label="Começa" hint="Vazio = já valendo.">
+            <PxInput
+              id="edit-promo-start"
+              type="datetime-local"
+              value={starts}
+              onChange={(e) => setStarts(e.target.value)}
+            />
+          </PxField>
+          <PxField label="Termina" hint="Vazio = sem data final.">
+            {ends ? (
+              <PxQuick
+                options={[1, 2, 7].map((d) => ({ value: d, label: `+${d} dia${d === 1 ? "" : "s"}` }))}
+                value={null}
+                onPick={(d) => {
+                  const iso = saoPauloDateTimeToIso(ends);
+                  if (iso)
+                    setEnds(
+                      isoToSaoPauloInput(new Date(new Date(iso).getTime() + d * 86400_000).toISOString()),
+                    );
+                }}
+              />
+            ) : null}
+            <PxInput
+              id="edit-promo-end"
+              type="datetime-local"
+              value={ends}
+              onChange={(e) => setEnds(e.target.value)}
+            />
+          </PxField>
+          {periodIssue ? <PxNote tone="warning">{periodIssue}</PxNote> : null}
+          <PxSwitchRow
+            title="Promoção ativa"
+            hint={active ? "Desligue para pausar sem apagar." : "Pausada: o preço volta ao normal na loja."}
+            checked={active}
+            onChange={setActive}
+          />
+          {siblings > 0 ? (
+            <PxSwitchRow
+              title={`Aplicar às outras ${siblings} “${row.name}”`}
+              hint="Mesmo nome, datas e ativa/pausada nos outros perfumes desta campanha. O preço de cada um não muda."
+              checked={sameName}
+              onChange={setSameName}
+            />
+          ) : null}
+        </>
+      ) : (
+        <>
+          <PxSwitchRow
+            title="Desconto exclusivo do aplicativo"
+            hint="Mostra um selo no perfume para quem compra pelo app."
+            checked={appExclusive}
+            onChange={setAppExclusive}
+          />
+          {appExclusive ? (
+            <PxField label="Texto do selo (opcional)" htmlFor="edit-promo-badge">
+              <PxInput
+                id="edit-promo-badge"
+                value={badgeLabel}
+                onChange={(e) => setBadgeLabel(e.target.value.slice(0, 28))}
+                placeholder="Exclusivo no app"
+              />
+            </PxField>
+          ) : null}
+          <PxSwitchRow
+            title="Acumula com cupom"
+            hint="Ligado: o cupom dá desconto em cima do preço da promoção."
+            checked={stackable}
+            onChange={setStackable}
+          />
+          <PxSwitchRow
+            title="Avisar o cliente uma vez"
+            hint="Um aviso na loja enquanto a promoção estiver no ar."
+            checked={announce}
+            onChange={setAnnounce}
+          />
+          {announce ? (
+            <CampaignCopyEditor
+              idPrefix={`edit-promo-${row.id}`}
+              value={copy}
+              onChange={setCopy}
+              vars={promoVars}
+              badge={`${pctLabel}% OFF`}
+              fallbackMessage={`${pctLabel}% OFF em ${name.trim() || "seus perfumes"}`}
+              withShowAgain
+            />
+          ) : null}
+          <AdminTechDetails label="Textos curtos (opcional)">
+            <div className="min-w-0 space-y-3">
+              <PxField label="Chamada" htmlFor="edit-promo-headline">
+                <PxInput
+                  id="edit-promo-headline"
+                  value={headline}
+                  onChange={(e) => setHeadline(e.target.value.slice(0, 120))}
+                  placeholder="Ex.: Só até sexta"
+                />
+              </PxField>
+              <PxField label="Texto do botão" htmlFor="edit-promo-cta">
+                <PxInput
+                  id="edit-promo-cta"
+                  value={ctaLabel}
+                  onChange={(e) => setCtaLabel(e.target.value.slice(0, 40))}
+                  placeholder="Ex.: Comprar agora"
+                />
+              </PxField>
+            </div>
+          </AdminTechDetails>
         </>
       )}
     </PxWizard>

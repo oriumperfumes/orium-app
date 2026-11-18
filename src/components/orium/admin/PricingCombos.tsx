@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { CalendarClock, CircleCheck, Layers, Minus, Pause, Plus, TrendingUp } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { dateBR } from "@/lib/format";
-import { saoPauloDateTimeToIso } from "@/lib/promotions";
+import { isoToSaoPauloInput, saoPauloDateTimeToIso } from "@/lib/promotions";
 import { DECANT_SIZES, decantPrice, type DecantMl } from "@/lib/decants";
 import {
   comboBrl,
@@ -93,23 +93,6 @@ export function useAdminCombos() {
       ((await table().select("*").order("created_at", { ascending: false })).data ??
         []) as ComboRow[],
   });
-}
-
-/** ISO → valor de <input type="datetime-local"> no relógio de São Paulo. */
-function isoToSaoPauloInput(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const parts = new Intl.DateTimeFormat("sv-SE", {
-    timeZone: "America/Sao_Paulo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(d);
-  return parts.replace(" ", "T");
 }
 
 /** Menor preço normal entre os tamanhos do combo — a referência honesta da economia. */
