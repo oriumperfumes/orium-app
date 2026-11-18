@@ -250,6 +250,7 @@ function ProductCardBase({
   const consult = isOnRequest(product as never, useConsultIds());
   const settings = useDecantSettings();
   const promotions = usePromotions();
+  const cart = useCart();
   const decant = canDecant(product);
   const globalView = usePriceView();
   const payment = usePaymentSettings();
@@ -492,6 +493,34 @@ function ProductCardBase({
           >
             <MessageCircle className="size-4" strokeWidth={2.4} /> Consultar
           </a>
+        ) : bottleOnPromo && black && canFullBottle(product) ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              // "Comprar agora" da Black: o frasco vai direto para a sacola, que já abre para fechar o pedido.
+              stopLink(e);
+              cart.add(
+                {
+                  productId: product.id,
+                  variant: "FULL",
+                  slug: product.slug,
+                  name: product.canonical_name,
+                  brand: product.brand,
+                  image: product.image_url,
+                  volumeMl: product.volume_ml,
+                  concentration: product.concentration,
+                  retailPrice: Number(product.retail_price ?? 0),
+                  wholesalePrice: Number(product.wholesale_price ?? 0),
+                },
+                1,
+              );
+              flyToCart(e.currentTarget as HTMLElement, product.image_url);
+              window.setTimeout(() => cart.setOpen(true), 450);
+            }}
+            className="press inline-flex h-[34px] items-center rounded-full bg-[#FFD599] px-4 text-[13px] font-bold text-black transition-colors hover:bg-[#FFDDAA] @min-[220px]/card:h-[40px] @min-[220px]/card:px-5 @min-[220px]/card:text-[14px]"
+          >
+            Comprar agora
+          </button>
         ) : bottleOnPromo ? (
           <Link
             to="/perfume/$slug"
