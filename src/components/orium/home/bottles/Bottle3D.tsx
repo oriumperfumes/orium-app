@@ -54,9 +54,11 @@ export function Bottle3D({
     let stage: Studio3D | null = null;
     const start = () =>
       load(model)
-        .then(({ createStudio3D, build, size }) => {
+        .then(async ({ createStudio3D, build, size }) => {
+          // o Asad vem de um arquivo .glb (assíncrono); o Club de Nuit é feito em código
+          const object = await build();
           if (cancelled) return;
-          stage = createStudio3D(canvas, build(), {
+          stage = createStudio3D(canvas, object, {
             bg: BG,
             height: size.total,
             footprint: Math.max(size.W, size.D),
