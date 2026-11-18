@@ -1,12 +1,12 @@
 /**
  * Regras do checkout PÚBLICO (loja), usadas pela tela e pelo servidor.
  *
- * No lançamento a loja oferece só:
- *  - pagamento: Pix;
+ * A loja oferece:
+ *  - pagamento: Pix (com desconto) ou cartão (a Orium cobra pelo WhatsApp);
  *  - retirada na loja (grátis, Itaguaí);
  *  - entrega com valor e prazo combinados pelo WhatsApp ANTES do pagamento.
- * Cartão e cotação automática de frete (SuperFrete/Correios) ficam para depois:
- * basta ampliar as listas abaixo (e ligar CARD_AVAILABLE) para reabrir.
+ * Cotação automática de frete (SuperFrete/Correios) fica para depois:
+ * basta ampliar PUBLIC_FULFILLMENTS para reabrir.
  *
  * Isto vale só para pedidos novos feitos pela loja. Pedidos antigos e as
  * opções internas do Admin (venda na loja, edição de pedido, Copiloto) não passam por aqui.
@@ -14,11 +14,11 @@
 export const PUBLIC_FULFILLMENTS = ["PICKUP", "LOCAL"] as const;
 export type PublicFulfillment = (typeof PUBLIC_FULFILLMENTS)[number];
 
-export const PUBLIC_PAYMENT_METHODS = ["PIX"] as const;
+export const PUBLIC_PAYMENT_METHODS = ["PIX", "CARD"] as const;
 export type PublicPaymentMethod = (typeof PUBLIC_PAYMENT_METHODS)[number];
 
-/** Enquanto for false, a loja não mostra o preço no cartão. */
-export const CARD_AVAILABLE = false;
+/** Liga o preço no cartão nas notas de pagamento da loja. */
+export const CARD_AVAILABLE = true;
 
 /** Texto gravado em `delivery_notes` para a equipe ver no Admin. */
 export const LOCAL_DELIVERY_NOTE =
@@ -45,7 +45,7 @@ export function assertPublicCheckoutOptions(input: {
   }
   const paymentMethod = input.paymentMethod ?? "PIX";
   if (!(PUBLIC_PAYMENT_METHODS as readonly string[]).includes(paymentMethod)) {
-    throw new Error("O pagamento no momento é só por Pix.");
+    throw new Error("Escolha pagar no Pix ou no cartão.");
   }
   return {
     fulfillment: fulfillment as PublicFulfillment,

@@ -5,7 +5,7 @@ import {
   LOCAL_DELIVERY_NOTE,
 } from "../checkout-rules";
 
-describe("checkout público: Pix, retirada e entrega pelo WhatsApp", () => {
+describe("checkout público: Pix ou cartão, retirada e entrega pelo WhatsApp", () => {
   it("sem opções informadas vale retirada e Pix", () => {
     expect(assertPublicCheckoutOptions({})).toEqual({
       fulfillment: "PICKUP",
@@ -28,14 +28,17 @@ describe("checkout público: Pix, retirada e entrega pelo WhatsApp", () => {
     );
   });
 
-  it("recusa cartão e qualquer valor desconhecido", () => {
-    expect(() => assertPublicCheckoutOptions({ paymentMethod: "CARD" })).toThrow(/só por Pix/);
-    expect(() => assertPublicCheckoutOptions({ paymentMethod: "BOLETO" })).toThrow(/só por Pix/);
+  it("aceita cartão", () => {
+    expect(assertPublicCheckoutOptions({ paymentMethod: "CARD" }).paymentMethod).toBe("CARD");
+  });
+
+  it("recusa forma de pagamento desconhecida", () => {
+    expect(() => assertPublicCheckoutOptions({ paymentMethod: "BOLETO" })).toThrow(/Pix ou no cartão/);
     expect(() => assertPublicCheckoutOptions({ fulfillment: "DRONE" })).toThrow();
   });
 
-  it("cartão fica desligado e a entrega tem aviso para a equipe", () => {
-    expect(CARD_AVAILABLE).toBe(false);
+  it("cartão ligado e a entrega tem aviso para a equipe", () => {
+    expect(CARD_AVAILABLE).toBe(true);
     expect(LOCAL_DELIVERY_NOTE).toMatch(/WhatsApp antes do pagamento/);
   });
 });
