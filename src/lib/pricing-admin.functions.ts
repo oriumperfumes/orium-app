@@ -470,3 +470,30 @@ export const setPricesOnRequest = createServerFn({ method: "POST" })
     });
     return { on: data.on };
   });
+
+/**
+ * Abertura da Home em modo Black (Admin → Precificação). Ligada e com uma
+ * campanha "Black" em vigor, o vídeo do topo vira a chamada da Black November.
+ */
+export const setBlackHero = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { on: boolean }) => ({ on: data?.on === true }))
+  .handler(async ({ data, context }) => {
+    await assertStaff(context as Ctx);
+    const { supabase, userId } = context as Ctx;
+    const { data: rows, error } = await (supabase as any)
+      .from("pricing_settings")
+      .update({ black_hero: data.on, updated_at: new Date().toISOString() })
+      .eq("id", true)
+      .select("black_hero");
+    if (error) throw new Error(error.message);
+    if (!rows?.length) throw new Error("Só o dono da loja pode mudar esta opção.");
+    await supabase.from("activity_logs").insert({
+      user_id: userId,
+      action: "pricing_rules_update",
+      entity: "pricing_settings",
+      entity_id: null,
+      details: { source: "admin", changes: [{ key: "black_hero", to: data.on }] },
+    });
+    return { on: data.on };
+  });

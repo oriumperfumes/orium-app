@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Layers, Percent, Plus, SlidersHorizontal, Ticket, Wallet } from "lucide-react";
 import { AdminShell } from "@/components/orium/AdminShell";
 import { cn } from "@/lib/utils";
-import { PricesOnRequestCard, PricingRulesBoard } from "@/components/orium/admin/PricingRules";
+import { BlackHeroCard, PricesOnRequestCard, PricingRulesBoard } from "@/components/orium/admin/PricingRules";
 import { PricingWorkbench } from "@/components/orium/admin/PricingProduct";
 import {
   CouponsPanel,
@@ -149,6 +149,7 @@ function AdminPricing() {
         {tab === "precos" ? (
           <div className="min-w-0 space-y-4">
             <PricesOnRequestCard />
+            <BlackHeroCard />
             <PricingRulesBoard
               editing={creating === "precos"}
               onEditingChange={(v) => setCreating(v ? "precos" : null)}
