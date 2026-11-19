@@ -55,7 +55,7 @@ export function Bottle3D({
     const start = () =>
       load(model)
         .then(async ({ createStudio3D, build, size }) => {
-          // o Asad vem de um arquivo .glb (assíncrono); o Club de Nuit é feito em código
+          // os dois frascos vêm de arquivos .glb (modelos do Blender)
           const object = await build();
           if (cancelled) return;
           stage = createStudio3D(canvas, object, {
