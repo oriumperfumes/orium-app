@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { registerCartTarget } from "@/lib/fly-to-cart";
 import { supabase } from "@/integrations/supabase/client";
 import { StockBadge } from "@/components/orium/badges";
+import { isBlack } from "@/lib/black";
 import type { CatalogProduct } from "@/components/orium/ProductCard";
 import { usePromotionsResolved } from "@/lib/use-promotions";
 import { matches, priceUnit } from "@/lib/promotions";
@@ -308,7 +309,14 @@ function ProductPageContent({
               </h1>
               {meta ? <p className="mt-1.5 text-[16px] font-semibold text-[#878787]">{meta}</p> : null}
               <div className="mt-2.5">
-                <StockBadge inStock={data.in_stock} productId={data.id} />
+                {bottleOk && !showDecant && fullPriced.saved > 0 ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#FFD599]">
+                    <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-[#FFD599]" />
+                    {isBlack(fullPriced.promotion) ? "Desconto de Black já aplicado" : "Desconto já aplicado"}
+                  </span>
+                ) : (
+                  <StockBadge inStock={data.in_stock} productId={data.id} />
+                )}
               </div>
             </div>
 

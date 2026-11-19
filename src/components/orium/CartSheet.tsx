@@ -276,8 +276,8 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
       const addr = `${address.street}, ${address.number}${address.complement ? ` - ${address.complement}` : ""} — ${address.district}, ${address.city}/${address.state} (CEP ${address.cep})`;
       const recebimento =
         fulfillment === "PICKUP"
-          ? `Vou retirar aí na loja, em Itaguaí.${hasSpecialOrder ? "\nVi que tem item sob encomenda, então fico no aguardo do prazo certinho (uns 4 dias)." : ""}`
-          : `Quero receber por entrega:\n${addr}\nPode me confirmar o valor e o prazo da entrega antes do pagamento?${hasSpecialOrder ? "\nVi que tem item sob encomenda (uns 4 dias), fico no aguardo da confirmação." : ""}`;
+          ? `Vou retirar aí na loja, em Itaguaí.${hasSpecialOrder ? "\nVi que a retirada fica pronta em uns 4 dias, fico no aguardo da confirmação." : ""}`
+          : `Quero receber por entrega:\n${addr}\nPode me confirmar o valor e o prazo da entrega antes do pagamento?${hasSpecialOrder ? "\nVi que o pedido fica pronto em uns 4 dias, fico no aguardo da confirmação." : ""}`;
 
       const descontos =
         (res.promotionDiscount > 0 ? `Promoção aplicada: -${brl(res.promotionDiscount)}\n` : "") +

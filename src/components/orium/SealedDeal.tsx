@@ -1,8 +1,8 @@
 /**
  * Frasco lacrado em promoção — o cartão que puxa a venda na página do perfume.
  *
- * O lacre dourado carimba o desconto, a economia sobe até o valor real e o
- * preço por ml compara com o decant. Nada aqui decide preço: tudo vem do
+ * O lacre dourado carimba o desconto e a economia sobe até o valor real.
+ * Nada aqui decide preço: tudo vem do
  * `priceUnit`, e o selo Black só aparece em campanha Black de verdade.
  */
 import { useEffect, useId, useState } from "react";
@@ -90,22 +90,17 @@ export function SealedDeal({
   priced,
   word,
   volumeMl,
-  decantPerMl,
   selected,
   onSelect,
 }: {
   priced: PricedUnit;
   word: string;
   volumeMl?: number | null;
-  /** Preço por ml do maior decant, para comparar com o frasco. */
-  decantPerMl?: number | null;
   selected: boolean;
   /** Sem decant disponível o cartão é só informativo. */
   onSelect?: () => void;
 }) {
   const saved = useCountUp(priced.saved, selected);
-  const perMl = volumeMl ? priced.finalPrice / volumeMl : null;
-  const showPerMl = perMl != null && decantPerMl != null && perMl < decantPerMl;
 
   const body = (
     <>
@@ -142,12 +137,10 @@ export function SealedDeal({
         </span>
       </span>
 
-      {showPerMl ? (
-        <span className="mt-3 block text-[13px] leading-snug text-[#CFC6B8] tabular-nums">
-          <strong className="font-bold text-[#FFD599]">{brl(perMl)} por ml</strong> no frasco. No
-          decant de 10 ml, {brl(decantPerMl)}.
-        </span>
-      ) : null}
+      <span className="mt-3 block text-[13px] leading-snug text-[#CFC6B8]">
+        <strong className="font-bold text-[#FFD599]">O desconto sai do nosso bolso.</strong> O
+        frasco continua original e lacrado.
+      </span>
     </>
   );
 

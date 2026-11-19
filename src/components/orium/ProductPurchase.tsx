@@ -103,7 +103,6 @@ export function ProductPurchase({
   /** Frasco com desconto real: o lacrado passa a ser o foco da página. */
   const sealedDeal = bottleOk && !!bottlePriced.promotion && bottlePriced.saved > 0;
   const dealShown = sealedDeal && !isDecant;
-  const decant10 = decantOk ? decantPriced(10).finalPrice : 0;
 
   const pickSize = (size: DecantMl) => {
     setMl(size);
@@ -232,7 +231,6 @@ export function ProductPurchase({
               priced={bottlePriced}
               word={bottleWord}
               volumeMl={product.volume_ml}
-              decantPerMl={isPerfume && decant10 > 0 ? decant10 / 10 : null}
               selected={!isDecant}
               onSelect={showChooser ? () => onModeChange("bottle") : undefined}
             />
