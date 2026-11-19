@@ -677,14 +677,13 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
             onClick={() => setFulfillment("PICKUP")}
             title="Retirar na loja"
             subtitle="Itaguaí — RJ · Grátis"
-            extra={hasSpecialOrder ? "Pronto para retirar em até 4 dias" : "Pronto para retirar no mesmo dia"}
+            extra={hasSpecialOrder ? undefined : "Pronto para retirar no mesmo dia"}
           />
           <ReceiveOption
             active={fulfillment === "LOCAL"}
             onClick={() => setFulfillment("LOCAL")}
             title="Entrega"
             subtitle="Valor e prazo combinados pelo WhatsApp, antes do pagamento"
-            extra="Frete a confirmar · você só paga depois"
           />
         </div>
 
