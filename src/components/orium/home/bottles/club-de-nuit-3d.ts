@@ -5,7 +5,8 @@
  * "club de nuit intense man" (frente) e "club de nuit" moldado na lateral.
  *
  * O arquivo fica em `public/3d/club-de-nuit.glb`, já comprimido para o
- * celular (meshopt + malha quantizada, sem simplificar a geometria). Só baixa
+ * celular (meshopt sem filtros + normais em 16 bits: o filtro agressivo
+ * do meshopt deixava manchas no vidro liso), sem simplificar a geometria. Só baixa
  * quando o card chega perto da tela, junto com este código.
  *
  * No Blender o modelo está em metros; aqui vira milímetros (como o estúdio),
@@ -20,9 +21,9 @@ export const CDN_GLB = "/3d/club-de-nuit.glb";
 /** medidas do modelo em mm (largura, profundidade com o medalhão, altura) */
 export const CDN_SIZE = { W: 62.1, D: 42, H: 105.2, total: 105.2 };
 
-export async function buildClubDeNuit(): Promise<THREE.Group> {
+export async function buildClubDeNuit(url = CDN_GLB): Promise<THREE.Group> {
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
-  const gltf = await loader.loadAsync(CDN_GLB);
+  const gltf = await loader.loadAsync(url);
   const model = gltf.scene;
   model.scale.setScalar(1000);
   model.updateMatrixWorld(true);
