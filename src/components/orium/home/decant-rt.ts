@@ -15,7 +15,7 @@
 export type DecantMl = 2 | 5 | 10;
 
 /**
- * O modelo de 10 ml mantém a bomba plástica. Os dois volumes menores usam
+ * O modelo de 10 ml tem saia e tampa douradas até o vidro. Os dois volumes menores usam
  * um só frasco, proporcionado pelo vídeo do novo atomizador dourado.
  * A escala absoluta do novo vidro é estimada.
  */
@@ -35,37 +35,33 @@ type Spec = {
   tubeR: number;
 };
 
-/* Proporções medidas nas fotos e nos vídeos de perto: o 10 ml é atarracado
-   (corpo ≈ 1,26× o diâmetro) com fundo de vidro grosso (≈ 4,4 mm); o fino é alto
-   (≈ 2,1×) de ombro arredondado. O borrifador é o MESMO nos dois: rosca Ø 12 mm,
-   tampa Ø 11,8 × 17,5 mm. Tubinho grosso (Ø ≈ 1,8 mm) com curva forte no fundo. */
+const GOLD_ATOMIZER = {
+  collarR: 7.77,
+  collarH: 15.8,
+  actH: 10.4,
+  capH: 33.8,
+  capR: 8.57,
+};
+
 const WIDE: Spec = {
+  ...GOLD_ATOMIZER,
   R: 11,
   H: 28,
   corner: 1.8,
   neck: 4.8,
   wall: 1.1,
   base: 4.4,
-  collarR: 6.0,
-  collarH: 8.0,
-  actH: 8.0,
-  capH: 17.5,
-  capR: 5.9,
   tubeA: 2.7,
   tubeR: 0.92,
 };
 const SLIM: Spec = {
+  ...GOLD_ATOMIZER,
   R: 8.55,
   H: 33.3,
   corner: 1.05,
   neck: 5.4,
   wall: 0.78,
   base: 1.65,
-  collarR: 7.77,
-  collarH: 15.8,
-  actH: 10.4,
-  capH: 33.8,
-  capR: 8.57,
   tubeA: 4.25,
   tubeR: 0.67,
 };
@@ -78,7 +74,8 @@ export const DECANT_SPECS: Record<DecantMl, Spec> = { 2: SLIM, 5: SLIM, 10: WIDE
  * caminho da luz, então absorve um pouco mais por mm para dar o mesmo dourado.
  */
 const SIGMA: Record<DecantMl, [number, number, number]> = {
-  10: [0.0045, 0.058, 0.2],
+  // Mesmo champanhe do fino, compensado pelo caminho óptico maior no vidro largo.
+  10: [0.00392424, 0.0274697, 0.10046061],
   5: [0.005, 0.035, 0.128],
   2: [0.005, 0.035, 0.128],
 };
@@ -119,10 +116,9 @@ uniform vec3 uCapP;         // base da tampa (espaço do frasco)
 uniform vec3 uCapAx;        // eixo da tampa (espaço do frasco)
 uniform vec3 uCapW;         // base da tampa no mundo (sombra na mesa)
 uniform float uCapR;        // raio da tampa
-uniform bool uGold;
+uniform bool uWide;
 uniform vec3 uToneFix;
 uniform vec2 uJit;           // deslocamento de subpixel (antisserrilhado temporal)
-uniform int uN4;            // sempre 4 (limite de laço que o compilador não desenrola)      // correção para o fundo sair exatamente na cor do card
 
 #define AIR 0
 #define GLASS 1
@@ -166,7 +162,7 @@ float rodS(vec3 p){
   if (far > 0.5) return max(far, max(y0 - p.y, p.y - y1));
   float d = (length(p.xz - tubeC(p.y)) - uTube.y)*0.8;
   d = max(d, max(y0 - p.y, p.y - y1));
-  if (uGold && p.y > uA.y-14.) {
+  if (!uWide && p.y > uA.y-14.) {
     float sleeveRadius=mix(1.08,2.67,smoothstep(uA.y-7.2,uA.y-.5,p.y));
     float sleeve=sdBox2(vec2(length(p.xz),p.y-(uA.y-3.5)),vec2(sleeveRadius,4.65),.28);
     d=min(d,sleeve*.8);
@@ -195,34 +191,16 @@ float surfS(vec3 p){
 float liqS(vec3 p){ return max(innerS(p), surfS(p)); }
 
 // alturas do borrifador
-float yCol(){ return uA.y + 0.15; }
-float yAct(){ return yCol() + uC.y + (uGold ? 4.65 : 1.1); }
-// rosca de plástico transparente canelada (meio que refrata)
+float yCol(){ return uA.y + (uWide ? 0.0 : 0.15); }
+float yAct(){ return yCol() + uC.y + 4.65; }
 float collarBox(vec3 p){
-  vec2 q = vec2(length(p.xz), p.y);
-  float lb = max(yCol() - 0.6 - p.y, q.x - uC.x - 0.6);
-  if (lb > 0.5) return lb;
-  if (uGold) return sdBox2(q - vec2(0., yCol() + uC.y*.5), vec2(uC.x, uC.y*.5), .36);
-  // caneluras só na faixa de baixo (onde os dedos giram); em cima a rosca é lisa
-  float band = 1. - smoothstep(0.62, 0.72, (p.y - yCol())/uC.y);
-  float rib = 0.075*(0.5 + 0.5*cos(atan(p.x, p.z)*40.))*band;
-  return sdBox2(q - vec2(0., yCol() + uC.y*0.5), vec2(uC.x - rib, uC.y*0.5), 0.5);
+  return sdBox2(vec2(length(p.xz),p.y-yCol()-uC.y*.5),vec2(uC.x,uC.y*.5),.36);
 }
-float collarS(vec3 p){ float c = collarBox(p); return c > 0.4 ? c : max(c, -outerS(p)); }
-// peças leitosas: anel branco, atuador com o bico, tampa
-float ringS(vec3 p){ vec2 q = vec2(length(p.xz), p.y);
-  if (uGold) return sdBox2(q - vec2(0., yCol() + uC.y + 2.36), vec2(uC.x*.884, 2.44), .26);
-  float lb = max(yCol() + uC.y - 0.2 - p.y, q.x - uC.x);
-  if (lb > 0.5) return lb;
-  return sdBox2(q - vec2(0., yCol() + uC.y + 0.5), vec2(uC.x*0.84, 0.6), 0.3); }
+float ringS(vec3 p){
+  return sdBox2(vec2(length(p.xz),p.y-yCol()-uC.y-2.36),vec2(uC.x*.884,2.44),.26);
+}
 float actS(vec3 p){
-  vec2 q = vec2(length(p.xz), p.y);
-  if (uGold) return sdBox2(q - vec2(0., yAct() + uC.z*.5), vec2(uC.x*.681, uC.z*.5), .32);
-  float lb = max(yCol() + uC.y - p.y, q.x - uC.x*0.6 - 0.2);
-  if (lb > 0.5) return lb;
-  float a = sdBox2(q - vec2(0., yAct() + uC.z*0.5), vec2(uC.x*0.6, uC.z*0.5), 1.3);
-  float stem = sdBox2(q - vec2(0., yAct() - 0.2), vec2(uC.x*0.3, 0.8), 0.2);
-  return min(a, stem);
+  return sdBox2(vec2(length(p.xz),p.y-yAct()-uC.z*.5),vec2(uC.x*.681,uC.z*.5),.32);
 }
 // tampa: cilindro de cantos macios em qualquer posição/eixo (ela sai e pousa na mesa)
 float capS(vec3 p){
@@ -231,12 +209,9 @@ float capS(vec3 p){
   if (lb > 0.5) return lb;
   float a = dot(d, uCapAx);
   float rr = length(d - a*uCapAx);
-  if (uGold) {
-    float outer = sdBox2(vec2(rr, a - uC.w*.5), vec2(uCapR, uC.w*.5), .42);
-    float hollow = sdBox2(vec2(rr, a - (uC.w*.5 - 1.)), vec2(uCapR - .47, uC.w*.5 + .3), .24);
-    return max(outer, -hollow);
-  }
-  return sdBox2(vec2(rr, a - uC.w*0.5), vec2(uCapR, uC.w*0.5), 1.0);
+  float outer = sdBox2(vec2(rr, a-uC.w*.5),vec2(uCapR,uC.w*.5),.42);
+  float hollow = sdBox2(vec2(rr,a-(uC.w*.5-1.)),vec2(uCapR-.47,uC.w*.5+.3),.24);
+  return max(outer,-hollow);
 }
 float solidS(vec3 p){ return min(ringS(p), actS(p)); }
 
@@ -265,10 +240,7 @@ float distOf(int m, S s){
   return min(-s.liq, s.rod);
 }
 int regionOf(S s){
-  if (uGold && min(s.cap, s.col) < 0.) return SOLID;
-  if (s.sol < 0.) return SOLID;
-  if (s.cap < 0.) return HAZE;
-  if (s.col < 0.) return PLAS;
+  if (min(s.cap,min(s.col,s.sol)) < 0.) return SOLID;
   if (s.o > 0.) return AIR;
   if (s.i > 0.) return GLASS;
   if (s.rod < 0.) return TUBE;
@@ -276,11 +248,6 @@ int regionOf(S s){
   return CAV;
 }
 const vec3 TET[4] = vec3[4](vec3(1.,-1.,-1.), vec3(-1.,-1.,1.), vec3(-1.,1.,-1.), vec3(1.,1.,1.));
-vec3 sgrad(vec3 p){
-  vec3 g = vec3(0.);
-  for (int k = 0; k < uN4; k++) g += TET[k]*solidS(p + TET[k]*0.003);
-  return normalize(g);
-}
 float iorOf(int m){ return m == GLASS ? 1.5 : (m == LIQ ? 1.36 : (m == PLAS ? 1.49 : 1.0)); }
 
 /* estúdio: fundo quase preto, duas softboxes altas nas laterais, uma no teto
@@ -328,39 +295,6 @@ vec3 floorBase(vec3 fp){
   return mix(c, uBg, far);
 }
 
-/* plástico (anel, atuador, tampa): uma única função, chamada de um só lugar */
-vec3 solidColor(vec3 p, vec3 rd){
-  vec3 n = L2W(sgrad(p)); vec3 v = L2W(rd); vec3 rf = reflect(v, n);
-  float ndv = max(dot(-v, n), 0.);
-  float fr = fresnel(1., 1.49, ndv);
-  int part = ringS(p) < actS(p) ? 0 : 1;   // 0 anel, 1 atuador
-  float key = max(dot(n, normalize(vec3(-0.55, 0.65, -0.5))), 0.);
-  float fill = max(dot(n, normalize(vec3(0.7, 0.3, -0.4))), 0.);
-  float top = smoothstep(0.2, 0.9, n.y);
-  float rim = pow(1. - ndv, 1.6);
-  // um reflexo e uma transmissão por pixel, com a aspereza de cada peça
-  vec3 spec = env(rf, part == 0 ? 0.18 : 0.16) * fr * 1.08;
-  vec3 through = env(v, 0.3) * (part == 0 ? 0. : 0.2);
-  vec3 c;
-  if (part == 0){
-    // anel branco fino (opaco, acetinado)
-    c = vec3(0.86, 0.86, 0.85)*(0.06 + 0.30*key + 0.10*fill) + spec;
-  } else {
-    /* atuador: plástico leitoso mais claro, com o miolo branco aparecendo por
-       dentro e o bico branco virado para a frente */
-    vec3 milk = vec3(0.84, 0.87, 0.90);
-    float tca = -dot(p.xz, rd.xz)/max(dot(rd.xz, rd.xz), 1e-4);
-    float ax = length(p.xz + rd.xz*max(tca, 0.));
-    float core = 1. - smoothstep(1.0, 1.7, ax);
-    through = mix(through, vec3(0.22)*(0.4 + 0.6*key), core*0.7);
-    c = through + milk*(0.02 + 0.10*key + 0.05*top) + milk*rim*0.12 + spec;
-    float ang = atan(p.x, -p.z);
-    float nz = 1. - smoothstep(0.75, 1.05, length(vec2(ang*uC.x*0.6, p.y - (yAct() + uC.z - 2.4))));
-    c = mix(c, vec3(0.62)*(0.5 + 0.5*key) + vec3(0.05), nz*0.9);
-  }
-  return c;
-}
-
 // The plain rolled brass reflects broad panels as well as the narrow edge lights.
 vec3 goldColor(vec3 p, vec3 rd, vec3 normal, bool actuator){
   vec3 n = L2W(normal), v = L2W(rd), rf = reflect(v,n);
@@ -396,7 +330,7 @@ vec3 render(vec3 ro, vec3 rd){
   float bound = uA.x + 2.2, top = yAct() + uC.z + 2.;
   vec3 capMid = uCapP + uCapAx*uC.w*0.5;
   float capRad = length(vec2(uCapR, uC.w*0.5)) + 1.;
-  bool refl = false, floorHit = false, escape = false, solid = false;
+  bool refl = false, floorHit = false, escape = false;
   vec3 colP = vec3(0.), TP = vec3(1.), fpP = vec3(0.);
   float floorK = 0.;
   int maxIt = 260, maxEv = 14;
@@ -419,10 +353,8 @@ vec3 render(vec3 ro, vec3 rd){
       int m2 = regionOf(sd);
       if (m2 == m){ p += rd*0.01; continue; }
       if (m2 == SOLID){
-        if (uGold) {
-          bool button = sd.sol < 0. && sd.cap >= 0. && sd.col >= 0. && pB.y > yAct();
-          col += T*goldColor(pB, rd, N, button);
-        } else solid = true;
+        bool button = sd.sol < 0. && sd.cap >= 0. && sd.col >= 0. && pB.y > yAct();
+        col += T*goldColor(pB, rd, N, button);
         break;
       }
       // tampa e tubinho: plástico leitoso fino — a luz passa sem desviar,
@@ -496,7 +428,6 @@ vec3 render(vec3 ro, vec3 rd){
     else if (m == PLAS) T *= exp(-vec3(0.035, 0.032, 0.028) * stepd);
     p += rd*stepd;
   }
-  if (solid) col += T*solidColor(pB, rd);
   if (escape) col += T*env(L2W(rd), 0.);
   vec3 base = floorHit ? floorBase(fpP) : vec3(0.);
   if (refl){
@@ -655,9 +586,8 @@ export function createDecantRT(
     capAx: U("uCapAx"),
     capW: U("uCapW"),
     capR: U("uCapR"),
-    gold: U("uGold"),
+    wide: U("uWide"),
     toneFix: U("uToneFix"),
-    n4: U("uN4"),
     jit: U("uJit"),
   };
 
@@ -1187,13 +1117,14 @@ void main(){
     const sinT = Math.sqrt(Math.max(0, 1 - cosT * cosT));
     const lift = (spec.R - 1.1) * sinT - 1.1 * cosT + 1.1;
     // câmera de produto: tele, um pouco acima, enquadrando o maior frasco
-    const gold = ml !== 10;
-    const seatY = gold ? spec.H + 0.06 : spec.H + 0.15 + spec.collarH + 0.25;
-    const clear = gold ? spec.collarH + 4.65 + spec.actH + 1.9 : spec.actH + 2.2;
-    // Pull back briefly while the full-length cap clears the pump.
-    const liftBeat = gold ? Math.sin(Math.PI * capT) ** 4 : 0;
-    const eye: V3 = [0, gold ? 41 + 16 * liftBeat : 36, -185 - 108 * liftBeat];
-    const target: V3 = [0, gold ? 32.5 + 16 * liftBeat : 27.5, 0];
+    const wide = ml === 10;
+    const seatY = spec.H + (wide ? 0 : 0.06);
+    const clear = spec.collarH + 4.65 + spec.actH + 1.9;
+    const liftBeat = Math.sin(Math.PI * capT) ** 4;
+    const pan = wide ? 4 * capT * capT : 0;
+    const framingY = 32.5 + (spec.H - SLIM.H) * 0.5 + 16 * liftBeat;
+    const eye: V3 = [pan, framingY + 8.5, -185 - 108 * liftBeat];
+    const target: V3 = [pan, framingY, 0];
     const f = norm([target[0] - eye[0], target[1] - eye[1], target[2] - eye[2]]);
     const r = norm(cross([0, 1, 0], f));
     const up = cross(f, r);
@@ -1222,8 +1153,8 @@ void main(){
     const axB: V3 = [R[3]!, R[4]!, R[5]!];
     const seatW: V3 = [R[3]! * seatY, R[4]! * seatY + lift, R[5]! * seatY];
     const rise = sm(0, 0.36, uu) * clear;
-    const side = sm(gold ? 0.36 : 0.3, 0.84, uu),
-      drop = sm(gold ? 0.69 : 0.5, 1, uu);
+    const side = sm(0.36, 0.84, uu),
+      drop = sm(0.69, 1, uu);
     const restW: V3 = [spec.R + spec.capR + 9, 0, 4];
     const hi: V3 = [seatW[0] + axB[0] * rise, seatW[1] + axB[1] * rise, seatW[2] + axB[2] * rise];
     const capW: V3 = [
@@ -1243,9 +1174,8 @@ void main(){
     gl.uniform3f(u.capAx, capAxL[0], capAxL[1], capAxL[2]);
     gl.uniform3f(u.capW, capW[0], capW[1], capW[2]);
     gl.uniform1f(u.capR, spec.capR);
-    gl.uniform1i(u.gold, gold ? 1 : 0);
+    gl.uniform1i(u.wide, wide ? 1 : 0);
     gl.uniform3f(u.toneFix, toneFix[0], toneFix[1], toneFix[2]);
-    gl.uniform1i(u.n4, 4);
     gl.uniform3f(u.wave2, w2Amp, w2Phase, w2Dir);
     // o perfume quer ficar nivelado no MUNDO: normal = cima + desvio da mola
     const nW = norm([sx, 1, sz]);
