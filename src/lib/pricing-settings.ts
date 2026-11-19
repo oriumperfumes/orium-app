@@ -14,6 +14,8 @@ export type PublicPricingSettings = {
   pix_discount_active: boolean | null;
   /** Admin → Precificação: loja inteira com preço sob consulta. */
   prices_on_request?: boolean | null;
+  /** Admin → Precificação: abertura da Home em modo Black (padrão: ligada). */
+  black_hero?: boolean | null;
 };
 
 export async function fetchPublicPricingSettings(): Promise<PublicPricingSettings | null> {

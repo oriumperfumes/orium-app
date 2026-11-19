@@ -21,6 +21,7 @@ import { getPaymentPricing } from "@/lib/payment-rule";
 import {
   pricingImpact,
   setPricesOnRequest,
+  setBlackHero,
   updatePricingRules,
   type PricingImpact,
 } from "@/lib/pricing-admin.functions";
@@ -182,6 +183,73 @@ export function PricesOnRequestCard() {
             onCheckedChange={(v) => void toggle(v)}
             aria-label="Preços sob consulta em toda a loja"
           />
+        )}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Abertura da Home em modo Black: o vídeo do topo vira a chamada da Black
+ * November (título, desconto, contagem e botão para a vitrine). Só aparece
+ * enquanto houver campanha com "Black" no nome em vigor. Vem ligada.
+ */
+export function BlackHeroCard() {
+  const qc = useQueryClient();
+  const save = useServerFn(setBlackHero);
+  const { settings, loading } = usePricingRules();
+  const [busy, setBusy] = useState(false);
+  const on = (settings as { black_hero?: boolean } | null | undefined)?.black_hero !== false;
+
+  const toggle = async (next: boolean) => {
+    setBusy(true);
+    try {
+      await save({ data: { on: next } });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["admin-pricing-rules"] }),
+        qc.invalidateQueries({ queryKey: ["pricing-settings"] }),
+      ]);
+      toast.success(next ? "Abertura Black ligada na Home." : "A Home voltou para a abertura normal.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não foi possível salvar.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section
+      className="adm-rise dash-card flex min-w-0 flex-col gap-4 p-5 sm:flex-row sm:items-center lg:p-6"
+      style={{ ["--i" as string]: 3 }}
+    >
+      <span className="inline-flex h-7 shrink-0 items-stretch self-start overflow-hidden rounded-[7px] text-[11px] leading-none font-black tracking-[0.06em] ring-1 ring-white/25 sm:self-center">
+        <span className="flex items-center bg-white px-2 text-black">BLACK</span>
+        <span className="flex items-center bg-black px-2 text-white">NOVEMBER</span>
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <h2 className="text-[19px] font-bold tracking-[-0.02em]">Abertura da Home em modo Black</h2>
+          <span
+            className={cn(
+              "inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-bold",
+              on ? "bg-white text-black" : "bg-[#232323] text-[#A9A9A9]",
+            )}
+          >
+            {on ? "Ligada" : "Desligada"}
+          </span>
+        </div>
+        <p className="mt-1 max-w-[70ch] text-[14px] leading-snug text-[#A9A9A9]">
+          {on
+            ? "Enquanto houver campanha com “Black” no nome, o vídeo do topo da Home mostra a Black November: desconto, contagem, o Asad Bourbon em oferta e o botão para a vitrine."
+            : "A Home mostra a abertura normal (“Encontre aqui o seu próximo perfume”)."}
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-3 max-sm:justify-between">
+        <span className="text-[14px] font-semibold text-[#A9A9A9] sm:hidden">{on ? "Desligar" : "Ligar"}</span>
+        {loading || busy ? (
+          <Loader2 className="size-6 animate-spin text-[#A9A9A9]" />
+        ) : (
+          <Switch className="scale-125" checked={on} onCheckedChange={(v) => void toggle(v)} aria-label="Abertura da Home em modo Black" />
         )}
       </div>
     </section>

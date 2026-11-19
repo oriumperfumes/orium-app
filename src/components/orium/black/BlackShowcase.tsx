@@ -67,7 +67,7 @@ export function BlackShowcase({
   const headline = black.some((p) => /esquenta/i.test(p.name)) ? ["Esquenta", "Black"] : /friday/i.test(black[0]!.name) ? ["Black", "Friday"] : ["Black", "November"];
 
   return (
-    <section aria-label={headline.join(" ")} className="black-in relative mx-[calc(-1*var(--page-gutter))] overflow-hidden bg-black tab:mx-0 tab:rounded-[28px] tab:ring-1 tab:ring-white/10">
+    <section id="black-november" aria-label={headline.join(" ")} className="black-in relative scroll-mt-16 mx-[calc(-1*var(--page-gutter))] overflow-hidden bg-black tab:mx-0 tab:rounded-[28px] tab:ring-1 tab:ring-white/10">
       {/* letreiro */}
       <div className="overflow-hidden border-b border-white/10 bg-white py-2 text-black" aria-hidden>
         <div className="black-marquee">
