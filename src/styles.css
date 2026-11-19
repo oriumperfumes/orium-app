@@ -3636,6 +3636,79 @@ body.admin-mode .press:active:not(:disabled) { transform: scale(0.965); transiti
   .black-dot, .black-sec, .black-bar, .black-tag, .black-marquee, .black-in { animation: none; }
 }
 
+/* ---------- FRASCO LACRADO EM PROMOÇÃO ---------- */
+/* borda de folha dourada; o lacre carimba, o brilho passa uma vez e a economia sobe */
+.sealed-card {
+  border: 1.5px solid rgb(255 255 255 / 0.1);
+  background: #151515;
+  transition: border-color var(--motion-standard) var(--ease-orium), box-shadow var(--motion-standard) var(--ease-orium);
+}
+.sealed-card.is-on {
+  border-color: transparent;
+  background:
+    radial-gradient(120% 90% at 100% 0%, rgb(255 213 153 / 0.2), transparent 58%) padding-box,
+    linear-gradient(#1C1610, #100D09) padding-box,
+    linear-gradient(135deg, #FFF0D2, #C9934E 38%, #FFD599 68%, #8F6530) border-box;
+  box-shadow: 0 14px 44px -20px rgb(255 190 105 / 0.55);
+}
+.sealed-card:focus-visible { outline: 2px solid #FFD599; outline-offset: 3px; }
+.sealed-sheen {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 32%, rgb(255 236 203 / 0.3) 50%, transparent 68%);
+  transform: translateX(-120%);
+  animation: sealedSheen calc(var(--motion-emphasis) * 3.4) var(--ease-orium) var(--motion-standard) both;
+}
+@keyframes sealedSheen { to { transform: translateX(120%); } }
+.sealed-seal {
+  z-index: 2;
+  rotate: -9deg;
+  filter: drop-shadow(0 7px 12px rgb(0 0 0 / 0.45));
+  animation: sealedStamp calc(var(--motion-emphasis) * 1.5) var(--ease-orium) both;
+}
+.sealed-seal::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  border: 2px solid #FFD599;
+  opacity: 0;
+  animation: sealedRing calc(var(--motion-emphasis) * 2) var(--ease-orium) var(--motion-standard) both;
+}
+@keyframes sealedStamp {
+  0% { transform: scale(1.75); opacity: 0; }
+  58% { transform: scale(0.92); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes sealedRing {
+  0% { transform: scale(0.8); opacity: 0.8; }
+  100% { transform: scale(1.55); opacity: 0; }
+}
+.sealed-saving { background: linear-gradient(100deg, #FFE7BF, #FFD599 55%, #EDBD7B); }
+.sealed-card:not(.is-on) .sealed-saving { background: #2A2520; color: #FFD599; }
+.sealed-cta {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(100deg, #FFE7BF, #FFD599 52%, #EDBD7B);
+}
+.sealed-cta:hover { background: linear-gradient(100deg, #FFEDCF, #FFDDAA 52%, #F2C88C); }
+.sealed-cta::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 35%, rgb(255 255 255 / 0.62) 50%, transparent 65%);
+  transform: translateX(-130%);
+  animation: sealedCta 4.6s var(--ease-orium) 1.4s infinite;
+}
+@keyframes sealedCta { 0% { transform: translateX(-130%); } 26%, 100% { transform: translateX(130%); } }
+@media (prefers-reduced-motion: reduce) {
+  .sealed-sheen, .sealed-seal, .sealed-seal::after, .sealed-cta::after { animation: none; }
+  .sealed-sheen, .sealed-cta::after { display: none; }
+}
+
 /* ── Vendas da loja ───────────────────────────────────────────────── */
 @keyframes ui-pop { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: none; } }
 .ui-pop { animation: ui-pop 260ms var(--ease-orium) both; transform-origin: top center; }

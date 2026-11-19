@@ -33,6 +33,8 @@
 - Restock lines: only ONE "a comprar" line per product+supplier (partial index `restock_items_unique_open_line`); new sales never attach to bought/received lines. Reopen lines only via `reopenRestockItems`/`detachOrderFromItem` (orders-restock.server.ts), which merge into the open twin. `rewindOrder` (Voltar etapa) and `deleteSupplierOrders` use them; supplier orders are shown grouped per day (`DayOrderCard`).
 - Widgets (Admin → Widgets): one summary (`src/lib/widget.server.ts` → `/api/public/widget?key=ow_…`, keys hashed in `widget_keys`) feeds iPhone (Scriptable script from `widget-scriptable.ts`), Windows desktop (Rainmeter .rmskin from `widget-rainmeter.ts`, reads `?format=text` = `widgetText`), Windows 11 (manifest `widgets` + `public/widgets/*` Adaptive Card + `sw.js` handlers) and Android (`apps/android-widget`, APK built by `.github/workflows/android-widget.yml` into release `android-widgets`). Device calendars: `buildAgenda` (uid-stable events) is written by the Scriptable widget (calendar "Orium · Pedidos"), by the Android app (`CalendarSync.kt`) and served as `.ics` at `/api/public/agenda?key=`. Change the summary shape in all places together.
 
+- Frasco em promoção na página do perfume: `SealedDeal` substitui a escolha Decant/Frasco, o decant vira alternativa discreta sem "Recomendado" e todo número vem de `priceUnit`; urgência continua só com fim e estoque reais.
+
 ## Preço sob consulta (fornecedor só de consulta)
 - `products.price_on_request = true` → o site mostra "Sob consulta" e o botão "Consultar no WhatsApp" (Orium) no lugar do preço; o produto nunca entra na Sacola.
 - As listas públicas vêm de RPCs com colunas fixas, então os cards usam `useConsultIds()` / `isOnRequest()` de `src/lib/price-on-request.ts`.

@@ -4,14 +4,17 @@
  * Decant (recomendado) ou Frasco em dois cartões; no decant, o seletor
  * 2 · 5 · 10 ml desliza; preço grande com quanto tempo dura; e a barra fixa
  * "Adicionar à sacola" sempre à mão, com o que está escolhido.
+ * Com o frasco em promoção, o lacrado vira o protagonista (SealedDeal) e o
+ * decant passa a ser a alternativa discreta, sem "Recomendado".
  */
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { Check, Minus, Plus } from "lucide-react";
+import { Check, ChevronRight, Minus, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { brl, productTitle } from "@/lib/format";
 import { useCart } from "@/lib/cart";
 import { flyToCart } from "@/lib/fly-to-cart";
+import { goldBurst } from "@/lib/gold-burst";
 import { DECANT_SIZES, trackDecant, type DecantMl } from "@/lib/decants";
 import { useDecantPrices } from "@/components/orium/DecantPicker";
 import { usePromotions } from "@/lib/use-promotions";
@@ -19,6 +22,7 @@ import { priceUnit } from "@/lib/promotions";
 import { PromotionBadge } from "@/components/orium/PromotionBadge";
 import { isBlack } from "@/lib/black";
 import { BlackCountdown, BlackPrice, BlackScarcity, BlackTag } from "@/components/orium/black/Black";
+import { SealedDeal } from "@/components/orium/SealedDeal";
 import { PixNote } from "@/components/orium/PixNote";
 import { DeliveryEstimate } from "@/components/orium/badges";
 import type { CatalogProduct } from "@/components/orium/ProductCard";
@@ -95,8 +99,11 @@ export function ProductPurchase({
   const fromPrice = Math.min(...DECANT_SIZES.map((s) => decantPriced(s).finalPrice));
   /** Black November na escolha atual: vitrine com contagem, escassez real e "Comprar agora". */
   const black = isBlack(active.promotion) ? active.promotion : null;
-  const bottleBlack = isBlack(bottlePriced.promotion);
   const decantBlack = DECANT_SIZES.some((s) => isBlack(decantPriced(s).promotion));
+  /** Frasco com desconto real: o lacrado passa a ser o foco da página. */
+  const sealedDeal = bottleOk && !!bottlePriced.promotion && bottlePriced.saved > 0;
+  const dealShown = sealedDeal && !isDecant;
+  const decant10 = decantOk ? decantPriced(10).finalPrice : 0;
 
   const pickSize = (size: DecantMl) => {
     setMl(size);
@@ -104,7 +111,7 @@ export function ProductPurchase({
     trackDecant("decant_size_selected", { productId: product.id, variant: `DECANT_${size}` });
   };
 
-  const add = () => {
+  const add = (event: MouseEvent<HTMLButtonElement>) => {
     if (state === "view") {
       cart.setOpen(true);
       return;
@@ -151,6 +158,7 @@ export function ProductPurchase({
       action: { label: "Ver sacola", onClick: () => cart.setOpen(true) },
     });
     flyToCart(flyFrom?.current ?? null, product.image_url);
+    if (dealShown) goldBurst(event.currentTarget);
     setState("done");
     timers.current.forEach((t) => window.clearTimeout(t));
     if (black) {
@@ -176,7 +184,13 @@ export function ProductPurchase({
   const buyBar = (
     <>
       <div className="min-w-0 flex-1">
-        <p key={summary} className="value-in truncate text-[13px] text-[#A9A9A9]">{summary}</p>
+        {dealShown ? (
+          <p key={`saved-${qty}`} className="value-in truncate text-[13px] font-bold text-[#FFD599] tabular-nums max-[359px]:text-[11.5px]">
+            Economiza {brl(active.saved * qty)}
+          </p>
+        ) : (
+          <p key={summary} className="value-in truncate text-[13px] text-[#A9A9A9]">{summary}</p>
+        )}
         <p key={total} className="value-in mt-0.5 truncate text-[22px] leading-tight font-bold tracking-[-0.02em] text-white tabular-nums lg:text-[26px]">
           {brl(total)}
         </p>
@@ -189,6 +203,8 @@ export function ProductPurchase({
         className={cn(
           "press flex h-[54px] shrink-0 items-center justify-center gap-2 rounded-full px-7 text-[16px] font-bold transition-colors duration-300 lg:h-[58px] lg:px-9",
           state === "view" ? "bg-white text-[#15130F]" : "bg-[#FFD599] text-[#15130F] hover:bg-[#FFDDAA]",
+          dealShown && "max-[359px]:px-4 max-[359px]:text-[15px]",
+          dealShown && state === "idle" && "sealed-cta",
         )}
       >
         {state === "done" ? (
@@ -206,7 +222,43 @@ export function ProductPurchase({
 
   return (
     <>
-      {showChooser ? (
+      {sealedDeal ? (
+        <section aria-label="Como você quer levar?" className="mt-8">
+          {showChooser ? (
+            <h2 className="text-[18px] font-bold tracking-[-0.01em] text-white">Como você quer levar?</h2>
+          ) : null}
+          <div role={showChooser ? "radiogroup" : undefined} className={cn("flex flex-col gap-2.5", showChooser && "mt-3")}>
+            <SealedDeal
+              priced={bottlePriced}
+              word={bottleWord}
+              volumeMl={product.volume_ml}
+              decantPerMl={isPerfume && decant10 > 0 ? decant10 / 10 : null}
+              selected={!isDecant}
+              onSelect={showChooser ? () => onModeChange("bottle") : undefined}
+            />
+            {showChooser ? (
+              <button
+                type="button"
+                role="radio"
+                aria-checked={isDecant}
+                onClick={() => onModeChange("decant")}
+                className={cn(
+                  "pd-choice press flex min-h-[60px] w-full items-center gap-3 rounded-[18px] px-4 py-2.5 text-left",
+                  isDecant ? "is-on bg-[#221C14] ring-1 ring-[#FFD599] ring-inset" : "bg-[#151515] ring-1 ring-white/[0.08] ring-inset",
+                )}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[14.5px] leading-tight font-bold text-white">Prefere só experimentar?</span>
+                  <span className="mt-0.5 block text-[13px] text-[#A9A9A9]">
+                    Decant de 2, 5 ou 10 ml, a partir de {brl(fromPrice)}
+                  </span>
+                </span>
+                <ChevronRight aria-hidden className="size-4 shrink-0 text-[#7A7A7A]" strokeWidth={2.4} />
+              </button>
+            ) : null}
+          </div>
+        </section>
+      ) : showChooser ? (
         <section aria-label="Como você quer levar?" className="mt-8">
           <h2 className="text-[18px] font-bold tracking-[-0.01em] text-white">Como você quer levar?</h2>
           <div role="radiogroup" className="mt-3 grid grid-cols-[1.55fr_1fr] gap-2.5">
@@ -242,13 +294,9 @@ export function ProductPurchase({
                 !isDecant ? "is-on bg-[#221C14] ring-1 ring-[#FFD599] ring-inset" : "bg-[#1A1A1A] ring-1 ring-white/10 ring-inset",
               )}
             >
-              {bottleBlack ? <BlackTag size="sm" className="absolute top-3.5 left-3.5" /> : null}
               <span className="text-[18px] leading-tight font-bold text-white">{bottleWord}</span>
               {product.volume_ml ? <span className="mt-1 text-[13px] text-[#A9A9A9]">{product.volume_ml} ml</span> : null}
-              <span className="text-[13px] text-[#A9A9A9] tabular-nums">
-                {bottleBlack ? <span className="mr-1.5 text-[#6E6E6E] line-through">{brl(bottlePriced.basePrice)}</span> : null}
-                {brl(bottlePriced.finalPrice)}
-              </span>
+              <span className="text-[13px] text-[#A9A9A9] tabular-nums">{brl(bottlePriced.finalPrice)}</span>
             </button>
           </div>
         </section>
@@ -289,8 +337,13 @@ export function ProductPurchase({
       {isDecant ? <DecantComboPromo ml={ml} onPick={pickSize} className="mt-5" /> : null}
 
       {/* preço e o que você leva */}
-      <div className={isDecant && comboRow ? "mt-5" : "mt-6"}>
-        {black ? (
+      <div className={isDecant && comboRow ? "mt-5" : dealShown ? "mt-4" : "mt-6"}>
+        {dealShown ? (
+          <div className="flex flex-col gap-3.5">
+            <BlackCountdown endsAt={active.promotion?.ends_at} variant="boxes" showDate />
+            <BlackScarcity product={product} variant="bar" />
+          </div>
+        ) : black ? (
           <div key={`black-${mode}-${ml}`} className="pd-price rounded-[22px] bg-[#0A0A0A] p-4 ring-1 ring-white/10">
             <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-3">
               <BlackTag promotion={black} size="md" />
@@ -320,14 +373,16 @@ export function ProductPurchase({
           {isDecant ? <span className="text-[14px] font-semibold text-[#FFD599]">{SIZE_COPY[ml].lasts}</span> : null}
         </div>
         )}
-        {active.promotion && !black ? <PromotionBadge promotion={active.promotion} size="sm" className="mt-2.5" /> : null}
-        <p className="mt-3 text-[15px] leading-relaxed text-[#A9A9A9]">
-          {isDecant
-            ? SIZE_COPY[ml].text
-            : isPerfume
-              ? `Frasco original e lacrado${product.volume_ml ? ` de ${product.volume_ml} ml` : ""}, direto da marca.`
-              : "Produto original e lacrado, direto da marca."}
-        </p>
+        {active.promotion && !black && !dealShown ? <PromotionBadge promotion={active.promotion} size="sm" className="mt-2.5" /> : null}
+        {dealShown ? null : (
+          <p className="mt-3 text-[15px] leading-relaxed text-[#A9A9A9]">
+            {isDecant
+              ? SIZE_COPY[ml].text
+              : isPerfume
+                ? `Frasco original e lacrado${product.volume_ml ? ` de ${product.volume_ml} ml` : ""}, direto da marca.`
+                : "Produto original e lacrado, direto da marca."}
+          </p>
+        )}
         {!isDecant && product.wholesale_price ? (
           <p className="mt-2 text-[14px] text-[#A9A9A9]">
             A partir de {minQty} peças: <strong className="font-bold text-[#FFD599]">{brl(Number(product.wholesale_price))} cada</strong>
