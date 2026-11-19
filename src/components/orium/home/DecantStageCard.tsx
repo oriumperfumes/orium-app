@@ -5,7 +5,6 @@ import { brl } from "@/lib/format";
 import { useDecantSettings } from "@/lib/use-decant-settings";
 import { usePricesOnRequestAll } from "@/lib/price-on-request";
 import { cn } from "@/lib/utils";
-import vialsImg from "@/assets/home-decants-vials.webp";
 import type { DecantMl, DecantRT } from "@/components/orium/home/decant-rt";
 
 const SIZES: DecantMl[] = [2, 5, 10];
@@ -32,6 +31,8 @@ export function DecantStageCard({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stageRef = useRef<DecantRT | null>(null);
   const [ml, setMl] = useState<DecantMl>(5);
+  const selectedMl = useRef<DecantMl>(5);
+  const capOpen = useRef(false);
   const [state, setState] = useState<"loading" | "live" | "fallback">("loading");
   const [touched, setTouched] = useState(false);
   const settings = useDecantSettings();
@@ -46,16 +47,23 @@ export function DecantStageCard({
     let stage: DecantRT | null = null;
     // o código do palco só baixa quando o card chega perto da tela
     const start = () =>
-      import("@/components/orium/home/decant-rt").then(({ createDecantRT }) => {
-        if (cancelled) return;
-        stage = createDecantRT(canvas, {
-          ml,
-          bg: BG,
-          onFirstFrame: () => !cancelled && setState("live"),
+      import("@/components/orium/home/decant-rt")
+        .then(({ createDecantRT }) => {
+          if (cancelled) return;
+          stage = createDecantRT(canvas, {
+            ml: selectedMl.current,
+            bg: BG,
+            onFirstFrame: () => !cancelled && setState("live"),
+            onCapChange: (open) => {
+              capOpen.current = open;
+            },
+          });
+          stageRef.current = stage;
+          if (!stage) setState("fallback");
+        })
+        .catch(() => {
+          if (!cancelled) setState("fallback");
         });
-        stageRef.current = stage;
-        if (!stage) setState("fallback");
-      });
     const io =
       typeof IntersectionObserver === "function"
         ? new IntersectionObserver(
@@ -77,10 +85,10 @@ export function DecantStageCard({
       stageRef.current = null;
     };
     // o tamanho inicial só vale na criação; trocas passam por setSize
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const pick = (s: DecantMl) => {
+    selectedMl.current = s;
     setMl(s);
     stageRef.current?.setSize(s);
     // toque também serve para o iPhone liberar o giroscópio
@@ -112,15 +120,22 @@ export function DecantStageCard({
       >
         {state === "fallback" ? (
           <img
-            src={vialsImg}
-            alt="Três decants com perfume âmbar, de 2, 5 e 10 ml"
-            className="mx-auto mt-10 block w-full max-w-[330px]"
+            src={`/3d/decant-${ml}.webp`}
+            alt={`Decant Orium com ${ml} ml de perfume`}
+            className="absolute inset-0 h-full w-full object-contain"
           />
         ) : (
           <canvas
             ref={canvasRef}
-            aria-label={`Decant de ${ml} ml em 3D. Arraste para girar, toque para tirar a tampa.`}
-            role="img"
+            aria-label={`Decant de ${ml} ml em 3D. Arraste para girar. Toque ou pressione Enter para abrir ou fechar a tampa.`}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                if (!e.repeat) stageRef.current?.setCapOpen(!capOpen.current);
+              }
+            }}
             className={cn(
               "absolute inset-0 h-full w-full cursor-grab transition-opacity duration-700 active:cursor-grabbing",
               state === "live" ? "opacity-100" : "opacity-0",
