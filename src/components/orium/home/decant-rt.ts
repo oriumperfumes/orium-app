@@ -116,7 +116,7 @@ uniform vec3 uCapP;         // base da tampa (espaço do frasco)
 uniform vec3 uCapAx;        // eixo da tampa (espaço do frasco)
 uniform vec3 uCapW;         // base da tampa no mundo (sombra na mesa)
 uniform float uCapR;        // raio da tampa
-uniform bool uWide;
+uniform float uWide;        // 0 = frasco fino, 1 = largo (contínuo durante a transformação)
 uniform vec3 uToneFix;
 uniform vec2 uJit;           // deslocamento de subpixel (antisserrilhado temporal)
 
@@ -162,7 +162,7 @@ float rodS(vec3 p){
   if (far > 0.5) return max(far, max(y0 - p.y, p.y - y1));
   float d = (length(p.xz - tubeC(p.y)) - uTube.y)*0.8;
   d = max(d, max(y0 - p.y, p.y - y1));
-  if (!uWide && p.y > uA.y-14.) {
+  if (uWide < .5 && p.y > uA.y-14.) {
     float sleeveRadius=mix(1.08,2.67,smoothstep(uA.y-7.2,uA.y-.5,p.y));
     float sleeve=sdBox2(vec2(length(p.xz),p.y-(uA.y-3.5)),vec2(sleeveRadius,4.65),.28);
     d=min(d,sleeve*.8);
@@ -191,7 +191,7 @@ float surfS(vec3 p){
 float liqS(vec3 p){ return max(innerS(p), surfS(p)); }
 
 // alturas do borrifador
-float yCol(){ return uA.y + (uWide ? 0.0 : 0.15); }
+float yCol(){ return uA.y + 0.15*(1. - uWide); }
 float yAct(){ return yCol() + uC.y + 4.65; }
 float collarBox(vec3 p){
   return sdBox2(vec2(length(p.xz),p.y-yCol()-uC.y*.5),vec2(uC.x,uC.y*.5),.36);
@@ -1117,11 +1117,12 @@ void main(){
     const sinT = Math.sqrt(Math.max(0, 1 - cosT * cosT));
     const lift = (spec.R - 1.1) * sinT - 1.1 * cosT + 1.1;
     // câmera de produto: tele, um pouco acima, enquadrando o maior frasco
-    const wide = ml === 10;
-    const seatY = spec.H + (wide ? 0 : 0.06);
+    // quanto o frasco já virou o largo (segue a mola da forma: transição suave)
+    const wide = Math.min(1, Math.max(0, (spec.R - SLIM.R) / (WIDE.R - SLIM.R)));
+    const seatY = spec.H + 0.06 * (1 - wide);
     const clear = spec.collarH + 4.65 + spec.actH + 1.9;
     const liftBeat = Math.sin(Math.PI * capT) ** 4;
-    const pan = wide ? 4 * capT * capT : 0;
+    const pan = 4 * capT * capT * wide;
     const framingY = 32.5 + (spec.H - SLIM.H) * 0.5 + 16 * liftBeat;
     const eye: V3 = [pan, framingY + 8.5, -185 - 108 * liftBeat];
     const target: V3 = [pan, framingY, 0];
@@ -1174,7 +1175,7 @@ void main(){
     gl.uniform3f(u.capAx, capAxL[0], capAxL[1], capAxL[2]);
     gl.uniform3f(u.capW, capW[0], capW[1], capW[2]);
     gl.uniform1f(u.capR, spec.capR);
-    gl.uniform1i(u.wide, wide ? 1 : 0);
+    gl.uniform1f(u.wide, wide);
     gl.uniform3f(u.toneFix, toneFix[0], toneFix[1], toneFix[2]);
     gl.uniform3f(u.wave2, w2Amp, w2Phase, w2Dir);
     // o perfume quer ficar nivelado no MUNDO: normal = cima + desvio da mola
@@ -1265,11 +1266,6 @@ void main(){
     },
     setSize(next) {
       if (next === ml) return;
-      if ((next === 10) !== (ml === 10)) {
-        Object.assign(spec, targetOf(next));
-        for (const key of Object.keys(specV) as Array<keyof typeof specV>) specV[key] = 0;
-        histValid = false;
-      }
       ml = next;
       // troca de frasco dá um tranco leve no perfume
       szv += 1.6;
