@@ -35,6 +35,8 @@
 
 - Frasco em promoção na página do perfume: `SealedDeal` substitui a escolha Decant/Frasco, o decant vira alternativa discreta sem "Recomendado" e todo número vem de `priceUnit`; urgência continua só com fim e estoque reais.
 
+- Menu do Admin: seis áreas em `NAV_HUBS` (AdminShell). Telas parecidas são abas da área (`SectionTabs`, no topo da página); para mudar o agrupamento, edite só `NAV_HUBS`. Atendimento fica fora do menu, mas a rota continua.
+
 ## Preço sob consulta (fornecedor só de consulta)
 - `products.price_on_request = true` → o site mostra "Sob consulta" e o botão "Consultar no WhatsApp" (Orium) no lugar do preço; o produto nunca entra na Sacola.
 - As listas públicas vêm de RPCs com colunas fixas, então os cards usam `useConsultIds()` / `isOnRequest()` de `src/lib/price-on-request.ts`.

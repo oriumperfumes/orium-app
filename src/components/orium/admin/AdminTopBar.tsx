@@ -1,33 +1,33 @@
 /**
  * TOPO DO ADMIN NO COMPUTADOR — navegação em pílulas.
  *
- * Símbolo da Orium · Início · Pedidos · Produtos · Estoque · Clientes · Mais
+ * Símbolo da Orium · Início · Pedidos · Produtos · Compras · Clientes
+ * À direita: Copilot, busca (Ctrl K), "+" (novo pedido), engrenagem (Configurações) e o perfil.
  * À direita: busca (abre a paleta de comandos, ⌘K), "+" (novo pedido) e o perfil.
  * O celular continua com a barra inferior e o menu lateral.
  */
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowUpRight, ChevronDown, CornerDownLeft, Plus, Search, ShoppingBag, Store, type LucideIcon } from "lucide-react";
+import { CornerDownLeft, Plus, Search, Settings, ShoppingBag, Store, type LucideIcon } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import symbolLight from "@/assets/orium-symbol-light.png.asset.json";
-import { AdminAvatar, NAV_GROUPS, displayName, isActive, type NavItem } from "@/components/orium/AdminShell";
+import { AdminAvatar, NAV_HUBS, displayName, hubActive, navSections } from "@/components/orium/AdminShell";
 import { useCopilot } from "@/components/orium/copilot/CopilotPanel";
 import { CopilotOrb } from "@/components/orium/copilot/CopilotOrb";
 
-const PRIMARY = ["/admin", "/admin/pedidos", "/admin/produtos", "/admin/estoque", "/admin/clientes"];
-/** lido na hora (AdminShell importa este arquivo: nada de NAV_GROUPS no topo do módulo) */
-const allItems = (): NavItem[] => NAV_GROUPS.flatMap((g) => g.items);
 const OPEN_EVENT = "orium:admin-search";
+/** Configurações vira a engrenagem da direita: sobra espaço para as áreas do dia a dia. */
+const SETTINGS_TO = "/admin/configuracoes";
 
 export const openAdminSearch = () => window.dispatchEvent(new Event(OPEN_EVENT));
 
 export function AdminTopBar({ pathname, orders }: { pathname: string; orders: number }) {
   const { session, role } = useAuth();
+  // lido na hora (AdminShell importa este arquivo: nada de NAV_HUBS no topo do módulo)
+  const settings = NAV_HUBS.find((h) => h.to === SETTINGS_TO)!;
   const name = displayName(session) || (session?.user.email ?? "").replace(/@.*/, "");
-  const primary = PRIMARY.map((to) => allItems().find((i) => i.to === to)!).filter(Boolean);
-  const inMore = !primary.some((i) => isActive(pathname, i));
 
   return (
     <header className="adm-top sticky top-0 z-40 hidden lg:block">
@@ -43,8 +43,8 @@ export function AdminTopBar({ pathname, orders }: { pathname: string; orders: nu
         </Link>
 
         <nav aria-label="Seções do admin" className="ml-6 flex min-w-0 items-center gap-1.5">
-          {primary.map((item) => {
-            const active = isActive(pathname, item);
+          {NAV_HUBS.filter((h) => h.to !== SETTINGS_TO).map((item) => {
+            const active = hubActive(pathname, item);
             const count = item.badge === "orders" ? orders : 0;
             return (
               <Link
@@ -53,6 +53,7 @@ export function AdminTopBar({ pathname, orders }: { pathname: string; orders: nu
                 preload="intent"
                 activeOptions={{ exact: true }}
                 data-active={active}
+                aria-current={active ? "page" : undefined}
                 className="adm-pill press"
               >
                 {item.label}
@@ -60,7 +61,6 @@ export function AdminTopBar({ pathname, orders }: { pathname: string; orders: nu
               </Link>
             );
           })}
-          <MoreMenu pathname={pathname} active={inMore} />
         </nav>
 
         <div className="ml-auto flex shrink-0 items-center gap-2.5">
@@ -83,6 +83,17 @@ export function AdminTopBar({ pathname, orders }: { pathname: string; orders: nu
             className="press grid size-12 place-items-center rounded-full border border-white/[0.08] bg-[#161616] text-white transition-colors hover:border-white/20 hover:bg-[#1F1F1F]"
           >
             <Plus className="size-5" strokeWidth={2.2} />
+          </Link>
+          <Link
+            to={SETTINGS_TO}
+            preload="intent"
+            aria-label="Configurações"
+            title="Configurações"
+            data-active={hubActive(pathname, settings)}
+            aria-current={hubActive(pathname, settings) ? "page" : undefined}
+            className="press grid size-12 place-items-center rounded-full border border-white/[0.08] bg-[#161616] text-white transition-colors hover:border-white/20 hover:bg-[#1F1F1F] data-[active=true]:border-transparent data-[active=true]:bg-white data-[active=true]:text-[#15130F]"
+          >
+            <Settings className="size-5" strokeWidth={2.1} />
           </Link>
           <div className="ml-1 flex items-center gap-3 rounded-full py-1 pr-1 pl-1 xl:pr-4">
             <AdminAvatar className="size-12 text-[15px]" />
@@ -120,71 +131,6 @@ function CopilotPill() {
   );
 }
 
-/** "Mais": todas as outras seções, agrupadas, num painel que abre abaixo da pílula. */
-function MoreMenu({ pathname, active }: { pathname: string; active: boolean }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const off = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    document.addEventListener("pointerdown", off);
-    document.addEventListener("keydown", esc);
-    return () => {
-      document.removeEventListener("pointerdown", off);
-      document.removeEventListener("keydown", esc);
-    };
-  }, [open]);
-  useEffect(() => setOpen(false), [pathname]);
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        aria-expanded={open}
-        data-active={active}
-        onClick={() => setOpen((v) => !v)}
-        className="adm-pill press"
-      >
-        Mais
-        <ChevronDown className={cn("size-4 transition-transform duration-200", open && "rotate-180")} strokeWidth={2.4} />
-      </button>
-      {open ? (
-        <div className="adm-pop absolute top-[calc(100%+10px)] left-0 z-50 grid w-[640px] grid-cols-3 gap-x-2 gap-y-5 rounded-[28px] border border-white/[0.08] bg-[#161616] p-5">
-          {NAV_GROUPS.map((g) => (
-            <div key={g.label}>
-              <p className="mb-1.5 px-3 text-[12px] font-semibold text-[#6F6F6F]">{g.label}</p>
-              <ul>
-                {g.items.map((item) => (
-                  <li key={item.to}>
-                    <Link
-                      to={item.to}
-                      preload="intent"
-                      activeOptions={{ exact: true }}
-                      data-active={isActive(pathname, item)}
-                      className="adm-nav press flex h-10 items-center gap-2.5 rounded-[12px] px-3 text-[14.5px] font-semibold"
-                    >
-                      <item.icon className="adm-nav-ico size-[17px] shrink-0" strokeWidth={1.9} />
-                      <span className="truncate">{item.label}</span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-          <Link
-            to="/"
-            className="press flex h-10 items-center gap-2 self-end rounded-[12px] px-3 text-[14.5px] font-semibold text-[#A9A9A9] hover:text-white"
-          >
-            Ver a loja <ArrowUpRight className="size-4" />
-          </Link>
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 type Cmd = { id: string; label: string; hint: string; icon: LucideIcon; to: string; search?: Record<string, unknown> };
 
@@ -225,7 +171,7 @@ export function CommandPalette() {
       { id: "novo", label: "Novo pedido", hint: "Ação", icon: Plus, to: "/admin/pedidos", search: { novo: true } },
       { id: "venda", label: "Registrar venda da loja", hint: "Ação", icon: Store, to: "/admin/vendas-loja", search: { registrar: "manual" } },
     ];
-    const sections: Cmd[] = allItems().map((i) => ({ id: i.to, label: i.label, hint: "Seção", icon: i.icon, to: i.to }));
+    const sections: Cmd[] = navSections().map((i) => ({ id: i.to, label: i.label, hint: i.label === i.hub ? "Área" : i.hub, icon: i.icon, to: i.to }));
     const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
     const list = [...actions, ...sections].filter((c) => !term || norm(c.label).includes(norm(term)));
     if (term.length >= 2)

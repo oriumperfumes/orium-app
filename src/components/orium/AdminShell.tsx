@@ -12,22 +12,13 @@ import { navigatingFromLayer, useBackToClose } from "@/hooks/use-back-to-close";
 import {
   ArrowLeft,
   ArrowUpRight,
-  BadgePercent,
-  Boxes,
   ClipboardList,
-  Gem,
   House,
   LayoutGrid,
-  MessagesSquare,
   Package,
-  Radio,
   Settings,
   ShoppingBag,
-  Store,
-  TrendingUp,
-  Truck,
   Users,
-  Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -47,60 +38,128 @@ import { AdminTopBar, CommandPalette } from "@/components/orium/admin/AdminTopBa
  * Barras #0A0A0A com fio de 6% de branco, fundo #101010, cartões #1A1A1A,
  * dourado #FFD599 só como acento. Sem desfoque, sem brilho, sem degradê.
  *
- * - Computador: menu lateral fixo com o nome da seção e nada mais.
- * - Celular: barra inferior com o que se usa todo dia; "Menu" abre o resto.
+ * - Seis áreas (NAV_HUBS): Início, Pedidos, Produtos, Compras, Clientes e
+ *   Configurações. Telas parecidas viram abas no topo da página da área.
+ * - Celular: barra inferior com o que se usa todo dia; "Menu" abre as áreas.
  * - Cada página tem um título grande (como "Favoritos" na loja); ao rolar,
  *   ele passa para a barra de cima do celular.
  */
 
 export type NavItem = { to: string; label: string; icon: LucideIcon; exact?: boolean; badge?: "orders" };
 
-export const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
+/** Uma aba dentro de uma área; `also` são telas filhas que acendem a mesma aba. */
+export type NavSection = { to: string; label: string; also?: string[] };
+export type NavHub = NavItem & { sections: NavSection[] };
+
+/**
+ * As seis áreas do Admin. Cada tela continua no mesmo endereço; o que mudou foi
+ * o agrupamento. Atendimento saiu do menu (a tela segue em /admin/atendimento).
+ */
+export const NAV_HUBS: NavHub[] = [
+  { to: "/admin", label: "Início", icon: House, exact: true, sections: [] },
   {
-    label: "Dia a dia",
-    items: [
-      { to: "/admin", label: "Início", icon: House, exact: true },
-      { to: "/admin/pedidos", label: "Pedidos", icon: ShoppingBag, badge: "orders" },
-      { to: "/admin/atendimento", label: "Atendimento", icon: MessagesSquare },
-      { to: "/admin/vendas-loja", label: "Vendas da loja", icon: Store },
-      { to: "/admin/aovivo", label: "Ao vivo", icon: Radio },
+    to: "/admin/pedidos",
+    label: "Pedidos",
+    icon: ShoppingBag,
+    badge: "orders",
+    sections: [
+      { to: "/admin/pedidos", label: "Pedidos" },
+      { to: "/admin/vendas-loja", label: "Vendas da loja" },
     ],
   },
   {
-    label: "Catálogo",
-    items: [
-      { to: "/admin/produtos", label: "Produtos", icon: Package },
-      { to: "/admin/estoque", label: "Estoque", icon: Boxes },
-      { to: "/admin/precificacao", label: "Precificação", icon: BadgePercent },
-      { to: "/admin/manutencao", label: "Manutenção", icon: Wrench },
+    to: "/admin/produtos",
+    label: "Produtos",
+    icon: Package,
+    sections: [
+      { to: "/admin/produtos", label: "Catálogo" },
+      { to: "/admin/estoque", label: "Estoque" },
+      { to: "/admin/precificacao", label: "Precificação" },
+      { to: "/admin/manutencao", label: "Manutenção" },
     ],
   },
   {
+    to: "/admin/reposicao",
     label: "Compras",
-    items: [
-      { to: "/admin/reposicao", label: "Reposição", icon: ClipboardList },
-      { to: "/admin/fornecedores", label: "Fornecedores", icon: Truck },
-      { to: "/admin/negociacao", label: "Negociação", icon: Gem },
+    icon: ClipboardList,
+    sections: [
+      { to: "/admin/reposicao", label: "Reposição" },
+      { to: "/admin/fornecedores", label: "Fornecedores", also: ["/admin/fornecedores-rota"] },
+      { to: "/admin/negociacao", label: "Negociação" },
     ],
   },
   {
+    to: "/admin/clientes",
     label: "Clientes",
-    items: [
-      { to: "/admin/clientes", label: "Clientes", icon: Users },
-      { to: "/admin/conversao", label: "Conversão", icon: TrendingUp },
+    icon: Users,
+    sections: [
+      { to: "/admin/clientes", label: "Clientes" },
+      { to: "/admin/aovivo", label: "Ao vivo" },
+      { to: "/admin/conversao", label: "Conversão" },
     ],
   },
   {
-    label: "Sistema",
-    items: [
-      { to: "/admin/widgets", label: "Widgets", icon: LayoutGrid },
-      { to: "/admin/configuracoes", label: "Configurações", icon: Settings },
+    to: "/admin/configuracoes",
+    label: "Configurações",
+    icon: Settings,
+    sections: [
+      { to: "/admin/configuracoes", label: "Configurações" },
+      { to: "/admin/widgets", label: "Widgets" },
     ],
   },
 ];
 
 export const isActive = (pathname: string, item: { to: string; exact?: boolean }) =>
   item.exact ? pathname === item.to || pathname === `${item.to}/` : pathname === item.to || pathname.startsWith(`${item.to}/`);
+
+const sectionActive = (pathname: string, s: NavSection) =>
+  isActive(pathname, s) || (s.also ?? []).some((to) => isActive(pathname, { to }));
+
+/** A área acende em qualquer uma das suas abas. */
+export const hubActive = (pathname: string, hub: NavHub) =>
+  hub.exact ? isActive(pathname, hub) : isActive(pathname, hub) || hub.sections.some((s) => sectionActive(pathname, s));
+
+/** Todas as telas do menu, para a busca do painel (Ctrl K). */
+export const navSections = (): Array<{ to: string; label: string; hub: string; icon: LucideIcon }> =>
+  NAV_HUBS.flatMap((h) =>
+    h.sections.length ? h.sections.map((s) => ({ to: s.to, label: s.label, hub: h.label, icon: h.icon })) : [{ to: h.to, label: h.label, hub: h.label, icon: h.icon }],
+  );
+
+/** Abas da área no topo da página: só aparecem quando a área junta mais de uma tela. */
+function SectionTabs({ pathname }: { pathname: string }) {
+  const hub = NAV_HUBS.find((h) => h.sections.length > 1 && h.sections.some((s) => sectionActive(pathname, s)));
+  const ref = useRef<HTMLElement>(null);
+  // celular: a fileira rola sozinha até a aba aberta (sem mexer na rolagem da página)
+  useEffect(() => {
+    const nav = ref.current;
+    const on = nav?.querySelector<HTMLElement>('[data-active="true"]');
+    if (!nav || !on) return;
+    const left = on.offsetLeft - (nav.clientWidth - on.offsetWidth) / 2;
+    nav.scrollLeft = Math.max(0, left);
+  }, [pathname]);
+  if (!hub) return null;
+  return (
+    <nav ref={ref} aria-label={hub.label} className="adm-scroll -mx-1 mb-5 overflow-x-auto px-1 pb-1 lg:mb-7">
+      <div className="inline-flex min-w-max items-center gap-1 rounded-full bg-[#1A1A1A] p-1 ring-1 ring-white/[0.06]">
+        {hub.sections.map((s) => {
+          const active = sectionActive(pathname, s);
+          return (
+            <Link
+              key={s.to}
+              to={s.to}
+              preload="intent"
+              aria-current={active ? "page" : undefined}
+              data-active={active}
+              className="press flex h-10 items-center rounded-full px-3.5 text-[14px] font-semibold sm:px-4 sm:text-[14.5px] whitespace-nowrap text-[#A9A9A9] transition-colors duration-[var(--motion-fast)] hover:text-white data-[active=true]:bg-white data-[active=true]:text-[#15130F]"
+            >
+              {s.label}
+            </Link>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
 
 /** O título da página vive no shell (título grande + barra do celular). */
 const TitleContext = createContext<(t: string) => void>(() => {});
@@ -191,6 +250,7 @@ function AdminChromeInner({ children }: { children: ReactNode }) {
           </Drawer>
 
           <main className="page-x min-w-0 flex-1 pt-5 pb-[calc(6.5rem+env(safe-area-inset-bottom))] lg:px-10 lg:pt-8 lg:pb-16 wide:px-14">
+            <SectionTabs pathname={pathname} />
             {children}
           </main>
           <AdminTabBar pathname={pathname} orders={orders} onMenu={openDrawer} menuOpen={open} />
@@ -203,39 +263,38 @@ function AdminChromeInner({ children }: { children: ReactNode }) {
 
 function AdminNav({ pathname, orders, onNavigate }: { pathname: string; orders: number; onNavigate?: () => void }) {
   return (
-    <nav aria-label="Seções do admin" className="space-y-6">
-      {NAV_GROUPS.map((group) => (
-        <div key={group.label}>
-          <p className="mb-1.5 px-3 text-[12px] font-semibold text-[#6F6F6F]">{group.label}</p>
-          <ul className="space-y-0.5">
-            {group.items.map((item) => {
-              const active = isActive(pathname, item);
-              const count = item.badge === "orders" ? orders : 0;
-              return (
-                <li key={item.to}>
-                  <Link
-                    to={item.to}
-                    preload="intent"
-                    onClick={onNavigate}
-                    replace={!!onNavigate}
-                    activeOptions={{ exact: true }}
-                    data-active={active}
-                    className="adm-nav press flex h-11 items-center gap-3 rounded-[14px] px-3 text-[15px] font-semibold"
-                  >
-                    <item.icon className="adm-nav-ico size-[19px] shrink-0" strokeWidth={1.9} />
-                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                    {count > 0 ? (
-                      <span className="grid h-[22px] min-w-[22px] place-items-center rounded-full bg-[#FFD599] px-1.5 text-[11.5px] font-bold text-[#15130F] tabular-nums">
-                        {count > 99 ? "99+" : count}
-                      </span>
-                    ) : null}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      ))}
+    <nav aria-label="Áreas do admin">
+      <ul className="space-y-1">
+        {NAV_HUBS.map((hub) => {
+          const active = hubActive(pathname, hub);
+          const count = hub.badge === "orders" ? orders : 0;
+          const parts = hub.sections.length > 1 ? hub.sections.map((s) => s.label).join(", ") : null;
+          return (
+            <li key={hub.to}>
+              <Link
+                to={hub.to}
+                preload="intent"
+                onClick={onNavigate}
+                replace={!!onNavigate}
+                activeOptions={{ exact: true }}
+                data-active={active}
+                className="adm-nav press flex min-h-[56px] items-center gap-3.5 rounded-[16px] px-3 py-2"
+              >
+                <hub.icon className="adm-nav-ico size-[21px] shrink-0" strokeWidth={1.9} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[16px] font-semibold">{hub.label}</span>
+                  {parts ? <span className="mt-0.5 block truncate text-[12.5px] font-medium text-[#7A7A7A]">{parts}</span> : null}
+                </span>
+                {count > 0 ? (
+                  <span className="grid h-[22px] min-w-[22px] place-items-center rounded-full bg-[#FFD599] px-1.5 text-[11.5px] font-bold text-[#15130F] tabular-nums">
+                    {count > 99 ? "99+" : count}
+                  </span>
+                ) : null}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
     </nav>
   );
 }
@@ -402,8 +461,8 @@ function AdminTabBar({
   onMenu: () => void;
   menuOpen: boolean;
 }) {
-  // "Menu" fica aceso nas seções que não têm aba própria
-  const elsewhere = !TABS.some((t) => isActive(pathname, t));
+  // "Menu" fica aceso nas áreas que não têm aba própria
+  const elsewhere = !TABS.some((t) => isActive(pathname, t) || NAV_HUBS.some((h) => h.to === t.to && hubActive(pathname, h)));
   const item =
     "press relative flex flex-col items-center justify-center gap-1 text-[#8C8C8C] transition-colors duration-[var(--motion-fast)] data-[active=true]:text-white";
   return (
@@ -414,7 +473,8 @@ function AdminTabBar({
     >
       <div className="mx-auto grid h-[60px] max-w-[460px] grid-cols-5 px-2">
         {TABS.flatMap((t, ti) => {
-          const active = isActive(pathname, t);
+          const hub = NAV_HUBS.find((h) => h.to === t.to);
+          const active = hub ? hubActive(pathname, hub) : isActive(pathname, t);
           const count = t.badge === "orders" ? orders : 0;
           const tab = (
             <Link key={t.to} to={t.to} preload="intent" activeOptions={{ exact: true }} data-active={active} className={item}>
