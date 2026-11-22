@@ -603,7 +603,8 @@ export function AdminShell({
     <div
       className={cn(
         "admin-page @container/page mx-auto w-full min-w-0",
-        wide ? "max-w-none" : "max-w-[1440px]",
+        // uma largura só para todo o Admin: título e conteúdo sempre na mesma linha
+        "max-w-[1440px]",
       )}
     >
       {bare ? null : (

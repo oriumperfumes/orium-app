@@ -47,7 +47,7 @@ function Page() {
 
   return (
     <AdminShell title="Manutenção">
-      <div className="mx-auto w-full max-w-6xl space-y-5 pb-24">
+      <div className="w-full space-y-5 pb-24">
         <section aria-label="Saúde do catálogo" className="space-y-2">
           <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Saúde do catálogo</h2>
           <div className="grid grid-cols-3 gap-2">

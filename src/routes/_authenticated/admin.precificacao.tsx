@@ -86,12 +86,12 @@ function AdminPricing() {
 
   return (
     <AdminShell title="Precificação" bare>
-      <header className="adm-rise flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+      <header className="adm-rise flex min-w-0 flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div className="min-w-0">
-          <p key={tab} className="adm-fade text-[15px] text-[#A9A9A9] lg:text-[17px]">
+          <PageTitle title="Precificação" />
+          <p key={tab} className="adm-fade mt-1.5 max-w-prose text-[15px] leading-snug text-[#A9A9A9]">
             {current.sub}
           </p>
-          <PageTitle title="Precificação" className="mt-1 text-[34px] leading-[1.05] tracking-[-0.04em] lg:text-[46px]" />
         </div>
         <PxPrimary
           onClick={() => setCreating(tab)}
@@ -102,7 +102,7 @@ function AdminPricing() {
               <Plus className="size-[18px]" strokeWidth={2.6} />
             )
           }
-          className="max-sm:w-full lg:h-[60px] lg:min-w-[220px]"
+          className="max-sm:w-full lg:min-w-[220px]"
         >
           {current.action}
         </PxPrimary>

@@ -67,7 +67,7 @@ function AdminSettings() {
 
   return (
     <AdminShell title="Configurações">
-      <div className="mx-auto w-full max-w-6xl min-w-0 pb-8">
+      <div className="w-full min-w-0 pb-8">
         <div className="mb-5">
           <div className="w-full overflow-x-auto overscroll-x-contain pb-1" aria-label="Categorias das configurações">
             <div

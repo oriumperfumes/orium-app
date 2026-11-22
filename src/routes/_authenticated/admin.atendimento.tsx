@@ -146,7 +146,7 @@ function AtendimentoPage() {
 
   return (
     <AdminShell title="Atendimento">
-      <div className="mx-auto flex w-full max-w-[1480px] min-w-0 flex-col gap-4 pb-8">
+      <div className="flex w-full min-w-0 flex-col gap-4 pb-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs uppercase tracking-[0.18em] text-primary/90">Orium · atendimento</p>

@@ -31,7 +31,7 @@ export function AdminTopBar({ pathname, orders }: { pathname: string; orders: nu
 
   return (
     <header className="adm-top sticky top-0 z-40 hidden lg:block">
-      <div className="flex h-[84px] items-center gap-3 px-10 wide:px-14">
+      <div className="mx-auto flex h-[84px] w-full max-w-[1520px] items-center gap-3 px-10">
         <Link
           to="/"
           preload="intent"
