@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { Layers, Percent, Plus, SlidersHorizontal, Ticket, Wallet } from "lucide-react";
-import { AdminShell } from "@/components/orium/AdminShell";
+import { AdminShell, PageTitle } from "@/components/orium/AdminShell";
 import { cn } from "@/lib/utils";
 import { BlackHeroCard, PricesOnRequestCard, PricingRulesBoard } from "@/components/orium/admin/PricingRules";
 import { PricingWorkbench } from "@/components/orium/admin/PricingProduct";
@@ -91,9 +91,7 @@ function AdminPricing() {
           <p key={tab} className="adm-fade text-[15px] text-[#A9A9A9] lg:text-[17px]">
             {current.sub}
           </p>
-          <h1 className="mt-1 text-[34px] leading-[1.05] font-bold tracking-[-0.04em] lg:text-[46px]">
-            Precificação
-          </h1>
+          <PageTitle title="Precificação" className="mt-1 text-[34px] leading-[1.05] tracking-[-0.04em] lg:text-[46px]" />
         </div>
         <PxPrimary
           onClick={() => setCreating(tab)}

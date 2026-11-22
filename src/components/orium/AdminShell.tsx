@@ -45,7 +45,13 @@ import { AdminTopBar, CommandPalette } from "@/components/orium/admin/AdminTopBa
  *   ele passa para a barra de cima do celular.
  */
 
-export type NavItem = { to: string; label: string; icon: LucideIcon; exact?: boolean; badge?: "orders" };
+export type NavItem = {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  exact?: boolean;
+  badge?: "orders";
+};
 
 /** Uma aba dentro de uma área; `also` são telas filhas que acendem a mesma aba. */
 export type NavSection = { to: string; label: string; also?: string[] };
@@ -72,7 +78,7 @@ export const NAV_HUBS: NavHub[] = [
     label: "Produtos",
     icon: Package,
     sections: [
-      { to: "/admin/produtos", label: "Catálogo" },
+      { to: "/admin/produtos", label: "Produtos" },
       { to: "/admin/estoque", label: "Estoque" },
       { to: "/admin/precificacao", label: "Precificação" },
       { to: "/admin/manutencao", label: "Manutenção" },
@@ -110,53 +116,74 @@ export const NAV_HUBS: NavHub[] = [
 ];
 
 export const isActive = (pathname: string, item: { to: string; exact?: boolean }) =>
-  item.exact ? pathname === item.to || pathname === `${item.to}/` : pathname === item.to || pathname.startsWith(`${item.to}/`);
+  item.exact
+    ? pathname === item.to || pathname === `${item.to}/`
+    : pathname === item.to || pathname.startsWith(`${item.to}/`);
 
 const sectionActive = (pathname: string, s: NavSection) =>
   isActive(pathname, s) || (s.also ?? []).some((to) => isActive(pathname, { to }));
 
 /** A área acende em qualquer uma das suas abas. */
 export const hubActive = (pathname: string, hub: NavHub) =>
-  hub.exact ? isActive(pathname, hub) : isActive(pathname, hub) || hub.sections.some((s) => sectionActive(pathname, s));
+  hub.exact
+    ? isActive(pathname, hub)
+    : isActive(pathname, hub) || hub.sections.some((s) => sectionActive(pathname, s));
 
 /** Todas as telas do menu, para a busca do painel (Ctrl K). */
-export const navSections = (): Array<{ to: string; label: string; hub: string; icon: LucideIcon }> =>
+export const navSections = (): Array<{
+  to: string;
+  label: string;
+  hub: string;
+  icon: LucideIcon;
+}> =>
   NAV_HUBS.flatMap((h) =>
-    h.sections.length ? h.sections.map((s) => ({ to: s.to, label: s.label, hub: h.label, icon: h.icon })) : [{ to: h.to, label: h.label, hub: h.label, icon: h.icon }],
+    h.sections.length
+      ? h.sections.map((s) => ({ to: s.to, label: s.label, hub: h.label, icon: h.icon }))
+      : [{ to: h.to, label: h.label, hub: h.label, icon: h.icon }],
   );
 
-/** Abas da área no topo da página: só aparecem quando a área junta mais de uma tela. */
-function SectionTabs({ pathname }: { pathname: string }) {
-  const hub = NAV_HUBS.find((h) => h.sections.length > 1 && h.sections.some((s) => sectionActive(pathname, s)));
+/**
+ * O título da página é a navegação da área: a tela aberta sempre primeiro, em
+ * destaque, e as telas irmãs logo depois, menores, na mesma linha de base.
+ * Tocar num nome troca de tela. Fica dentro da página, alinhado ao conteúdo.
+ */
+export function PageTitle({ title, className }: { title: string; className?: string }) {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const hub = NAV_HUBS.find(
+    (h) => h.sections.length > 1 && h.sections.some((s) => sectionActive(pathname, s)),
+  );
   const ref = useRef<HTMLElement>(null);
-  // celular: a fileira rola sozinha até a aba aberta (sem mexer na rolagem da página)
+  // trocou de tela: a linha volta para o começo (a tela aberta é sempre a primeira)
   useEffect(() => {
-    const nav = ref.current;
-    const on = nav?.querySelector<HTMLElement>('[data-active="true"]');
-    if (!nav || !on) return;
-    const left = on.offsetLeft - (nav.clientWidth - on.offsetWidth) / 2;
-    nav.scrollLeft = Math.max(0, left);
+    if (ref.current) ref.current.scrollLeft = 0;
   }, [pathname]);
-  if (!hub) return null;
+
+  const big = cn(
+    "text-[30px] leading-[1.1] font-bold tracking-[-0.035em] text-white lg:text-[36px]",
+    className,
+  );
+  if (!hub) return <h1 className={cn(big, "break-words text-balance")}>{title}</h1>;
+
   return (
-    <nav ref={ref} aria-label={hub.label} className="adm-scroll -mx-1 mb-5 overflow-x-auto px-1 pb-1 lg:mb-7">
-      <div className="inline-flex min-w-max items-center gap-1 rounded-full bg-[#1A1A1A] p-1 ring-1 ring-white/[0.06]">
-        {hub.sections.map((s) => {
-          const active = sectionActive(pathname, s);
-          return (
+    <nav ref={ref} aria-label={hub.label} className="adm-titles">
+      {[...hub.sections]
+        .sort((a, b) => Number(sectionActive(pathname, b)) - Number(sectionActive(pathname, a)))
+        .map((s) =>
+          sectionActive(pathname, s) ? (
+            <h1 key={s.to} data-on className={cn(big, "adm-title-on shrink-0 whitespace-nowrap")}>
+              {title}
+            </h1>
+          ) : (
             <Link
               key={s.to}
               to={s.to}
               preload="intent"
-              aria-current={active ? "page" : undefined}
-              data-active={active}
-              className="press flex h-10 items-center rounded-full px-3.5 text-[14px] font-semibold sm:px-4 sm:text-[14.5px] whitespace-nowrap text-[#A9A9A9] transition-colors duration-[var(--motion-fast)] hover:text-white data-[active=true]:bg-white data-[active=true]:text-[#15130F]"
+              className="adm-title-link press shrink-0 whitespace-nowrap"
             >
               {s.label}
             </Link>
-          );
-        })}
-      </div>
+          ),
+        )}
     </nav>
   );
 }
@@ -208,7 +235,10 @@ function AdminChromeInner({ children }: { children: ReactNode }) {
           <AdminTopBar pathname={pathname} orders={orders} />
 
           {/* barra de cima (celular e tablet) */}
-          <header className="adm-bar sticky top-0 z-40 lg:hidden" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
+          <header
+            className="adm-bar sticky top-0 z-40 lg:hidden"
+            style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+          >
             <div className="page-x relative flex h-14 items-center justify-between">
               {/* seta: volta para a loja */}
               <Link
@@ -221,7 +251,10 @@ function AdminChromeInner({ children }: { children: ReactNode }) {
               </Link>
               {/* logo branca no meio (vira o título da página ao rolar) */}
               <div className="pointer-events-none absolute inset-x-16 flex h-full items-center justify-center">
-                <span className={cn("adm-bar-mark absolute", scrolled && title ? "is-off" : "is-on")} aria-hidden>
+                <span
+                  className={cn("adm-bar-mark absolute", scrolled && title ? "is-off" : "is-on")}
+                  aria-hidden
+                >
                   <img src={symbolLight.url} alt="" className="size-7 object-contain" />
                 </span>
                 <span
@@ -241,7 +274,9 @@ function AdminChromeInner({ children }: { children: ReactNode }) {
           {/* menu do celular: folha que sobe de baixo (sem painel lateral) */}
           <Drawer open={open} onOpenChange={(v) => (v ? openDrawer() : closeDrawer())}>
             <DrawerContent className="max-h-[88dvh] border-0 bg-[#0E0E0E] px-0 pb-[env(safe-area-inset-bottom,0px)] text-white lg:hidden">
-              <DrawerTitle className="px-6 pt-3 pb-2 text-[22px] font-bold tracking-[-0.02em]">Menu</DrawerTitle>
+              <DrawerTitle className="px-6 pt-3 pb-2 text-[22px] font-bold tracking-[-0.02em]">
+                Menu
+              </DrawerTitle>
               <div className="adm-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-3">
                 <AdminNav pathname={pathname} orders={orders} onNavigate={leaveDrawer} />
               </div>
@@ -250,7 +285,6 @@ function AdminChromeInner({ children }: { children: ReactNode }) {
           </Drawer>
 
           <main className="page-x min-w-0 flex-1 pt-5 pb-[calc(6.5rem+env(safe-area-inset-bottom))] lg:px-10 lg:pt-8 lg:pb-16 wide:px-14">
-            <SectionTabs pathname={pathname} />
             {children}
           </main>
           <AdminTabBar pathname={pathname} orders={orders} onMenu={openDrawer} menuOpen={open} />
@@ -261,14 +295,23 @@ function AdminChromeInner({ children }: { children: ReactNode }) {
   );
 }
 
-function AdminNav({ pathname, orders, onNavigate }: { pathname: string; orders: number; onNavigate?: () => void }) {
+function AdminNav({
+  pathname,
+  orders,
+  onNavigate,
+}: {
+  pathname: string;
+  orders: number;
+  onNavigate?: () => void;
+}) {
   return (
     <nav aria-label="Áreas do admin">
       <ul className="space-y-1">
         {NAV_HUBS.map((hub) => {
           const active = hubActive(pathname, hub);
           const count = hub.badge === "orders" ? orders : 0;
-          const parts = hub.sections.length > 1 ? hub.sections.map((s) => s.label).join(", ") : null;
+          const parts =
+            hub.sections.length > 1 ? hub.sections.map((s) => s.label).join(", ") : null;
           return (
             <li key={hub.to}>
               <Link
@@ -283,7 +326,11 @@ function AdminNav({ pathname, orders, onNavigate }: { pathname: string; orders: 
                 <hub.icon className="adm-nav-ico size-[21px] shrink-0" strokeWidth={1.9} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[16px] font-semibold">{hub.label}</span>
-                  {parts ? <span className="mt-0.5 block truncate text-[12.5px] font-medium text-[#7A7A7A]">{parts}</span> : null}
+                  {parts ? (
+                    <span className="mt-0.5 block truncate text-[12.5px] font-medium text-[#7A7A7A]">
+                      {parts}
+                    </span>
+                  ) : null}
                 </span>
                 {count > 0 ? (
                   <span className="grid h-[22px] min-w-[22px] place-items-center rounded-full bg-[#FFD599] px-1.5 text-[11.5px] font-bold text-[#15130F] tabular-nums">
@@ -347,10 +394,19 @@ export function AdminAvatar({ className }: { className?: string }) {
   return (
     <span
       aria-label="Administrador"
-      className={cn("grid shrink-0 place-items-center overflow-hidden rounded-full bg-[#232323] font-bold text-[#FFD599]", className)}
+      className={cn(
+        "grid shrink-0 place-items-center overflow-hidden rounded-full bg-[#232323] font-bold text-[#FFD599]",
+        className,
+      )}
     >
       {photo && !broken ? (
-        <img src={photo} alt="" referrerPolicy="no-referrer" className="size-full object-cover" onError={() => setBroken(true)} />
+        <img
+          src={photo}
+          alt=""
+          referrerPolicy="no-referrer"
+          className="size-full object-cover"
+          onError={() => setBroken(true)}
+        />
       ) : (
         initials
       )}
@@ -443,9 +499,15 @@ function CopilotTab() {
       className="press relative flex flex-col items-center justify-start gap-1 text-[#8C8C8C] [touch-action:manipulation] select-none"
     >
       <span className="cp-tab-orb" data-holding={holding}>
-        <CopilotOrb state={holding ? "listening" : activity.orb} level={holding ? 0.12 : 0} size={44} />
+        <CopilotOrb
+          state={holding ? "listening" : activity.orb}
+          level={holding ? 0.12 : 0}
+          size={44}
+        />
       </span>
-      <span className={cn("text-[10.5px] leading-none font-semibold", open && "text-white")}>Copilot</span>
+      <span className={cn("text-[10.5px] leading-none font-semibold", open && "text-white")}>
+        Copilot
+      </span>
     </button>
   );
 }
@@ -462,7 +524,9 @@ function AdminTabBar({
   menuOpen: boolean;
 }) {
   // "Menu" fica aceso nas áreas que não têm aba própria
-  const elsewhere = !TABS.some((t) => isActive(pathname, t) || NAV_HUBS.some((h) => h.to === t.to && hubActive(pathname, h)));
+  const elsewhere = !TABS.some(
+    (t) => isActive(pathname, t) || NAV_HUBS.some((h) => h.to === t.to && hubActive(pathname, h)),
+  );
   const item =
     "press relative flex flex-col items-center justify-center gap-1 text-[#8C8C8C] transition-colors duration-[var(--motion-fast)] data-[active=true]:text-white";
   return (
@@ -477,7 +541,14 @@ function AdminTabBar({
           const active = hub ? hubActive(pathname, hub) : isActive(pathname, t);
           const count = t.badge === "orders" ? orders : 0;
           const tab = (
-            <Link key={t.to} to={t.to} preload="intent" activeOptions={{ exact: true }} data-active={active} className={item}>
+            <Link
+              key={t.to}
+              to={t.to}
+              preload="intent"
+              activeOptions={{ exact: true }}
+              data-active={active}
+              className={item}
+            >
               <span className="relative">
                 <t.icon className="size-[22px]" strokeWidth={active ? 2.1 : 1.8} />
                 {count > 0 ? (
@@ -494,12 +565,7 @@ function AdminTabBar({
           );
           return ti === 1 ? [tab, <CopilotTab key="copilot" />] : [tab];
         })}
-        <button
-          type="button"
-          onClick={onMenu}
-          data-active={elsewhere || menuOpen}
-          className={item}
-        >
+        <button type="button" onClick={onMenu} data-active={elsewhere || menuOpen} className={item}>
           <LayoutGrid className="size-[22px]" strokeWidth={elsewhere ? 2.1 : 1.8} />
           <span className="text-[10.5px] leading-none font-semibold">Menu</span>
         </button>
@@ -534,14 +600,21 @@ export function AdminShell({
   }, [title, setTitle]);
 
   return (
-    <div className={cn("admin-page @container/page mx-auto w-full min-w-0", wide ? "max-w-none" : "max-w-[1440px]")}>
+    <div
+      className={cn(
+        "admin-page @container/page mx-auto w-full min-w-0",
+        wide ? "max-w-none" : "max-w-[1440px]",
+      )}
+    >
       {bare ? null : (
         <header className="flex min-w-0 flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div className="min-w-0">
-            <h1 className="text-[30px] leading-[1.1] font-bold tracking-[-0.035em] break-words text-white text-balance lg:text-[36px]">
-              {title}
-            </h1>
-            {description ? <p className="mt-1.5 max-w-prose text-[15px] leading-snug text-[#A9A9A9]">{description}</p> : null}
+            <PageTitle title={title} />
+            {description ? (
+              <p className="mt-1.5 max-w-prose text-[15px] leading-snug text-[#A9A9A9]">
+                {description}
+              </p>
+            ) : null}
           </div>
           {action ? <div className="flex min-w-0 shrink-0 md:justify-end">{action}</div> : null}
         </header>

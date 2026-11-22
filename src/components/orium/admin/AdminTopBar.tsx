@@ -42,7 +42,7 @@ export function AdminTopBar({ pathname, orders }: { pathname: string; orders: nu
           <img src={symbolLight.url} alt="Orium" className="size-8 object-contain" />
         </Link>
 
-        <nav aria-label="Seções do admin" className="ml-6 flex min-w-0 items-center gap-1.5">
+        <nav aria-label="Seções do admin" className="ml-6 flex shrink-0 items-center gap-1.5">
           {NAV_HUBS.filter((h) => h.to !== SETTINGS_TO).map((item) => {
             const active = hubActive(pathname, item);
             const count = item.badge === "orders" ? orders : 0;
@@ -69,8 +69,8 @@ export function AdminTopBar({ pathname, orders }: { pathname: string; orders: nu
             <span className="grid size-9 place-items-center rounded-full bg-[#232323]">
               <Search className="size-[17px]" strokeWidth={2.2} />
             </span>
-            <span className="hidden flex-1 truncate text-left xl:block">Procurar no painel</span>
-            <kbd className="hidden rounded-md border border-white/10 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-[#8C8C8C] xl:block">
+            <span className="hidden flex-1 truncate text-left 2xl:block">Procurar no painel</span>
+            <kbd className="hidden rounded-md border border-white/10 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-[#8C8C8C] 2xl:block">
               Ctrl K
             </kbd>
           </button>
@@ -95,9 +95,9 @@ export function AdminTopBar({ pathname, orders }: { pathname: string; orders: nu
           >
             <Settings className="size-5" strokeWidth={2.1} />
           </Link>
-          <div className="ml-1 flex items-center gap-3 rounded-full py-1 pr-1 pl-1 xl:pr-4">
+          <div className="ml-1 flex items-center gap-3 rounded-full py-1 pr-1 pl-1 2xl:pr-4">
             <AdminAvatar className="size-12 text-[15px]" />
-            <div className="hidden min-w-0 leading-tight xl:block">
+            <div className="hidden min-w-0 leading-tight 2xl:block">
               <p className="max-w-[140px] truncate text-[15px] font-bold">{name || "Equipe Orium"}</p>
               <p className="text-[13px] text-[#8C8C8C]">{role === "owner" ? "Dono" : "Equipe"}</p>
             </div>
@@ -123,8 +123,8 @@ function CopilotPill() {
       className="cp-pill press"
     >
       <CopilotOrb state={activity.orb} size={34} />
-      <span className="hidden max-w-[150px] truncate 2xl:inline xl:inline">{busy && activity.label ? activity.label : "Copilot"}</span>
-      <kbd className={cn("hidden rounded-md border px-1.5 py-0.5 font-sans text-[11px] font-semibold xl:block", open ? "border-black/15 text-[#15130F]/60" : "border-white/10 text-[#8C8C8C]")}>
+      <span className="hidden max-w-[150px] truncate 2xl:inline">{busy && activity.label ? activity.label : "Copilot"}</span>
+      <kbd className={cn("hidden rounded-md border px-1.5 py-0.5 font-sans text-[11px] font-semibold 2xl:block", open ? "border-black/15 text-[#15130F]/60" : "border-white/10 text-[#8C8C8C]")}>
         Ctrl J
       </kbd>
     </button>
