@@ -37,6 +37,8 @@
 
 - Menu do Admin: seis áreas em `NAV_HUBS` (AdminShell). Telas parecidas são navegadas pelo próprio título da página (`PageTitle`: a tela aberta grande, as irmãs ao lado em cinza); para mudar o agrupamento, edite só `NAV_HUBS`. Atendimento fica fora do menu, mas a rota continua.
 
+- Gerenciamento (Produtos › Gerenciamento, rota `/admin/estoque`): `?parte=perfumes` é o estoque de frascos lacrados (store-stock); `?parte=itens` são os itens que a loja usa (`store_supplies` + histórico `store_supply_moves`, sempre via `store_supply_move`; gasto = soma das compras com valor, em `src/lib/store-supplies.functions.ts`).
+
 ## Preço sob consulta (fornecedor só de consulta)
 - `products.price_on_request = true` → o site mostra "Sob consulta" e o botão "Consultar no WhatsApp" (Orium) no lugar do preço; o produto nunca entra na Sacola.
 - As listas públicas vêm de RPCs com colunas fixas, então os cards usam `useConsultIds()` / `isOnRequest()` de `src/lib/price-on-request.ts`.

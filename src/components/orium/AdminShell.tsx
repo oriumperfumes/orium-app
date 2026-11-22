@@ -79,7 +79,7 @@ export const NAV_HUBS: NavHub[] = [
     icon: Package,
     sections: [
       { to: "/admin/produtos", label: "Produtos" },
-      { to: "/admin/estoque", label: "Estoque" },
+      { to: "/admin/estoque", label: "Gerenciamento" },
       { to: "/admin/precificacao", label: "Precificação" },
       { to: "/admin/manutencao", label: "Manutenção" },
     ],
