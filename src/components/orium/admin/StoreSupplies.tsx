@@ -51,6 +51,7 @@ import {
   PxStat,
   pxInputClass,
 } from "@/components/orium/admin/PricingUI";
+import { MiniStat, Segmented } from "@/components/orium/admin/PanelKit";
 import { brl } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -106,7 +107,11 @@ export function StoreSupplies() {
     category: SupplyCategory;
     unit: string;
   }>>(null);
-  const [open, setOpen] = useState<{ id: string; mode: SupplyMoveKind } | null>(null);
+  const [open, setOpen] = useState<{
+    id: string;
+    mode: SupplyMoveKind;
+    el: HTMLElement | null;
+  } | null>(null);
 
   const items = useMemo(() => data.data?.items ?? [], [data.data]);
   const counts = useMemo(() => {
@@ -269,16 +274,21 @@ export function StoreSupplies() {
               key={item.id}
               item={item}
               i={i}
-              onOpen={() => setOpen({ id: item.id, mode: "compra" })}
+              onOpen={(el) => setOpen({ id: item.id, mode: "compra", el })}
               onUse={() => void registerUse(item)}
-              onBuy={() => setOpen({ id: item.id, mode: "compra" })}
+              onBuy={(el) => setOpen({ id: item.id, mode: "compra", el })}
             />
           ))}
         </div>
       )}
 
       <NewSupplySheet seed={creating} onClose={() => setCreating(null)} />
-      <SupplySheet item={current} mode={open?.mode ?? "compra"} onClose={() => setOpen(null)} />
+      <SupplySheet
+        item={current}
+        mode={open?.mode ?? "compra"}
+        originEl={open?.el ?? null}
+        onClose={() => setOpen(null)}
+      />
     </div>
   );
 }
@@ -324,10 +334,12 @@ function SupplyCard({
 }: {
   item: SupplyItem;
   i: number;
-  onOpen: () => void;
+  onOpen: (el: HTMLElement | null) => void;
   onUse: () => void;
-  onBuy: () => void;
+  onBuy: (el: HTMLElement | null) => void;
 }) {
+  // o painel nasce do próprio cartão (como em Produtos)
+  const card = (e: { currentTarget: HTMLElement }) => e.currentTarget.closest("article");
   const c = CATEGORY[item.category];
   const level = levelOf(item);
   // régua: o aviso fica no primeiro terço; sem aviso, a régua some
@@ -344,7 +356,7 @@ function SupplyCard({
     >
       <button
         type="button"
-        onClick={onOpen}
+        onClick={(e) => onOpen(card(e))}
         className="press -m-1 flex min-w-0 items-start gap-3 rounded-[20px] p-1 text-left"
       >
         <span className="dash-ico">
@@ -422,7 +434,7 @@ function SupplyCard({
         </button>
         <button
           type="button"
-          onClick={onBuy}
+          onClick={(e) => onBuy(card(e))}
           className="press inline-flex h-11 items-center justify-center gap-1.5 rounded-full bg-white text-[14px] font-bold text-[#15130F] transition-colors hover:bg-[#EDEDED]"
         >
           <Plus className="size-4" strokeWidth={2.6} /> Comprei
@@ -464,6 +476,11 @@ function EmptyState({
       </div>
     </section>
   );
+}
+
+function CategoryIcon({ category }: { category: SupplyCategory }) {
+  const Icon = CATEGORY[category].icon;
+  return <Icon className="size-6 text-[#D4D4D4]" strokeWidth={2} />;
 }
 
 function CategoryPicker({
@@ -590,7 +607,8 @@ function NewSupplySheet({
       open={!!seed}
       onClose={onClose}
       title="Novo item da loja"
-      description="Algo que a loja usa e não vende: embalagem, limpeza, frascos, divulgação."
+      description="Algo que a loja usa e não vende"
+      icon={<CategoryIcon category={category} />}
       footer={
         <PxPrimary className="w-full" loading={busy} onClick={() => void save()}>
           Cadastrar item
@@ -689,10 +707,12 @@ const MODE_COPY: Record<SupplyMoveKind, { label: string; field: string; action: 
 function SupplySheet({
   item,
   mode: initial,
+  originEl,
   onClose,
 }: {
   item: SupplyItem | null;
   mode: SupplyMoveKind;
+  originEl: HTMLElement | null;
   onClose: () => void;
 }) {
   const move = useServerFn(supplyMove);
@@ -836,6 +856,23 @@ function SupplySheet({
       onClose={onClose}
       title={item?.name ?? ""}
       description={item ? `${CATEGORY[item.category].label} · conta em ${unitLabel}` : undefined}
+      originEl={originEl}
+      icon={item ? <CategoryIcon category={item.category} /> : undefined}
+      header={
+        item ? (
+          <div className="mt-4 flex gap-2">
+            <MiniStat
+              label="Na loja"
+              value={`${fmtQty(item.quantity)} ${item.unit === "un" ? "un." : item.unit}`}
+            />
+            <MiniStat label="Gasto total" value={brl(item.spent)} tone="gold" />
+            <MiniStat
+              label="Custo médio"
+              value={item.avg_cost != null ? brl(item.avg_cost) : "—"}
+            />
+          </div>
+        ) : null
+      }
       footer={
         editing ? (
           <PxPrimary className="w-full" loading={busy} onClick={() => void saveEdit()}>
@@ -850,22 +887,13 @@ function SupplySheet({
     >
       {item ? (
         <div className="space-y-4">
-          <div className="grid grid-cols-3 gap-2">
-            <PxStat
-              label="Na loja"
-              value={`${fmtQty(item.quantity)}`}
-              note={unitWord(item.unit, item.quantity)}
-              tone={
-                levelOf(item) === "ok" ? undefined : levelOf(item) === "low" ? "warning" : "danger"
-              }
-            />
-            <PxStat label="Gasto total" value={brl(item.spent)} tone="gold" />
-            <PxStat
-              label="Custo médio"
-              value={item.avg_cost != null ? brl(item.avg_cost) : "—"}
-              note={item.avg_cost != null ? `por ${unitLabel}` : undefined}
-            />
-          </div>
+          {levelOf(item) !== "ok" ? (
+            <PxNote tone={levelOf(item) === "out" ? "danger" : "warning"}>
+              {levelOf(item) === "out"
+                ? "Acabou. Registre a compra quando chegar."
+                : `Está acabando: o aviso é com ${fmtQty(item.min_quantity)} ou menos.`}
+            </PxNote>
+          ) : null}
 
           {editing ? (
             <PxSection title="Editar item">
@@ -911,8 +939,8 @@ function SupplySheet({
             </PxSection>
           ) : (
             <PxSection>
-              <PxSeg
-                label="O que aconteceu"
+              <Segmented
+                full
                 value={mode}
                 onChange={setMode}
                 options={(["compra", "uso", "ajuste"] as const).map((m) => ({

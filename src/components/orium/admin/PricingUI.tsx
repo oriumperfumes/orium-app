@@ -1,13 +1,7 @@
 import type { ReactNode } from "react";
 import { Loader2 } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { SidePanel, PanelClose } from "@/components/orium/admin/orders/model";
+import { PanelFooter, PanelHeader, PanelScroll } from "@/components/orium/admin/PanelKit";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
@@ -309,18 +303,18 @@ export function PxField({
 }) {
   return (
     <div className={cn("min-w-0 space-y-2", className)}>
-      <label htmlFor={htmlFor} className="block text-[14px] font-semibold text-[#D4D4D4]">
+      <label htmlFor={htmlFor} className="block text-[13px] font-semibold text-[#A9A9A9]">
         {label}
       </label>
       {children}
-      {hint ? <div className="text-[13px] leading-snug text-[#8C8C8C]">{hint}</div> : null}
+      {hint ? <div className="text-[12.5px] leading-snug text-[#6F6F6F]">{hint}</div> : null}
     </div>
   );
 }
 
 /** Campo de texto no estilo do Admin (pílula #232323, foco dourado). */
 export const pxInputClass =
-  "h-[52px] w-full min-w-0 rounded-[18px] border-0 bg-[#232323] px-4 text-[16px] text-white outline-none placeholder:text-[#6F6F6F] focus:ring-2 focus:ring-[#FFD599]/50 [color-scheme:dark]";
+  "pk-field h-12 w-full min-w-0 rounded-[16px] border-0 bg-[#232323] px-4 text-[16px] text-white outline-none transition-colors duration-200 placeholder:text-[#6F6F6F] hover:bg-[#262626] focus:bg-[#2A2A2A] focus:ring-2 focus:ring-[#FFD599]/40 [color-scheme:dark]";
 
 export function PxInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   const { className, ...rest } = props;
@@ -415,6 +409,9 @@ export function PxSheet({
   description,
   children,
   footer,
+  icon,
+  originEl,
+  header,
 }: {
   open: boolean;
   onClose: () => void;
@@ -422,33 +419,26 @@ export function PxSheet({
   description?: string;
   children: ReactNode;
   footer?: ReactNode;
+  /** miniatura do topo (ícone da categoria, foto) */
+  icon?: ReactNode;
+  /** cartão de onde a janela nasce e para onde volta */
+  originEl?: HTMLElement | null;
+  /** números de resumo logo abaixo do título */
+  header?: ReactNode;
 }) {
   return (
-    <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent
-        side="bottom"
-        className="flex max-h-[92vh] flex-col gap-0 rounded-t-[30px] border-0 bg-[#121212] p-0 text-white sm:mx-auto sm:max-w-[640px]"
+    <SidePanel open={open} onClose={onClose} label={title} originEl={originEl ?? null}>
+      <PanelHeader
+        {...(icon ? { image: null, fallback: icon } : {})}
+        title={title}
+        subtitle={description}
+        onClose={onClose}
       >
-        <SheetHeader className="shrink-0 px-5 pt-6 pb-2 text-left sm:px-7">
-          <SheetTitle className="text-[26px] leading-tight font-bold tracking-[-0.03em] text-white">
-            {title}
-          </SheetTitle>
-          {description ? (
-            <SheetDescription className="text-[14.5px] leading-snug text-[#A9A9A9]">
-              {description}
-            </SheetDescription>
-          ) : (
-            <SheetDescription className="sr-only">{title}</SheetDescription>
-          )}
-        </SheetHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-3 pb-6 sm:px-7">{children}</div>
-        {footer ? (
-          <div className="shrink-0 border-t border-white/[0.06] bg-[#121212] px-5 pt-3 pb-[calc(env(safe-area-inset-bottom,0px)+16px)] sm:px-7">
-            {footer}
-          </div>
-        ) : null}
-      </SheetContent>
-    </Sheet>
+        {header}
+      </PanelHeader>
+      <PanelScroll>{children}</PanelScroll>
+      {footer ? <PanelFooter className="[&>*]:flex-1">{footer}</PanelFooter> : null}
+    </SidePanel>
   );
 }
 
@@ -528,37 +518,14 @@ export function PxDialog({
   wide?: boolean;
 }) {
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent
-        className={cn(
-          "flex max-h-[calc(100svh-2rem)] flex-col gap-0 overflow-hidden rounded-[32px] border-0 bg-[#121212] p-0 text-white sm:p-0 [&>button:last-child]:top-6 [&>button:last-child]:right-6 [&>button:last-child]:grid [&>button:last-child]:size-10 [&>button:last-child]:place-items-center [&>button:last-child]:rounded-full [&>button:last-child]:bg-[#232323] [&>button:last-child]:opacity-100",
-          wide ? "max-w-[920px]" : "max-w-[540px]",
-        )}
-      >
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="flex min-w-0 items-center gap-3 px-6 pt-6 pr-20">
-            {icon ? <span className="dash-ico">{icon}</span> : null}
-            <div className="min-w-0">
-              <DialogTitle className="text-[24px] leading-tight font-bold tracking-[-0.03em] text-white">
-                {title}
-              </DialogTitle>
-              <DialogDescription
-                className={cn("text-[14px] leading-snug text-[#A9A9A9]", !description && "sr-only")}
-              >
-                {description ?? title}
-              </DialogDescription>
-            </div>
-          </div>
-          {preview ? <div className="px-6 pt-5">{preview}</div> : null}
-          <div className="min-w-0 space-y-4 px-6 pt-5 pb-6">{children}</div>
-        </div>
-        {footer ? (
-          <div className="shrink-0 border-t border-white/[0.06] px-6 pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+20px)]">
-            {footer}
-          </div>
-        ) : null}
-      </DialogContent>
-    </Dialog>
+    <SidePanel open={open} onClose={onClose} label={title} wide={wide}>
+      <PanelHeader {...(icon ? { image: null, fallback: icon } : {})} title={title} subtitle={description} onClose={onClose} />
+      <PanelScroll>
+        {preview ? <div className="pb-1">{preview}</div> : null}
+        <div className="min-w-0 space-y-4">{children}</div>
+      </PanelScroll>
+      {footer ? <PanelFooter className="[&>*]:flex-1">{footer}</PanelFooter> : null}
+    </SidePanel>
   );
 }
 
@@ -628,15 +595,15 @@ export function PxWizard({
   const last = step === steps.length - 1;
   const current = steps[step]!;
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="flex max-h-[calc(100svh-2rem)] max-w-[980px] flex-col gap-0 overflow-hidden rounded-[32px] border-0 bg-[#121212] p-0 text-white sm:p-0 lg:grid lg:grid-cols-[minmax(0,1fr)_380px] [&>button:last-child]:top-5 [&>button:last-child]:right-5 [&>button:last-child]:grid [&>button:last-child]:size-10 [&>button:last-child]:place-items-center [&>button:last-child]:rounded-full [&>button:last-child]:bg-[#232323] [&>button:last-child]:opacity-100">
+    <SidePanel open={open} onClose={onClose} label={title} wide>
+      <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_380px]">
         {/* coluna do formulário */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:max-h-[calc(100svh-2rem)]">
-          <div className="shrink-0 px-6 pt-6 pr-20 lg:pr-6">
-            <DialogTitle className="text-[26px] leading-tight font-bold tracking-[-0.03em] text-white">
-              {title}
-            </DialogTitle>
-            <DialogDescription className="sr-only">{title}</DialogDescription>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="shrink-0 px-5 pt-[max(1rem,env(safe-area-inset-top))] lg:px-6 lg:pt-6">
+            <div className="flex min-w-0 items-center gap-3.5">
+              <h2 className="min-w-0 flex-1 truncate text-[20px] leading-tight font-bold tracking-[-0.025em] text-white">{title}</h2>
+              <PanelClose onClose={onClose} className="lg:hidden" />
+            </div>
 
             {/* passos: barra de progresso + nomes */}
             <ol
@@ -723,8 +690,11 @@ export function PxWizard({
         </div>
 
         {/* coluna da prévia (computador) */}
-        <aside className="hidden min-h-0 flex-col gap-4 overflow-y-auto bg-[#0C0C0C] p-6 pt-20 lg:flex">
-          <p className="text-[13px] font-semibold text-[#8C8C8C]">Como o cliente vê</p>
+        <aside className="hidden min-h-0 flex-col gap-4 overflow-y-auto bg-[#0C0C0C] p-6 lg:flex">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[13px] font-semibold text-[#8C8C8C]">Como o cliente vê</p>
+            <PanelClose onClose={onClose} />
+          </div>
           {preview}
           {summary?.length ? (
             <div className="rounded-[22px] bg-[#1A1A1A] p-4">
@@ -743,8 +713,8 @@ export function PxWizard({
             </div>
           ) : null}
         </aside>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </SidePanel>
   );
 }
 
