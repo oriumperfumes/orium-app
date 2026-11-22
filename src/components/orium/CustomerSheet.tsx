@@ -3,39 +3,31 @@
  * Admin → Negociação → Interesses recebidos.
  *
  * Uma só fonte de verdade: mesma ficha, mesmo editor, mesma exclusão. Editar ou
- * excluir aqui atualiza na hora as duas áreas.
+ * excluir aqui atualiza na hora as duas áreas. Visual: o mesmo painel de
+ * Produtos e Pedidos (SidePanel + PanelKit).
  */
 import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
-import {
-  MessageCircle,
-  Loader2,
-  ChevronDown,
-  ChevronRight,
-  Trash2,
-  Pencil,
-  Archive,
-  ArchiveRestore,
-} from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Archive, ArchiveRestore, ChevronRight, MessageCircle, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { SidePanel } from "@/components/orium/admin/orders/model";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+  Field,
+  GoldButton,
+  MiniStat,
+  PanelCard,
+  PanelFooter,
+  PanelHeader,
+  PanelScroll,
+  PanelTabs,
+  SoftButton,
+  StatusDot,
+  TextArea,
+  TextInput,
+} from "@/components/orium/admin/PanelKit";
+import { AdminConfirm } from "@/components/orium/admin/AdminUI";
 import { brl, productTitle } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
@@ -45,11 +37,19 @@ import {
   crmCustomerUpdate,
   crmCustomerArchive,
   crmCustomerDelete,
+  type CrmCustomerDetail,
 } from "@/lib/crm.functions";
 import { customerJourney } from "@/lib/analytics-admin.functions";
 
 const date = (v?: string | null) =>
-  v ? new Date(v).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "2-digit" }) : "—";
+  v
+    ? new Date(v).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "2-digit" })
+    : "—";
+
+const shortDate = (v?: string | null) =>
+  v
+    ? new Date(v).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" })
+    : "—";
 
 const when = (v?: string | null) =>
   v
@@ -61,576 +61,719 @@ const when = (v?: string | null) =>
       })
     : "—";
 
-const whats = (phone?: string | null) => {
+export const whatsLink = (phone?: string | null) => {
   const d = (phone ?? "").replace(/\D/g, "");
   if (d.length < 10) return null;
   return `https://wa.me/${d.startsWith("55") ? d : `55${d}`}`;
+};
+
+/** Iniciais para o círculo do cliente ("Carmen Ribeiro" → "CR"). */
+export const initialsOf = (name?: string | null) =>
+  (name ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join("") || "?";
+
+type Tab = "resumo" | "compras" | "interesses" | "notas" | "dados";
+
+const CART_LABEL: Record<string, string> = {
+  ACTIVE: "Carrinho atual",
+  ABANDONED: "Abandonado",
+  RECOVERED: "Recuperado",
 };
 
 export function CustomerSheet({
   id,
   onClose,
   openEditor,
+  originEl,
 }: {
   id: string | null;
   onClose: () => void;
-  /** Abre já com os dados do cliente expandidos (ação "Editar cliente"). */
+  /** Abre já nos dados do cliente (ação "Editar cliente"). */
   openEditor?: boolean;
+  /** linha de onde a ficha nasce (e para onde volta) */
+  originEl?: HTMLElement | null;
 }) {
   const detailFn = useServerFn(crmCustomer);
+  const [tab, setTab] = useState<Tab>(openEditor ? "dados" : "resumo");
+  // durante a saída o painel ainda mostra a última ficha aberta
+  const [lastId, setLastId] = useState(id);
+  if (id && id !== lastId) setLastId(id);
+  const shownId = id ?? lastId;
+
+  useEffect(() => {
+    if (id) setTab(openEditor ? "dados" : "resumo");
+  }, [id, openEditor]);
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["crm-customer", shownId],
+    enabled: !!shownId,
+    queryFn: () => detailFn({ data: { id: shownId! } }),
+  });
+
+  const c = data?.customer;
+  const link = whatsLink(c?.phone);
+  const pending = data ? data.metrics.orders_count - (data.metrics.confirmed_count ?? 0) : 0;
+  const interests = data
+    ? data.favorites.length +
+      data.waiting.length +
+      (data.negotiations?.length ?? 0) +
+      data.carts.length
+    : 0;
+
+  return (
+    <SidePanel
+      open={!!id}
+      onClose={onClose}
+      label={c?.name ?? "Ficha do cliente"}
+      originEl={originEl ?? null}
+    >
+      <PanelHeader
+        image={null}
+        fallback={
+          <span className="text-[18px] font-bold text-[#FFD599]">{initialsOf(c?.name)}</span>
+        }
+        title={c?.name ?? (isLoading ? "Carregando…" : "Cliente sem nome")}
+        subtitle={c ? (c.phone ?? c.email ?? "sem contato") : " "}
+        onClose={onClose}
+      >
+        {data ? (
+          <>
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <MiniStat
+                label="Total gasto"
+                value={brl(Number(data.metrics.total_spent))}
+                tone="gold"
+                onClick={() => setTab("compras")}
+              />
+              <MiniStat
+                label="Pedidos"
+                value={String(data.metrics.orders_count)}
+                onClick={() => setTab("compras")}
+              />
+              <MiniStat
+                label="Ticket médio"
+                value={brl(Number(data.metrics.avg_ticket))}
+                onClick={() => setTab("compras")}
+              />
+              <MiniStat
+                label="Última compra"
+                value={shortDate(data.metrics.last_order_at)}
+                onClick={() => setTab("compras")}
+              />
+            </div>
+            <PanelTabs
+              className="mt-4"
+              value={tab}
+              onChange={setTab}
+              tabs={[
+                { key: "resumo", label: "Resumo" },
+                { key: "compras", label: "Compras", badge: <Count n={data.orders.length} /> },
+                { key: "interesses", label: "Interesses", badge: <Count n={interests} /> },
+                { key: "notas", label: "Notas", badge: <Count n={data.notes.length} /> },
+                { key: "dados", label: "Dados" },
+              ]}
+            />
+          </>
+        ) : null}
+      </PanelHeader>
+
+      <PanelScroll swapKey={`${shownId}-${tab}`}>
+        {isLoading ? (
+          <>
+            <div className="admin-skeleton h-24 rounded-[24px]" />
+            <div className="admin-skeleton h-40 rounded-[24px]" />
+          </>
+        ) : isError || !data ? (
+          <PanelCard>
+            <p className="text-[14px] text-[#A9A9A9]">Não conseguimos abrir esta ficha agora.</p>
+          </PanelCard>
+        ) : tab === "resumo" ? (
+          <Summary data={data} pending={pending} onClose={onClose} />
+        ) : tab === "compras" ? (
+          <Purchases data={data} onClose={onClose} />
+        ) : tab === "interesses" ? (
+          <Interests data={data} />
+        ) : tab === "notas" ? (
+          <Notes data={data} />
+        ) : (
+          <CustomerEditor
+            key={data.customer.id}
+            customer={data.customer}
+            onSaved={() => setTab("resumo")}
+            onDeleted={onClose}
+          />
+        )}
+      </PanelScroll>
+
+      {data && tab !== "dados" ? (
+        <PanelFooter>
+          {link ? (
+            <GoldButton
+              className="flex-1"
+              icon={<MessageCircle className="size-[18px]" strokeWidth={2.2} />}
+              onClick={() => window.open(link, "_blank", "noopener")}
+            >
+              Falar no WhatsApp
+            </GoldButton>
+          ) : (
+            <p className="min-w-0 flex-1 truncate px-1 text-[13.5px] text-[#8C8C8C]">
+              Sem WhatsApp cadastrado
+            </p>
+          )}
+          <SoftButton
+            icon={<Pencil />}
+            onClick={() => setTab("dados")}
+            aria-label="Editar dados do cliente"
+          >
+            Editar
+          </SoftButton>
+        </PanelFooter>
+      ) : null}
+    </SidePanel>
+  );
+}
+
+function Count({ n }: { n: number }) {
+  return n > 0 ? <span className="text-[12px] font-bold tabular-nums opacity-60">{n}</span> : null;
+}
+
+/** Linha de lista dentro dos cartões (nome à esquerda, detalhe à direita). */
+function Line({
+  title,
+  sub,
+  right,
+  to,
+}: {
+  title: ReactNode;
+  sub?: ReactNode;
+  right?: ReactNode;
+  to?: ReactNode;
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-3 py-2.5">
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[14.5px] font-semibold text-white">{title}</span>
+        {sub ? (
+          <span className="mt-0.5 block truncate text-[12.5px] text-[#8C8C8C]">{sub}</span>
+        ) : null}
+      </span>
+      {right ? (
+        <span className="shrink-0 text-right text-[13px] text-[#A9A9A9] tabular-nums">{right}</span>
+      ) : null}
+      {to}
+    </div>
+  );
+}
+
+const List = ({ children }: { children: ReactNode }) => (
+  <div className="divide-y divide-white/[0.06]">{children}</div>
+);
+const Empty = ({ children }: { children: ReactNode }) => (
+  <p className="text-[14px] text-[#8C8C8C]">{children}</p>
+);
+const Chevron = () => <ChevronRight className="size-4 shrink-0 text-[#6F6F6F]" />;
+
+function Summary({
+  data,
+  pending,
+  onClose,
+}: {
+  data: CrmCustomerDetail;
+  pending: number;
+  onClose: () => void;
+}) {
+  const recent = data.recent_views ?? [];
+  return (
+    <>
+      {data.customer.archived_at || pending > 0 || data.customer.provisional ? (
+        <div className="flex flex-wrap gap-x-4 gap-y-2 rounded-[20px] bg-[#1A1A1A] px-4 py-3">
+          {data.customer.archived_at ? (
+            <StatusDot tone="off">Arquivado em {date(data.customer.archived_at)}</StatusDot>
+          ) : null}
+          {pending > 0 ? (
+            <StatusDot tone="warn">
+              {pending} {pending === 1 ? "pedido sem confirmação" : "pedidos sem confirmação"} (fora
+              dos valores)
+            </StatusDot>
+          ) : null}
+          {data.customer.provisional ? (
+            <StatusDot tone="gold">Identificado pelo aparelho</StatusDot>
+          ) : null}
+        </div>
+      ) : null}
+
+      <JourneyCard id={data.customer.id} />
+
+      <PanelCard
+        title="Acessou recentemente"
+        hint={recent.length ? "Os perfumes que abriu por último na loja." : undefined}
+      >
+        {recent.length ? (
+          <List>
+            {recent.map((v) => {
+              const row = (
+                <Line
+                  title={productTitle(v.name)}
+                  sub={[
+                    v.brand,
+                    when(v.last_at),
+                    v.views > 1 ? `${v.views}x` : null,
+                    v.in_stock ? null : "sem estoque",
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                  to={v.slug ? <Chevron /> : undefined}
+                />
+              );
+              return v.slug ? (
+                <Link
+                  key={v.product_id}
+                  to="/perfume/$slug"
+                  params={{ slug: v.slug }}
+                  onClick={onClose}
+                  className="press block rounded-[12px] transition-colors hover:bg-white/[0.03]"
+                >
+                  {row}
+                </Link>
+              ) : (
+                <div key={v.product_id}>{row}</div>
+              );
+            })}
+          </List>
+        ) : (
+          <Empty>Nenhum acesso registrado ainda.</Empty>
+        )}
+      </PanelCard>
+
+      {data.viewed.length ? (
+        <PanelCard title="Perfumes que mais acessou">
+          <Bars
+            rows={data.viewed.map((v) => ({
+              label: productTitle(v.name),
+              value: v.views,
+              display: `${v.views}x`,
+            }))}
+          />
+        </PanelCard>
+      ) : null}
+    </>
+  );
+}
+
+function Purchases({ data, onClose }: { data: CrmCustomerDetail; onClose: () => void }) {
+  return (
+    <>
+      <PanelCard
+        title="Pedidos"
+        hint={data.orders.length ? "Toque para abrir o pedido." : undefined}
+      >
+        {data.orders.length ? (
+          <List>
+            {data.orders.map((o) => (
+              <Link
+                key={o.id}
+                to="/admin/pedidos"
+                search={{ pedido: o.id } as never}
+                onClick={onClose}
+                className="press block rounded-[12px] transition-colors hover:bg-white/[0.03]"
+              >
+                <Line
+                  title={`Pedido ${o.order_number ?? o.id.slice(0, 8)}`}
+                  sub={`${date(o.created_at)} · ${o.status}${o.is_confirmed ? "" : " · aguardando confirmação"}`}
+                  right={<span className="font-bold text-white">{brl(Number(o.total))}</span>}
+                  to={<Chevron />}
+                />
+              </Link>
+            ))}
+          </List>
+        ) : (
+          <Empty>Nenhum pedido ainda.</Empty>
+        )}
+      </PanelCard>
+
+      <PanelCard title="Decants que já experimentou">
+        {data.decants.length ? (
+          <List>
+            {data.decants.map((d, i) => (
+              <Line
+                key={`${d.name}-${d.ml}-${i}`}
+                title={productTitle(d.name)}
+                sub={d.brand ?? undefined}
+                right={`${d.ml} ml · ${d.quantity}x`}
+              />
+            ))}
+          </List>
+        ) : (
+          <Empty>Ainda não experimentou decants.</Empty>
+        )}
+      </PanelCard>
+
+      <PanelCard title="Frascos comprados">
+        {data.bottles.length ? (
+          <List>
+            {data.bottles.map((b, i) => (
+              <Line
+                key={`${b.name}-${i}`}
+                title={productTitle(b.name)}
+                sub={b.brand ?? undefined}
+                right={`${b.volume_ml ? `${b.volume_ml} ml · ` : ""}${b.quantity}x`}
+              />
+            ))}
+          </List>
+        ) : (
+          <Empty>Nenhum frasco comprado.</Empty>
+        )}
+      </PanelCard>
+
+      {data.others.length ? (
+        <PanelCard title="Outros produtos">
+          <List>
+            {data.others.map((o, i) => (
+              <Line
+                key={`${o.name}-${i}`}
+                title={productTitle(o.name)}
+                sub={o.brand ?? undefined}
+                right={`${o.quantity}x`}
+              />
+            ))}
+          </List>
+        </PanelCard>
+      ) : null}
+    </>
+  );
+}
+
+function Interests({ data }: { data: CrmCustomerDetail }) {
+  return (
+    <>
+      <PanelCard title="Carrinhos">
+        {data.carts.length ? (
+          <div className="space-y-2">
+            {data.carts.map((c) => (
+              <div key={c.id} className="rounded-[18px] bg-[#232323] p-3.5">
+                <div className="flex items-center justify-between gap-3">
+                  <StatusDot
+                    tone={
+                      c.status === "ABANDONED" ? "coral" : c.status === "ACTIVE" ? "gold" : "ok"
+                    }
+                  >
+                    {CART_LABEL[c.status] ?? "Virou pedido"}
+                  </StatusDot>
+                  <span className="text-[15px] font-bold tabular-nums">
+                    {brl(Number(c.estimated_total))}
+                  </span>
+                </div>
+                <p className="mt-1 text-[12.5px] text-[#8C8C8C]">
+                  {c.items_count} {c.items_count === 1 ? "item" : "itens"} · mexeu em{" "}
+                  {date(c.last_activity_at)}
+                </p>
+                <ul className="mt-2 space-y-1 text-[13px] text-[#D4D4D4]">
+                  {c.items.map((it, i) => (
+                    <li key={i} className="truncate">
+                      {it.quantity}× {productTitle(it.name ?? "")}
+                      <span className="text-[#8C8C8C]">
+                        {it.variant === "DECANT" ? ` · decant ${it.decant_ml} ml` : " · frasco"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Empty>Nenhum carrinho registrado.</Empty>
+        )}
+      </PanelCard>
+
+      <PanelCard title="Favoritos">
+        {data.favorites.length ? (
+          <List>
+            {data.favorites.map((f) => (
+              <Line
+                key={f.product_id}
+                title={productTitle(f.name)}
+                sub={
+                  [f.brand, f.in_stock ? null : "indisponível"].filter(Boolean).join(" · ") ||
+                  undefined
+                }
+                right={
+                  f.want_decant ? (
+                    <StatusDot tone="gold">Quer experimentar</StatusDot>
+                  ) : (
+                    <StatusDot tone="off">Salvo</StatusDot>
+                  )
+                }
+              />
+            ))}
+          </List>
+        ) : (
+          <Empty>Nenhum favorito.</Empty>
+        )}
+      </PanelCard>
+
+      <PanelCard title="Esperando chegar">
+        {data.waiting.length ? (
+          <List>
+            {data.waiting.map((w) => (
+              <Line
+                key={w.product_id}
+                title={productTitle(w.name)}
+                sub={w.brand ?? undefined}
+                right={w.in_stock ? <StatusDot tone="ok">Já voltou</StatusDot> : date(w.created_at)}
+              />
+            ))}
+          </List>
+        ) : (
+          <Empty>Não está esperando nenhum perfume.</Empty>
+        )}
+      </PanelCard>
+
+      <PanelCard title="Interesses na Negociação">
+        {data.negotiations?.length ? (
+          <List>
+            {data.negotiations.map((n) => (
+              <Link
+                key={n.id}
+                to="/negociacao/$id"
+                params={{ id: n.item_id }}
+                className="press block rounded-[12px] hover:bg-white/[0.03]"
+              >
+                <Line
+                  title={productTitle(n.item_name)}
+                  right={date(n.created_at)}
+                  to={<Chevron />}
+                />
+              </Link>
+            ))}
+          </List>
+        ) : (
+          <Empty>Nenhum interesse em negociação.</Empty>
+        )}
+      </PanelCard>
+    </>
+  );
+}
+
+function Notes({ data }: { data: CrmCustomerDetail }) {
   const addNote = useServerFn(crmAddNote);
   const delNote = useServerFn(crmDeleteNote);
   const qc = useQueryClient();
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
-
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["crm-customer", id],
-    enabled: !!id,
-    queryFn: () => detailFn({ data: { id: id! } }),
-  });
-
-  const link = whats(data?.customer.phone);
+  const refresh = () => qc.invalidateQueries({ queryKey: ["crm-customer", data.customer.id] });
 
   return (
-    <Sheet open={!!id} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-lg">
-        <SheetHeader>
-          <SheetTitle className="truncate">{data?.customer.name ?? "Ficha do cliente"}</SheetTitle>
-          <SheetDescription>{data?.customer.phone ?? data?.customer.email ?? "sem contato"}</SheetDescription>
-        </SheetHeader>
+    <>
+      <PanelCard
+        title="Nova anotação"
+        hint="Só a equipe vê. Ex.: prefere doces, comprou para presente."
+      >
+        <TextArea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Escreva aqui"
+        />
+        <GoldButton
+          className="mt-3 w-full"
+          loading={saving}
+          disabled={note.trim().length < 2}
+          onClick={async () => {
+            setSaving(true);
+            try {
+              await addNote({ data: { customerId: data.customer.id, note } });
+              setNote("");
+              await refresh();
+              toast.success("Anotação salva.");
+            } catch (e) {
+              toast.error((e as Error).message);
+            } finally {
+              setSaving(false);
+            }
+          }}
+        >
+          Salvar anotação
+        </GoldButton>
+      </PanelCard>
 
-        <div className="space-y-4 px-4 pb-8">
-          {isLoading ? (
-            <>
-              <Skeleton className="h-20 rounded-2xl" />
-              <Skeleton className="h-40 rounded-2xl" />
-            </>
-          ) : isError || !data ? (
-            <p className="text-sm text-muted-foreground">Não conseguimos abrir esta ficha agora.</p>
-          ) : (
-            <>
-              <div className="grid grid-cols-2 gap-2">
-                <Box label="Pedidos" value={String(data.metrics.orders_count)} />
-                <Box label="Total gasto" value={brl(Number(data.metrics.total_spent))} />
-                <Box label="Ticket médio" value={brl(Number(data.metrics.avg_ticket))} />
-                <Box label="Última compra" value={date(data.metrics.last_order_at)} />
+      {data.notes.length ? (
+        <div className="space-y-2">
+          {data.notes.map((n) => (
+            <div key={n.id} className="rounded-[20px] bg-[#1A1A1A] p-4">
+              <div className="flex items-start gap-3">
+                <p className="min-w-0 flex-1 text-[14.5px] leading-relaxed break-words whitespace-pre-wrap text-[#E6E6E6]">
+                  {n.note}
+                </p>
+                <button
+                  type="button"
+                  aria-label="Apagar anotação"
+                  className="press grid size-9 shrink-0 place-items-center rounded-full text-[#8C8C8C] transition-colors hover:bg-white/[0.06] hover:text-[#FF9A8A]"
+                  onClick={async () => {
+                    await delNote({ data: { id: n.id } });
+                    await refresh();
+                  }}
+                >
+                  <Trash2 className="size-4" />
+                </button>
               </div>
-              {data.metrics.orders_count > (data.metrics.confirmed_count ?? 0) ? (
-                <p className="text-xs text-muted-foreground">
-                  {data.metrics.orders_count - (data.metrics.confirmed_count ?? 0)} pedido(s) ainda sem confirmação — não
-                  entram nos valores acima.
-                </p>
-              ) : null}
-              {data.customer.provisional ? (
-                <p className="text-xs text-muted-foreground">Cliente identificado pelo dispositivo.</p>
-              ) : null}
-              <JourneyBlock id={id!} />
-              {data.customer.archived_at ? (
-                <p className="rounded-xl border border-border/70 bg-surface-3 p-3 text-xs text-muted-foreground">
-                  Cliente arquivado em {date(data.customer.archived_at)}. O histórico de pedidos continua guardado.
-                </p>
-              ) : null}
-              {link ? (
-                <Button asChild className="h-11 w-full rounded-full">
-                  <a href={link} target="_blank" rel="noreferrer">
-                    <MessageCircle className="size-4" /> Falar no WhatsApp
-                  </a>
-                </Button>
-              ) : null}
-
-              <CustomerEditor
-                customer={data.customer}
-                defaultOpen={!!openEditor}
-                onSaved={() => {
-                  void qc.invalidateQueries({ queryKey: ["crm-customer", id] });
-                  void qc.invalidateQueries({ queryKey: ["crm-customers"] });
-                  void qc.invalidateQueries({ queryKey: ["crm-overview"] });
-                  // o nome mostrado nos interesses da Negociação vem da mesma ficha
-                  void qc.invalidateQueries({ queryKey: ["negotiation-interests"] });
-                }}
-                onDeleted={() => {
-                  void qc.invalidateQueries({ queryKey: ["crm-customers"] });
-                  void qc.invalidateQueries({ queryKey: ["crm-overview"] });
-                  void qc.invalidateQueries({ queryKey: ["negotiation-interests"] });
-                  onClose();
-                }}
-              />
-
-
-
-
-              <Section title={`Decants que já experimentou (${data.decants.length})`} defaultOpen>
-                {data.decants.length ? (
-                  <ul className="space-y-1.5 text-sm">
-                    {data.decants.map((d, i) => (
-                      <li key={`${d.name}-${d.ml}-${i}`} className="flex justify-between gap-3">
-                        <span className="min-w-0 truncate">{productTitle(d.name)}</span>
-                        <span className="shrink-0 text-muted-foreground">
-                          {d.ml}ml · {d.quantity}x
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <Empty>Ainda não experimentou decants.</Empty>
-                )}
-              </Section>
-
-              <Section title={`Frascos já comprados (${data.bottles.length})`}>
-                {data.bottles.length ? (
-                  <ul className="space-y-1.5 text-sm">
-                    {data.bottles.map((b, i) => (
-                      <li key={`${b.name}-${i}`} className="flex justify-between gap-3">
-                        <span className="min-w-0 truncate">{productTitle(b.name)}</span>
-                        <span className="shrink-0 text-muted-foreground">
-                          {b.volume_ml ? `${b.volume_ml}ml · ` : ""}
-                          {b.quantity}x
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <Empty>Nenhum frasco comprado.</Empty>
-                )}
-              </Section>
-
-              {data.others.length ? (
-                <Section title={`Outros produtos (${data.others.length})`}>
-                  <ul className="space-y-1.5 text-sm">
-                    {data.others.map((o, i) => (
-                      <li key={`${o.name}-${i}`} className="flex justify-between gap-3">
-                        <span className="min-w-0 truncate">{productTitle(o.name)}</span>
-                        <span className="shrink-0 text-muted-foreground">{o.quantity}x</span>
-                      </li>
-                    ))}
-                  </ul>
-                </Section>
-              ) : null}
-
-              <Section title={`Favoritos (${data.favorites.length})`}>
-                {data.favorites.length ? (
-                  <ul className="space-y-1.5 text-sm">
-                    {data.favorites.map((f) => (
-                      <li key={f.product_id} className="flex justify-between gap-3">
-                        <span className="min-w-0 truncate">{productTitle(f.name)}</span>
-                        <span className="shrink-0 text-xs text-muted-foreground">
-                          {f.want_decant ? "quer experimentar" : "salvo"}
-                          {f.in_stock ? "" : " · indisponível"}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <Empty>Nenhum favorito.</Empty>
-                )}
-              </Section>
-
-              <Section
-                title={`Interesses em negociação (${data.negotiations?.length ?? 0})`}
-                defaultOpen={(data.negotiations?.length ?? 0) > 0}
-              >
-                {data.negotiations?.length ? (
-                  <ul className="space-y-1.5 text-sm">
-                    {data.negotiations.map((n) => (
-                      <li key={n.id} className="flex justify-between gap-3">
-                        <Link
-                          to="/negociacao/$id"
-                          params={{ id: n.item_id }}
-                          className="min-w-0 truncate hover:text-primary"
-                        >
-                          {productTitle(n.item_name)}
-                        </Link>
-                        <span className="shrink-0 text-xs text-muted-foreground">{date(n.created_at)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <Empty>Nenhum interesse em negociação.</Empty>
-                )}
-              </Section>
-
-              <Section title={`Aguardando estoque (${data.waiting.length})`}>
-                {data.waiting.length ? (
-                  <ul className="space-y-1.5 text-sm">
-                    {data.waiting.map((w) => (
-                      <li key={w.product_id} className="flex justify-between gap-3">
-                        <span className="min-w-0 truncate">{productTitle(w.name)}</span>
-                        <span className="shrink-0 text-xs text-muted-foreground">{date(w.created_at)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <Empty>Não está esperando nenhum perfume.</Empty>
-                )}
-              </Section>
-
-              <Section title={`Carrinhos (${data.carts.length})`}>
-                {data.carts.length ? (
-                  <ul className="space-y-2.5">
-                    {data.carts.map((c) => (
-                      <li key={c.id} className="rounded-xl border border-border/70 p-3">
-                        <div className="flex items-center justify-between gap-3 text-sm">
-                          <span className="font-medium">
-                            {c.status === "ACTIVE"
-                              ? "Carrinho atual"
-                              : c.status === "ABANDONED"
-                                ? "Abandonado"
-                                : c.status === "RECOVERED"
-                                  ? "Recuperado"
-                                  : "Convertido em pedido"}
-                          </span>
-                          <span className="tabular-nums">{brl(Number(c.estimated_total))}</span>
-                        </div>
-                        <p className="mt-0.5 text-[11px] text-muted-foreground">
-                          {c.items_count} item(ns) · atividade {date(c.last_activity_at)}
-                        </p>
-                        <ul className="mt-1.5 space-y-1 text-xs text-muted-foreground">
-                          {c.items.map((it, i) => (
-                            <li key={i} className="truncate">
-                              {it.quantity}x {productTitle(it.name ?? "")}{" "}
-                              {it.variant === "DECANT" ? `· decant ${it.decant_ml}ml` : "· frasco"}
-                            </li>
-                          ))}
-                        </ul>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <Empty>Nenhum carrinho registrado.</Empty>
-                )}
-              </Section>
-
-              <Section title={`Pedidos (${data.orders.length})`} defaultOpen>
-                {data.orders.length ? (
-                  <ul className="space-y-1.5 text-sm">
-                    {data.orders.map((o) => (
-                      <li key={o.id}>
-                        <Link
-                          to="/admin/pedidos"
-                          search={{ pedido: o.id }}
-                          onClick={onClose}
-                          className="press flex items-center justify-between gap-3 rounded-xl border border-border/70 p-2.5 transition-colors hover:bg-surface-3"
-                        >
-                          <span className="min-w-0">
-                            <span className="block truncate font-medium">
-                              {o.order_number ?? o.id.slice(0, 8)}
-                            </span>
-                            <span className="block truncate text-[11px] text-muted-foreground">
-                              {date(o.created_at)} · {o.status}
-                              {o.is_confirmed ? "" : " · aguardando confirmação"}
-                            </span>
-                          </span>
-                          <span className="flex shrink-0 items-center gap-1 tabular-nums">
-                            {brl(Number(o.total))}
-                            <ChevronRight className="size-4 text-muted-foreground" />
-                          </span>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <Empty>Nenhum pedido.</Empty>
-                )}
-              </Section>
-
-
-              <Section
-                title={`Acessou recentemente (${data.recent_views?.length ?? 0})`}
-                defaultOpen
-              >
-                {data.recent_views?.length ? (
-
-                  <ul className="space-y-1.5 text-sm">
-                    {data.recent_views.map((v) => {
-                      const row = (
-                        <>
-                          <span className="min-w-0">
-                            <span className="block truncate font-medium">{productTitle(v.name)}</span>
-                            <span className="block truncate text-[11px] text-muted-foreground">
-                              {v.brand ? `${v.brand} · ` : ""}
-                              {when(v.last_at)}
-                              {v.views > 1 ? ` · ${v.views}x` : ""}
-                              {v.in_stock ? "" : " · sem estoque"}
-                            </span>
-                          </span>
-                          {v.slug ? <ChevronRight className="size-4 shrink-0 text-muted-foreground" /> : null}
-                        </>
-                      );
-                      return (
-                        <li key={v.product_id}>
-                          {v.slug ? (
-                            <Link
-                              to="/perfume/$slug"
-                              params={{ slug: v.slug }}
-                              onClick={onClose}
-                              className="press flex items-center justify-between gap-3 rounded-xl border border-border/70 p-2.5 transition-colors hover:bg-surface-3"
-                            >
-                              {row}
-                            </Link>
-                          ) : (
-                            <div className="flex items-center justify-between gap-3 rounded-xl border border-border/70 p-2.5">
-                              {row}
-                            </div>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                ) : (
-                  <Empty>Nenhum acesso registrado ainda.</Empty>
-                )}
-              </Section>
-
-
-              {data.viewed.length ? (
-                <Section title="Perfumes que mais acessou">
-                  <ul className="space-y-1.5 text-sm">
-                    {data.viewed.map((v, i) => (
-                      <li key={i} className="flex justify-between gap-3">
-                        <span className="min-w-0 truncate">{productTitle(v.name)}</span>
-                        <span className="shrink-0 text-muted-foreground">{v.views}x</span>
-                      </li>
-                    ))}
-                  </ul>
-                </Section>
-              ) : null}
-
-              <Section title={`Anotações internas (${data.notes.length})`} defaultOpen>
-                <div className="space-y-2">
-                  <Textarea
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    placeholder="Ex.: prefere fragrâncias doces, comprou para presente…"
-                    className="min-h-20 rounded-xl"
-                  />
-                  <Button
-                    className="h-10 w-full rounded-full"
-                    disabled={saving || note.trim().length < 2}
-                    onClick={async () => {
-                      setSaving(true);
-                      try {
-                        await addNote({ data: { customerId: data.customer.id, note } });
-                        setNote("");
-                        await qc.invalidateQueries({ queryKey: ["crm-customer", id] });
-                        toast.success("Anotação salva.");
-                      } catch (e) {
-                        toast.error((e as Error).message);
-                      } finally {
-                        setSaving(false);
-                      }
-                    }}
-                  >
-                    {saving ? <Loader2 className="size-4 animate-spin" /> : "Salvar anotação"}
-                  </Button>
-                  <ul className="space-y-2">
-                    {data.notes.map((n) => (
-                      <li key={n.id} className="rounded-xl bg-surface-2 p-3 text-sm">
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="min-w-0 break-words whitespace-pre-wrap">{n.note}</p>
-                          <button
-                            type="button"
-                            aria-label="Remover anotação"
-                            className="shrink-0 text-muted-foreground"
-                            onClick={async () => {
-                              await delNote({ data: { id: n.id } });
-                              await qc.invalidateQueries({ queryKey: ["crm-customer", id] });
-                            }}
-                          >
-                            <Trash2 className="size-4" />
-                          </button>
-                        </div>
-                        <p className="mt-1 text-[11px] text-muted-foreground">{date(n.created_at)}</p>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </Section>
-            </>
-          )}
+              <p className="mt-1.5 text-[12px] text-[#6F6F6F]">{date(n.created_at)}</p>
+            </div>
+          ))}
         </div>
-      </SheetContent>
-    </Sheet>
+      ) : null}
+    </>
   );
 }
 
-const Box = ({ label, value }: { label: string; value: string }) => (
-  <div className="rounded-xl border border-border/70 p-3">
-    <p className="text-[11px] tracking-wide text-muted-foreground uppercase">{label}</p>
-    <p className="mt-0.5 text-sm font-semibold">{value}</p>
-  </div>
-);
-
-const Empty = ({ children }: { children: React.ReactNode }) => (
-  <p className="text-sm text-muted-foreground">{children}</p>
-);
-
-function Section({
-  title,
-  children,
-  defaultOpen,
-}: {
-  title: string;
-  children: React.ReactNode;
-  defaultOpen?: boolean;
-}) {
-  const [open, setOpen] = useState(!!defaultOpen);
-  return (
-    <Collapsible open={open} onOpenChange={setOpen} className="rounded-2xl border border-border/70 bg-card">
-      <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-semibold">
-        <span className="min-w-0 truncate">{title}</span>
-        <ChevronDown className={cn("size-4 shrink-0 transition-transform duration-200", open && "rotate-180")} />
-      </CollapsibleTrigger>
-      <CollapsibleContent className="px-4 pb-4">{children}</CollapsibleContent>
-    </Collapsible>
-  );
-}
-
-/** Corrigir dados do cliente e arquivar sem apagar histórico. */
+/** Corrigir dados do cliente, arquivar sem apagar histórico ou excluir a ficha. */
 function CustomerEditor({
   customer,
   onSaved,
   onDeleted,
-  defaultOpen,
 }: {
-  customer: { id: string; name: string | null; phone: string | null; email: string | null; archived_at: string | null };
+  customer: {
+    id: string;
+    name: string | null;
+    phone: string | null;
+    email: string | null;
+    archived_at: string | null;
+  };
   onSaved: () => void;
   onDeleted: () => void;
-  defaultOpen?: boolean;
 }) {
   const update = useServerFn(crmCustomerUpdate);
   const archive = useServerFn(crmCustomerArchive);
   const remove = useServerFn(crmCustomerDelete);
+  const qc = useQueryClient();
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [open, setOpen] = useState(!!defaultOpen);
   const [name, setName] = useState(customer.name ?? "");
   const [phone, setPhone] = useState(customer.phone ?? "");
   const [email, setEmail] = useState(customer.email ?? "");
   const [busy, setBusy] = useState(false);
   const archived = !!customer.archived_at;
 
+  const refresh = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: ["crm-customer", customer.id] }),
+      qc.invalidateQueries({ queryKey: ["crm-customers"] }),
+      qc.invalidateQueries({ queryKey: ["crm-overview"] }),
+      // o nome mostrado nos interesses da Negociação vem da mesma ficha
+      qc.invalidateQueries({ queryKey: ["negotiation-interests"] }),
+    ]);
+
+  const run = async (fn: () => Promise<unknown>, ok: string, after?: () => void) => {
+    setBusy(true);
+    try {
+      await fn();
+      await refresh();
+      toast.success(ok);
+      after?.();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger asChild>
-        <Button variant="outline" className="h-11 w-full justify-between rounded-full">
-          <span className="flex items-center gap-2">
-            <Pencil className="size-4" /> Dados do cliente
-          </span>
-          <ChevronDown className={cn("size-4 transition-transform duration-200", open && "rotate-180")} />
-        </Button>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="pt-3">
-        <div className="space-y-2.5 rounded-2xl border border-border/70 p-3.5">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome" className="h-11 rounded-xl" />
-          <Input
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="WhatsApp"
-            inputMode="tel"
-            className="h-11 rounded-xl"
-          />
-          <Input
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="E-mail"
-            inputMode="email"
-            className="h-11 rounded-xl"
-          />
-          <Button
-            className="h-11 w-full rounded-full"
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                await update({ data: { id: customer.id, name, phone, email } });
-                toast.success("Dados do cliente atualizados.");
-                onSaved();
-              } catch (e) {
-                toast.error((e as Error).message);
-              } finally {
-                setBusy(false);
-              }
-            }}
+    <>
+      <PanelCard title="Dados do cliente">
+        <div className="space-y-4">
+          <Field label="Nome" htmlFor="crm-name">
+            <TextInput
+              id="crm-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Nome"
+            />
+          </Field>
+          <Field label="WhatsApp" htmlFor="crm-phone">
+            <TextInput
+              id="crm-phone"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="(21) 99999-9999"
+              inputMode="tel"
+            />
+          </Field>
+          <Field label="E-mail" htmlFor="crm-email">
+            <TextInput
+              id="crm-email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="nome@email.com"
+              inputMode="email"
+            />
+          </Field>
+          <GoldButton
+            className="w-full"
+            loading={busy}
+            onClick={() =>
+              void run(
+                () => update({ data: { id: customer.id, name, phone, email } }),
+                "Dados do cliente atualizados.",
+                onSaved,
+              )
+            }
           >
-            {busy ? <Loader2 className="size-4 animate-spin" /> : "Salvar dados"}
-          </Button>
-          <Button
-            variant="outline"
-            className="h-11 w-full rounded-full"
+            Salvar dados
+          </GoldButton>
+        </div>
+      </PanelCard>
+
+      <PanelCard
+        title="Arquivar ou excluir"
+        hint="Arquivar tira da lista e guarda o histórico. Excluir apaga a ficha; os pedidos continuam salvos."
+      >
+        <div className="flex flex-wrap gap-2">
+          <SoftButton
             disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                await archive({ data: { id: customer.id, archived: !archived } });
-                toast.success(archived ? "Cliente reativado." : "Cliente arquivado.");
-                onSaved();
-              } catch (e) {
-                toast.error((e as Error).message);
-              } finally {
-                setBusy(false);
-              }
-            }}
+            icon={archived ? <ArchiveRestore /> : <Archive />}
+            onClick={() =>
+              void run(
+                () => archive({ data: { id: customer.id, archived: !archived } }),
+                archived ? "Cliente reativado." : "Cliente arquivado.",
+              )
+            }
           >
-            {archived ? (
-              <>
-                <ArchiveRestore className="size-4" /> Reativar cliente
-              </>
-            ) : (
-              <>
-                <Archive className="size-4" /> Arquivar cliente
-              </>
-            )}
-          </Button>
-          <Button
-            variant="ghost"
-            className="h-11 w-full rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
+            {archived ? "Reativar cliente" : "Arquivar cliente"}
+          </SoftButton>
+          <SoftButton
             disabled={busy}
+            icon={<Trash2 />}
+            className="text-[#FF9A8A]"
             onClick={() => setConfirmOpen(true)}
           >
-            <Trash2 className="size-4" /> Excluir cliente
-          </Button>
-
-          <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-            <AlertDialogContent className="max-w-[min(92vw,26rem)] rounded-2xl">
-              <AlertDialogHeader>
-                <AlertDialogTitle>Excluir ficha deste cliente?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Essa ação remove a ficha do cliente da área de Clientes. Os pedidos existentes não são apagados.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel className="h-11 rounded-full">Cancelar</AlertDialogCancel>
-                <AlertDialogAction
-                  className="h-11 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  onClick={async () => {
-                    setBusy(true);
-                    try {
-                      await remove({ data: { id: customer.id } });
-                      toast.success("Ficha do cliente excluída. Os pedidos continuam salvos.");
-                      onDeleted();
-                    } catch (e) {
-                      toast.error((e as Error).message);
-                    } finally {
-                      setBusy(false);
-                    }
-                  }}
-                >
-                  Excluir cliente
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+            Excluir cliente
+          </SoftButton>
         </div>
-      </CollapsibleContent>
-    </Collapsible>
+      </PanelCard>
+
+      <AdminConfirm
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title="Excluir a ficha deste cliente?"
+        description="A ficha sai da área de Clientes. Os pedidos dele não são apagados."
+        confirmLabel="Excluir cliente"
+        danger
+        onConfirm={() =>
+          void run(
+            () => remove({ data: { id: customer.id } }),
+            "Ficha excluída. Os pedidos continuam salvos.",
+            onDeleted,
+          )
+        }
+      />
+    </>
   );
 }
 
-/**
- * Jornada do cliente: de onde veio, o que buscou e o que fez a pessoa se
- * identificar. Somente equipe (a função do banco checa a permissão).
- */
-function JourneyBlock({ id }: { id: string }) {
+/** De onde veio, o que buscou e o que fez a pessoa se identificar. */
+function JourneyCard({ id }: { id: string }) {
   const load = useServerFn(customerJourney);
   const { data } = useQuery({
     queryKey: ["crm-journey", id],
@@ -653,30 +796,83 @@ function JourneyBlock({ id }: { id: string }) {
     aviso_estoque: "Aviso de estoque",
     checkout: "Finalização do pedido",
   };
-
-  const bits = [
-    data.first_source ? `Chegou por ${SOURCE[data.first_source] ?? data.first_source}` : null,
-    data.utm_campaign ? `campanha ${data.utm_campaign}` : null,
-    data.lead_trigger ? (TRIGGER[data.lead_trigger] ?? data.lead_trigger) : null,
-    data.marketing_optin ? "aceitou receber novidades" : null,
-  ].filter(Boolean);
-
-  if (!bits.length && !data.searches?.length) return null;
+  const facts = [
+    data.first_source
+      ? { k: "Chegou por", v: SOURCE[data.first_source] ?? data.first_source }
+      : null,
+    data.utm_campaign ? { k: "Campanha", v: data.utm_campaign } : null,
+    data.lead_trigger
+      ? { k: "Se identificou em", v: TRIGGER[data.lead_trigger] ?? data.lead_trigger }
+      : null,
+    data.marketing_optin ? { k: "Novidades", v: "Aceitou receber" } : null,
+    data.help_requests?.length
+      ? { k: "Pediu ajuda", v: `${data.help_requests.length} perfume(s)` }
+      : null,
+  ].filter(Boolean) as Array<{ k: string; v: string }>;
+  if (!facts.length && !data.searches?.length) return null;
 
   return (
-    <div className="rounded-xl border border-border/70 bg-surface-3 p-3">
-      <p className="text-xs tracking-wide text-muted-foreground uppercase">Como chegou</p>
-      {bits.length ? <p className="mt-1 text-sm">{bits.join(" · ")}</p> : null}
+    <PanelCard title="Como chegou">
+      {facts.length ? (
+        <dl className="grid grid-cols-2 gap-2">
+          {facts.map((f) => (
+            <div key={f.k} className="min-w-0 rounded-[16px] bg-[#232323] px-3.5 py-2.5">
+              <dt className="truncate text-[11.5px] font-semibold text-[#8C8C8C]">{f.k}</dt>
+              <dd className="mt-0.5 truncate text-[14px] font-bold">{f.v}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
       {data.searches?.length ? (
-        <p className="mt-2 text-xs text-muted-foreground">
-          Buscou: {data.searches.slice(0, 5).map((s) => s.query).join(", ")}
-        </p>
+        <div className={cn("flex flex-wrap gap-1.5", facts.length && "mt-3")}>
+          <span className="mr-1 self-center text-[12.5px] font-semibold text-[#8C8C8C]">
+            Buscou
+          </span>
+          {data.searches.slice(0, 6).map((s, i) => (
+            <span
+              key={`${s.query}-${i}`}
+              className="inline-flex h-7 items-center rounded-full bg-[#232323] px-3 text-[12.5px] font-semibold text-[#D4D4D4]"
+            >
+              {s.query}
+            </span>
+          ))}
+        </div>
       ) : null}
-      {data.help_requests?.length ? (
-        <p className="mt-1 text-xs text-muted-foreground">
-          Pediu ajuda em {data.help_requests.length} perfume(s).
-        </p>
-      ) : null}
-    </div>
+    </PanelCard>
+  );
+}
+
+/** Barras horizontais de uma série só (comprimento = quantidade). */
+export function Bars({
+  rows,
+  max,
+}: {
+  rows: Array<{ label: string; value: number; display: string; hint?: string }>;
+  max?: number;
+}) {
+  const top = max ?? Math.max(1, ...rows.map((r) => r.value));
+  return (
+    <ul className="space-y-3">
+      {rows.map((r, i) => (
+        <li
+          key={`${r.label}-${i}`}
+          title={`${r.label}: ${r.hint ?? r.display}`}
+          className="min-w-0"
+        >
+          <div className="flex min-w-0 items-baseline justify-between gap-3">
+            <span className="min-w-0 truncate text-[14px] font-semibold text-[#E6E6E6]">
+              {r.label}
+            </span>
+            <span className="shrink-0 text-[13px] text-[#A9A9A9] tabular-nums">{r.display}</span>
+          </div>
+          <span className="mt-1.5 block h-[6px] overflow-hidden rounded-full bg-white/[0.06]">
+            <span
+              className="block h-full rounded-full bg-[#FFD599] transition-[width] duration-700"
+              style={{ width: `${Math.max(2, (r.value / top) * 100)}%` }}
+            />
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }

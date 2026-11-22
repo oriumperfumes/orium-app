@@ -3636,6 +3636,12 @@ body.admin-mode .press:active:not(:disabled) { transform: scale(0.965); transiti
   .black-dot, .black-sec, .black-bar, .black-tag, .black-marquee, .black-in { animation: none; }
 }
 
+/* ---------- ADMIN: PONTO "AO VIVO" ---------- */
+.live-dot { position: relative; display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #7fcf9f; flex-shrink: 0; }
+.live-dot::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: #7fcf9f; animation: liveDot 1.8s var(--ease-orium) infinite; }
+@keyframes liveDot { from { transform: scale(1); opacity: 0.55; } to { transform: scale(2.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .live-dot::after { animation: none; } }
+
 /* ---------- ADMIN: TÍTULO QUE NAVEGA ---------- */
 /* a tela aberta grande; as irmãs na mesma linha de base, em cinza, como um índice */
 .adm-titles {
