@@ -7,13 +7,26 @@
  * O assistente ao lado diz quem é o cliente e o que fazer. Nada sai sem clique.
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Archive,
   ArrowLeft,
   ArrowUpDown,
+  ArchiveRestore,
+  ExternalLink,
+  Mail,
+  MessageCircle,
+  Trash2,
   Check,
   CheckCheck,
   ChevronDown,
@@ -43,6 +56,7 @@ import {
 import { toast } from "sonner";
 import { AdminShell } from "@/components/orium/AdminShell";
 import { CustomerSheet, whatsLink } from "@/components/orium/CustomerSheet";
+import { crmCustomerDelete } from "@/lib/crm.functions";
 import { SidePanel } from "@/components/orium/admin/orders/model";
 import { PanelHeader, PanelScroll } from "@/components/orium/admin/PanelKit";
 import { pxInputClass } from "@/components/orium/admin/PricingUI";
@@ -67,6 +81,7 @@ import {
   waLinkCustomer,
   waSend,
   waThread,
+  waDeleteContact,
   waUpdateContact,
   type PerfumeQuote,
   type ReplySuggestion,
@@ -168,6 +183,8 @@ function ConversasPage() {
   const [sort, setSort] = useState<"recentes" | "quentes">("recentes");
   const [assistOpen, setAssistOpen] = useState(true);
   const [assistSheet, setAssistSheet] = useState(false);
+  const [menu, setMenu] = useState<{ c: WaContact; x: number; y: number } | null>(null);
+  const [menuFicha, setMenuFicha] = useState<string | null>(null);
 
   const inbox = useQuery({
     queryKey: ["wa-inbox"],
@@ -431,6 +448,7 @@ function ConversasPage() {
                   lead={leadOf(c)}
                   active={c.jid === selected}
                   onOpen={() => select(c.jid)}
+                  onMenu={(x, y) => setMenu({ c, x, y })}
                 />
               ))
             )}
@@ -484,6 +502,21 @@ function ConversasPage() {
           </aside>
         ) : null}
       </div>
+
+      {menu ? (
+        <ContactMenu
+          c={menu.c}
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+          onOpen={() => select(menu.c.jid)}
+          onFicha={(id) => setMenuFicha(id)}
+          onDeleted={(jid) => {
+            if (jid === selected) select(undefined);
+          }}
+        />
+      ) : null}
+      <CustomerSheet id={menuFicha} onClose={() => setMenuFicha(null)} />
 
       <SidePanel
         open={assistSheet && !!current}
@@ -576,12 +609,16 @@ function ContactRow({
   lead,
   active,
   onOpen,
+  onMenu,
 }: {
   c: WaContact;
   lead?: Lead;
   active: boolean;
   onOpen: () => void;
+  onMenu: (x: number, y: number) => void;
 }) {
+  // segurar o dedo (celular) abre o mesmo menu do botão direito
+  const press = useRef<{ t: number; x: number; y: number; fired: boolean } | null>(null);
   const qc = useQueryClient();
   const pin = useMutation({
     mutationFn: () => waUpdateContact({ data: { jid: c.jid, pinned: !c.pinned } }),
@@ -592,8 +629,37 @@ function ContactRow({
     <div
       role="button"
       tabIndex={0}
-      onClick={onOpen}
-      onKeyDown={(e) => (e.key === "Enter" ? onOpen() : undefined)}
+      onClick={() => {
+        if (press.current?.fired) return;
+        onOpen();
+      }}
+      onKeyDown={(e) =>
+        e.key === "Enter" ? onOpen() : e.key === "ContextMenu" ? onMenu(80, 200) : undefined
+      }
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onMenu(e.clientX, e.clientY);
+      }}
+      onPointerDown={(e) => {
+        if (e.pointerType === "mouse") return;
+        const st = { x: e.clientX, y: e.clientY, fired: false, t: 0 };
+        st.t = window.setTimeout(() => {
+          st.fired = true;
+          navigator.vibrate?.(10);
+          onMenu(st.x, st.y);
+        }, 480);
+        press.current = st;
+      }}
+      onPointerMove={(e) => {
+        const st = press.current;
+        if (st && !st.fired && Math.hypot(e.clientX - st.x, e.clientY - st.y) > 10)
+          window.clearTimeout(st.t);
+      }}
+      onPointerUp={() => {
+        const st = press.current;
+        if (st) window.clearTimeout(st.t);
+        window.setTimeout(() => (press.current = null), 0);
+      }}
       className={cn(
         "press group relative flex w-full min-w-0 cursor-pointer gap-3 rounded-[22px] p-3 text-left transition-colors",
         active ? "bg-[#FFD599]/[0.09] ring-1 ring-[#FFD599]/25" : "hover:bg-white/[0.04]",
@@ -1685,5 +1751,256 @@ function LinkCustomer({ contact }: { contact: WaContact }) {
         </div>
       ) : null}
     </Block>
+  );
+}
+
+/* ───────────────────────── menu do contato ───────────────────────── */
+
+function ContactMenu({
+  c,
+  x,
+  y,
+  onClose,
+  onOpen,
+  onFicha,
+  onDeleted,
+}: {
+  c: WaContact;
+  x: number;
+  y: number;
+  onClose: () => void;
+  onOpen: () => void;
+  onFicha: (customerId: string) => void;
+  onDeleted: (jid: string) => void;
+}) {
+  const qc = useQueryClient();
+  const [confirm, setConfirm] = useState<null | "conversa" | "cliente">(null);
+  // abre para cima quando o clique foi na metade de baixo da tela; nunca sai da tela
+  const vw = typeof window === "undefined" ? 1200 : window.innerWidth;
+  const vh = typeof window === "undefined" ? 800 : window.innerHeight;
+  const up = y > vh * 0.5;
+  const place: CSSProperties = {
+    left: Math.max(8, Math.min(x, vw - 256)),
+    ...(up ? { bottom: Math.max(8, vh - y) } : { top: Math.max(8, y) }),
+    maxHeight: up ? Math.max(200, y - 8) : Math.max(200, vh - y - 8),
+  };
+  useEffect(() => {
+    const key = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", key);
+    window.addEventListener("resize", onClose);
+    return () => {
+      window.removeEventListener("keydown", key);
+      window.removeEventListener("resize", onClose);
+    };
+  }, [onClose]);
+
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: ["wa-inbox"] });
+    void qc.invalidateQueries({ queryKey: ["crm-leads"] });
+    void qc.invalidateQueries({ queryKey: ["crm-pulse"] });
+  };
+  const update = useMutation({
+    mutationFn: (patch: {
+      pinned?: boolean;
+      archived?: boolean;
+      unread?: number;
+      stage?: WaContact["stage"];
+    }) => waUpdateContact({ data: { jid: c.jid, ...patch } }),
+    onSuccess: refresh,
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Não deu certo"),
+  });
+  const delConversa = useMutation({
+    mutationFn: () => waDeleteContact({ data: { jid: c.jid } }),
+    onSuccess: () => {
+      toast.success("Conversa excluída");
+      onDeleted(c.jid);
+      refresh();
+      onClose();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Não foi possível excluir"),
+  });
+  const delCliente = useMutation({
+    mutationFn: () => crmCustomerDelete({ data: { id: c.customer_id! } }),
+    onSuccess: () => {
+      toast.success("Cliente excluído para sempre");
+      refresh();
+      void qc.invalidateQueries({ queryKey: ["crm-customers"] });
+      onClose();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Não foi possível excluir"),
+  });
+  const run = (fn: () => void) => () => {
+    fn();
+    onClose();
+  };
+  const wa = whatsLink(c.phone_normalized);
+  const name = contactName(c);
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-[80]"
+        onClick={onClose}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onClose();
+        }}
+      />
+      <div
+        role="menu"
+        aria-label={`Opções de ${name}`}
+        className="adm-scroll fixed z-[81] w-[248px] overflow-y-auto rounded-[22px] border border-white/[0.08] bg-[#1C1C1C] p-1.5 shadow-[0_24px_60px_rgba(0,0,0,0.6)]"
+        style={place}
+      >
+        <div className="flex items-center gap-2.5 px-2.5 pt-2 pb-2.5">
+          <Avatar name={name} size={32} />
+          <div className="min-w-0">
+            <p className="truncate text-[13.5px] font-bold">{name}</p>
+            <p className="truncate text-[11.5px] text-[#8C8C8C]">{fmtPhone(c.phone_normalized)}</p>
+          </div>
+        </div>
+
+        {confirm ? (
+          <div className="rounded-[16px] bg-[#FF9A8A]/10 p-3">
+            <p className="text-[13.5px] font-bold text-[#FFB3A7]">
+              {confirm === "conversa" ? "Excluir esta conversa?" : "Excluir o cliente para sempre?"}
+            </p>
+            <p className="mt-1 text-[12px] leading-snug text-[#D4D4D4]">
+              {confirm === "conversa"
+                ? "Apaga as mensagens daqui do CRM. Se a pessoa escrever de novo, a conversa volta."
+                : "Apaga a ficha, notas e histórico do cliente no CRM. Os pedidos continuam nas vendas. Não dá para desfazer."}
+            </p>
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirm(null)}
+                className="press h-9 flex-1 rounded-full bg-white/[0.08] text-[12.5px] font-bold"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={delConversa.isPending || delCliente.isPending}
+                onClick={() =>
+                  confirm === "conversa" ? delConversa.mutate() : delCliente.mutate()
+                }
+                className="press h-9 flex-1 rounded-full bg-[#FF9A8A] text-[12.5px] font-bold text-[#15130F] disabled:opacity-50"
+              >
+                Excluir
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <MenuItem icon={<MessageCircle />} label="Abrir conversa" onClick={run(onOpen)} />
+            <MenuItem
+              icon={<Star fill={c.pinned ? "currentColor" : "none"} />}
+              label={c.pinned ? "Desafixar" : "Fixar no topo"}
+              onClick={run(() => update.mutate({ pinned: !c.pinned }))}
+            />
+            <MenuItem
+              icon={<Mail />}
+              label={c.unread ? "Marcar como lida" : "Marcar como não lida"}
+              onClick={run(() => update.mutate({ unread: c.unread ? 0 : 1 }))}
+            />
+            <div className="px-2.5 pt-2 pb-1">
+              <p className="text-[11px] font-semibold text-[#6F6F6F]">Etapa</p>
+              <div className="mt-1.5 flex gap-1">
+                {STAGES.map((s) => (
+                  <button
+                    key={s.v}
+                    type="button"
+                    title={s.label}
+                    aria-label={`Etapa ${s.label}`}
+                    onClick={run(() => update.mutate({ stage: s.v }))}
+                    className={cn(
+                      "press grid h-8 flex-1 place-items-center rounded-[10px]",
+                      c.stage === s.v ? "bg-white/[0.12]" : "hover:bg-white/[0.06]",
+                    )}
+                  >
+                    <span className="size-2.5 rounded-full" style={{ background: s.dot }} />
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1 text-[11px] text-[#8C8C8C]">
+                {STAGES.find((s) => s.v === c.stage)?.label}
+              </p>
+            </div>
+            <div className="my-1 h-px bg-white/[0.06]" />
+            {c.customer_id ? (
+              <MenuItem
+                icon={<UserRound />}
+                label="Ver ficha do cliente"
+                onClick={run(() => onFicha(c.customer_id!))}
+              />
+            ) : null}
+            <MenuItem
+              icon={<Copy />}
+              label="Copiar número"
+              onClick={run(() => {
+                void navigator.clipboard?.writeText(c.phone_normalized ?? "");
+                toast.success("Número copiado");
+              })}
+            />
+            {wa ? (
+              <MenuItem
+                icon={<ExternalLink />}
+                label="Abrir no WhatsApp"
+                onClick={run(() => window.open(wa, "_blank", "noopener"))}
+              />
+            ) : null}
+            <MenuItem
+              icon={c.archived ? <ArchiveRestore /> : <Archive />}
+              label={c.archived ? "Desarquivar" : "Arquivar"}
+              onClick={run(() => update.mutate({ archived: !c.archived }))}
+            />
+            <div className="my-1 h-px bg-white/[0.06]" />
+            <MenuItem
+              icon={<Trash2 />}
+              label="Excluir conversa"
+              danger
+              onClick={() => setConfirm("conversa")}
+            />
+            {c.customer_id ? (
+              <MenuItem
+                icon={<Trash2 />}
+                label="Excluir cliente"
+                danger
+                onClick={() => setConfirm("cliente")}
+              />
+            ) : null}
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+function MenuItem({
+  icon,
+  label,
+  onClick,
+  danger,
+}: {
+  icon: ReactNode;
+  label: string;
+  onClick: () => void;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      className={cn(
+        "flex h-10 w-full items-center gap-3 rounded-[14px] px-2.5 text-left text-[13.5px] font-semibold transition-colors [&_svg]:size-[17px]",
+        danger ? "text-[#FF9A8A] hover:bg-[#FF9A8A]/10" : "text-[#E5E5E5] hover:bg-white/[0.06]",
+      )}
+    >
+      <span className="grid size-5 shrink-0 place-items-center opacity-80">{icon}</span>
+      {label}
+    </button>
   );
 }

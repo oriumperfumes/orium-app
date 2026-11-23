@@ -202,7 +202,7 @@ export const waOpenForCustomer = createServerFn({ method: "POST" })
 export const waUpdateContact = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
-    (d: { jid: string; stage?: string; unread?: 0; pinned?: boolean; archived?: boolean }) => {
+    (d: { jid: string; stage?: string; unread?: number; pinned?: boolean; archived?: boolean }) => {
       if (d.stage && !(STAGES as readonly string[]).includes(d.stage))
         throw new Error("Etapa inválida.");
       return d;
@@ -556,4 +556,18 @@ export const crmSuggestReply = createServerFn({ method: "POST" })
       why: String(out.why ?? "").trim(),
       next_step: String(out.next_step ?? "").trim(),
     };
+  });
+
+/** Apaga a conversa (contato + mensagens + fila) do CRM. Se o cliente escrever de novo, ela volta. */
+export const waDeleteContact = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { jid: string }) => {
+    if (!/@s\.whatsapp\.net$/.test(d.jid)) throw new Error("Conversa inválida.");
+    return { jid: d.jid };
+  })
+  .handler(async ({ data, context }) => {
+    const ctx = await staffCtx(context as any);
+    const { error } = await ctx.adminDb.from("wa_contacts").delete().eq("jid", data.jid);
+    if (error) throw new Error(error.message);
+    return { ok: true };
   });
