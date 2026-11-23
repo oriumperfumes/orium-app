@@ -86,12 +86,14 @@ import {
   waUpdateContact,
   type PerfumeQuote,
   type ReplySuggestion,
+  type ReplyGoal,
   type WaBridge,
   type WaContact,
   type WaMessage,
 } from "@/lib/crm-wa.functions";
 import { brl } from "@/lib/format";
 import { flat } from "@/lib/perfume-mentions";
+import { REPLY_GOALS } from "@/lib/sales-playbook";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/admin/conversas")({
@@ -135,6 +137,22 @@ const QUICK = [
   },
   { label: "Separar", text: "Separo um pra você? Assim garante o seu ✨" },
 ];
+
+const HEAT: Record<string, { label: string; cls: string }> = {
+  frio: { label: "Frio", cls: "bg-[#232323] text-[#A9A9A9]" },
+  morno: { label: "Morno", cls: "bg-white/[0.08] text-white" },
+  quente: { label: "Quente", cls: "bg-[#FFB86B] text-[#15130F]" },
+  pronto: { label: "Pronto pra comprar", cls: "bg-[#7FCF9F] text-[#15130F]" },
+};
+const OBJ: Record<string, string> = {
+  preco: "preço",
+  vou_pensar: "vou pensar",
+  confianca: "confiança",
+  comparando: "comparando",
+  entrega: "entrega",
+  indeciso: "indeciso",
+  sumiu: "sumiu",
+};
 
 const contactName = (c: WaContact) =>
   c.customer?.name ||
@@ -796,7 +814,8 @@ function Thread({
   const [quick, setQuick] = useState(false);
   const [stageOpen, setStageOpen] = useState(false);
   const [ai, setAi] = useState<ReplySuggestion | null>(null);
-  const [aiShort, setAiShort] = useState(false);
+  const [aiVersion, setAiVersion] = useState(0);
+  const [goal, setGoal] = useState<ReplyGoal>("auto");
   const endRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const thread = useThread(contact.jid);
@@ -855,10 +874,10 @@ function Thread({
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["wa-inbox"] }),
   });
   const suggest = useMutation({
-    mutationFn: () => crmSuggestReply({ data: { jid: contact.jid } }),
+    mutationFn: (g: ReplyGoal = "auto") => crmSuggestReply({ data: { jid: contact.jid, goal: g } }),
     onMutate: () => {
       setAi(null);
-      setAiShort(false);
+      setAiVersion(0);
     },
     onSuccess: (r) => setAi(r),
     onError: (e) => toast.error(e instanceof Error ? e.message : "A IA não respondeu agora"),
@@ -880,7 +899,14 @@ function Thread({
   const quoteList = quotes.data ?? [];
   const st = STAGES.find((s) => s.v === contact.stage) ?? STAGES[0];
   const waitingReply = contact.last_from_me === false;
-  const aiText = ai ? (aiShort && ai.short ? ai.short : ai.reply) : "";
+  const versions = ai
+    ? [
+        { label: "Principal", text: ai.reply },
+        ...(ai.short ? [{ label: "Mais curta", text: ai.short }] : []),
+        ...ai.alternativas.map((a) => ({ label: a.rotulo || "Outra abordagem", text: a.texto })),
+      ].filter((v) => v.text)
+    : [];
+  const aiText = versions[aiVersion]?.text ?? versions[0]?.text ?? "";
   // perfume citado em cada mensagem do cliente → cartão de preço logo abaixo
   const quoteFor = (body: string | null) => {
     if (!body) return [];
@@ -1106,33 +1132,91 @@ function Thread({
         {suggest.isPending ? (
           <div className="mb-3 flex items-center gap-3 rounded-[22px] border border-[#FFD599]/25 bg-[#FFD599]/[0.06] p-4">
             <Sparkles className="size-5 shrink-0 animate-pulse text-[#FFD599]" />
-            <p className="text-[14px] font-semibold text-[#FFD599]">
-              Pensando na melhor resposta para fechar a venda…
-            </p>
+            <div className="min-w-0">
+              <p className="text-[14px] font-bold text-[#FFD599]">
+                Lendo a conversa como um vendedor experiente…
+              </p>
+              <p className="text-[12.5px] text-[#A9A9A9]">
+                Diagnóstico, técnica certa e a resposta com os preços reais.
+              </p>
+            </div>
           </div>
         ) : ai ? (
-          <div className="mb-3 rounded-[24px] border border-[#FFD599]/30 bg-gradient-to-br from-[#2A2416] to-[#1C1A15] p-4">
-            <div className="flex items-center gap-2">
-              <Sparkles className="size-4 text-[#FFD599]" />
-              <p className="flex-1 text-[13px] font-bold text-[#FFD599]">Resposta ideal</p>
+          <div className="adm-scroll mb-3 max-h-[min(58dvh,560px)] overflow-y-auto rounded-[24px] border border-[#FFD599]/30 bg-gradient-to-br from-[#2A2416] to-[#1C1A15] p-4">
+            {/* diagnóstico */}
+            <div className="flex items-start gap-2">
+              <Sparkles className="mt-0.5 size-4 shrink-0 text-[#FFD599]" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-bold text-[#FFD599]">Resposta ideal</p>
+                {ai.situacao ? (
+                  <p className="truncate text-[12.5px] text-[#D4D4D4]">{ai.situacao}</p>
+                ) : null}
+              </div>
+              <span
+                className={cn(
+                  "shrink-0 rounded-full px-2.5 py-1 text-[11.5px] font-bold",
+                  HEAT[ai.temperatura]?.cls,
+                )}
+              >
+                {HEAT[ai.temperatura]?.label}
+              </span>
               <button
                 type="button"
                 onClick={() => setAi(null)}
                 aria-label="Fechar sugestão"
-                className="press grid size-8 place-items-center rounded-full text-[#A9A9A9] hover:bg-white/[0.06] hover:text-white"
+                className="press grid size-8 shrink-0 place-items-center rounded-full text-[#A9A9A9] hover:bg-white/[0.06] hover:text-white"
               >
                 <X className="size-4" />
               </button>
             </div>
-            <p className="mt-2 text-[15px] leading-relaxed whitespace-pre-wrap text-white">
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {ai.tecnica ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-[#FFD599] px-2.5 py-1 text-[11.5px] font-bold text-[#15130F]">
+                  <Zap className="size-3" /> {ai.tecnica}
+                </span>
+              ) : null}
+              {ai.objecao && ai.objecao !== "nenhuma" ? (
+                <span className="rounded-full bg-[#FF9A8A]/15 px-2.5 py-1 text-[11.5px] font-bold text-[#FFB3A7]">
+                  Objeção: {OBJ[ai.objecao] ?? ai.objecao}
+                </span>
+              ) : null}
+            </div>
+
+            {/* versões */}
+            {versions.length > 1 ? (
+              <div className="adm-scroll -mx-1 mt-3 flex gap-1.5 overflow-x-auto px-1">
+                {versions.map((v, i) => (
+                  <button
+                    key={v.label + i}
+                    type="button"
+                    aria-pressed={aiVersion === i}
+                    onClick={() => setAiVersion(i)}
+                    className={cn(
+                      "press h-8 shrink-0 rounded-full px-3 text-[12.5px] font-bold",
+                      aiVersion === i
+                        ? "bg-white text-[#15130F]"
+                        : "bg-white/[0.07] text-[#D4D4D4] hover:text-white",
+                    )}
+                  >
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <p className="mt-3 rounded-[18px] bg-black/25 p-3.5 text-[15px] leading-relaxed whitespace-pre-wrap text-white">
               {aiText}
             </p>
-            {ai.why ? (
-              <p className="mt-2 flex gap-1.5 text-[12.5px] text-[#A9A9A9]">
+
+            {ai.por_que ? (
+              <p className="mt-2.5 flex gap-1.5 text-[12.5px] leading-snug text-[#D4D4D4]">
                 <Lightbulb className="mt-0.5 size-3.5 shrink-0 text-[#FFD599]" />
-                {ai.why}
+                <span>
+                  <span className="font-bold text-[#FFD599]">Por que funciona: </span>
+                  {ai.por_que}
+                </span>
               </p>
             ) : null}
+
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
@@ -1153,35 +1237,84 @@ function Thread({
               >
                 <PencilLine className="size-4" /> Editar
               </button>
-              {ai.short ? (
-                <button
-                  type="button"
-                  onClick={() => setAiShort((v) => !v)}
-                  className="press inline-flex h-10 items-center rounded-full bg-white/[0.08] px-4 text-[13.5px] font-bold hover:bg-white/[0.12]"
-                >
-                  {aiShort ? "Versão completa" : "Mais curta"}
-                </button>
-              ) : null}
               <button
                 type="button"
-                onClick={() => suggest.mutate()}
+                onClick={() => suggest.mutate(goal)}
                 className="press inline-flex h-10 items-center gap-1.5 rounded-full bg-white/[0.08] px-4 text-[13.5px] font-bold hover:bg-white/[0.12]"
               >
                 <RefreshCw className="size-4" /> Outra
               </button>
             </div>
-            {ai.next_step ? (
-              <p className="mt-3 border-t border-white/[0.06] pt-2.5 text-[12.5px] text-[#8C8C8C]">
-                Depois: {ai.next_step}
-              </p>
-            ) : null}
+
+            {/* refazer com outro foco */}
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              <span className="text-[11.5px] font-semibold text-[#8C8C8C]">
+                Refazer com foco em:
+              </span>
+              {REPLY_GOALS.filter((g) => g.v !== "auto").map((g) => (
+                <button
+                  key={g.v}
+                  type="button"
+                  onClick={() => {
+                    setGoal(g.v);
+                    suggest.mutate(g.v);
+                  }}
+                  className={cn(
+                    "press h-7 rounded-full px-2.5 text-[11.5px] font-bold",
+                    goal === g.v
+                      ? "bg-[#FFD599] text-[#15130F]"
+                      : "border border-white/[0.12] text-[#D4D4D4] hover:text-white",
+                  )}
+                >
+                  {g.label}
+                </button>
+              ))}
+            </div>
+
+            {/* plano */}
+            <div className="mt-3 space-y-2 border-t border-white/[0.06] pt-3 text-[12.5px] leading-snug">
+              {ai.next_step ? (
+                <p className="text-[#D4D4D4]">
+                  <span className="font-bold text-white">Depois que responder: </span>
+                  {ai.next_step}
+                </p>
+              ) : null}
+              {ai.se_nao_responder ? (
+                <div className="rounded-[14px] bg-white/[0.04] p-2.5">
+                  <p className="font-bold text-white">Se não responder em 24h, mande:</p>
+                  <p className="mt-1 text-[#D4D4D4]">{ai.se_nao_responder}</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(ai.se_nao_responder);
+                      toast.success("Mensagem de retomada copiada");
+                    }}
+                    className="press mt-1.5 inline-flex items-center gap-1 text-[12px] font-bold text-[#FFD599]"
+                  >
+                    <Copy className="size-3.5" /> Copiar
+                  </button>
+                </div>
+              ) : null}
+              {ai.evitar ? (
+                <p className="flex gap-1.5 text-[#FFB3A7]">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  <span>
+                    <span className="font-bold">Evite: </span>
+                    {ai.evitar}
+                  </span>
+                </p>
+              ) : null}
+            </div>
           </div>
         ) : null}
 
         <div className="adm-scroll -mx-1 mb-2.5 flex items-center gap-1.5 overflow-x-auto px-1">
           <button
             type="button"
-            onClick={() => suggest.mutate()}
+            onClick={() => {
+              setGoal("auto");
+              suggest.mutate("auto");
+            }}
             disabled={suggest.isPending}
             className={cn(
               "press inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-bold",

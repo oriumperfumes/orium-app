@@ -427,26 +427,86 @@ export const crmPerfumeQuote = createServerFn({ method: "POST" })
 
 // ---------- resposta ideal (IA) ----------
 
-export type ReplySuggestion = { reply: string; short: string; why: string; next_step: string };
+export type { ReplySuggestion, ReplyGoal } from "@/lib/sales-playbook";
 
-const REPLY_SYSTEM = `Você é o melhor vendedor da Orium Perfumes, loja de perfumes árabes no Rio de Janeiro, respondendo clientes pelo WhatsApp.
-Objetivo: fazer o cliente comprar agora, com a menor chance de erro.
-Regras:
-- Português do Brasil, tom humano e próximo de WhatsApp. Curto: no máximo 3 frases curtas. 0 a 2 emojis.
-- NUNCA invente preço, estoque, prazo, desconto, cupom ou brinde. Use só os dados fornecidos. Sem preço nos dados: diga que vai confirmar o valor.
-- Nunca fale de custo, margem ou lucro. Nunca diga que viu os dados de navegação do cliente de forma invasiva ("vi que você curtiu" é ok; números de visitas não).
-- Se perguntou preço: dê o preço no Pix (e cartão, se houver) dos dados e, se houver desconto Pix, destaque. Se tiver frasco pronta na loja, diga que pode retirar hoje.
-- Se o preço parecer alto para o perfil, ofereça o decant como alternativa (se houver nos dados).
-- Retirada na loja é grátis. Entrega: o valor é combinado pelo WhatsApp. Não fale "sob encomenda" nem prazos longos.
-- Sobre o perfume: descreva o estilo de forma geral e desejável, sem inventar notas específicas se não tiver certeza.
-- Termine sempre com uma pergunta fechada que avance a venda (ex.: "Separo um pra você?", "Te mando a chave Pix?").
-- Responda à ÚLTIMA mensagem do cliente. Se não houver mensagem do cliente, escreva uma abertura certeira para o perfil.`;
+const GOAL_TEXT: Record<string, string> = {
+  fechar: "Objetivo do vendedor: levar ao fechamento agora (reserva/Pix/retirada).",
+  objecao: "Objetivo do vendedor: contornar a objeção do cliente com empatia e valor.",
+  duvida: "Objetivo do vendedor: tirar a dúvida com clareza e avançar um passo.",
+  reengajar:
+    "Objetivo do vendedor: retomar um cliente que parou de responder, com algo novo e útil.",
+  abrir: "Objetivo do vendedor: puxar conversa de forma natural e útil, sem parecer propaganda.",
+};
+
+/** Vendas reais dos últimos 30 dias (unidades) por produto + lista dos mais vendidos. */
+async function salesProof(db: any, productIds: string[]) {
+  const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  const [{ data: online }, { data: store }] = await Promise.all([
+    db
+      .from("catalog_order_items")
+      .select(
+        "product_id, quantity, catalog_orders!inner(created_at, status, deleted_at, canceled_at)",
+      )
+      .gte("catalog_orders.created_at", since)
+      .is("catalog_orders.deleted_at", null)
+      .is("catalog_orders.canceled_at", null)
+      .neq("catalog_orders.status", "cancelado")
+      .limit(5000),
+    db
+      .from("store_sale_items")
+      .select("product_id, quantity, store_sales!inner(sold_at, deleted_at, canceled_at)")
+      .gte("store_sales.sold_at", since)
+      .is("store_sales.deleted_at", null)
+      .is("store_sales.canceled_at", null)
+      .limit(5000),
+  ]);
+  const units = new Map<string, number>();
+  for (const r of [...((online ?? []) as any[]), ...((store ?? []) as any[])])
+    if (r.product_id)
+      units.set(r.product_id, (units.get(r.product_id) ?? 0) + Number(r.quantity ?? 0));
+  const top = [...units.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([id]) => id);
+  return Object.fromEntries(
+    productIds.map((id) => [
+      id,
+      { vendidos_30d: units.get(id) ?? 0, top_vendas: top.includes(id) },
+    ]),
+  );
+}
+
+/** Promoções em vigor com data real de fim, por produto. */
+async function promoEnds(db: any, productIds: string[]) {
+  const now = new Date().toISOString();
+  const { data } = await db
+    .from("promotions")
+    .select("name, discount_percent, ends_at, applies_to, product_ids, starts_at, active")
+    .eq("active", true)
+    .or(`ends_at.is.null,ends_at.gt.${now}`)
+    .limit(50);
+  const out: Record<string, { promocao: string; acaba_em: string | null }> = {};
+  for (const id of productIds) {
+    const p = ((data ?? []) as any[]).find(
+      (x) =>
+        (!x.starts_at || x.starts_at <= now) &&
+        (x.applies_to === "all" || (x.product_ids ?? []).includes(id)),
+    );
+    if (p)
+      out[id] = {
+        promocao: `${p.name} (${Math.round(Number(p.discount_percent))}% off)`,
+        acaba_em: p.ends_at,
+      };
+  }
+  return out;
+}
 
 export const crmSuggestReply = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { jid: string; tone?: string | null }) => ({
+  .inputValidator((d: { jid: string; goal?: string | null; tone?: string | null }) => ({
     jid: String(d.jid),
-    tone: d.tone ? String(d.tone).slice(0, 80) : null,
+    goal: d.goal && d.goal in GOAL_TEXT ? d.goal : "auto",
+    tone: d.tone ? String(d.tone).slice(0, 120) : null,
   }))
   .handler(async ({ data, context }) => {
     const ctx = await staffCtx(context as any);
@@ -454,7 +514,9 @@ export const crmSuggestReply = createServerFn({ method: "POST" })
     const [{ data: contact }, { data: msgs }, { data: ps }] = await Promise.all([
       db
         .from("wa_contacts")
-        .select("jid, push_name, customer_id, stage, phone_normalized")
+        .select(
+          "jid, push_name, saved_name, customer_id, stage, phone_normalized, last_inbound_at, last_from_me",
+        )
         .eq("jid", data.jid)
         .maybeSingle(),
       db
@@ -462,7 +524,7 @@ export const crmSuggestReply = createServerFn({ method: "POST" })
         .select("from_me, body, kind, ts")
         .eq("jid", data.jid)
         .order("ts", { ascending: false })
-        .limit(24),
+        .limit(30),
       db
         .from("pricing_settings")
         .select("pix_discount_active, pix_discount_percent")
@@ -485,81 +547,108 @@ export const crmSuggestReply = createServerFn({ method: "POST" })
       const raw = ((rows ?? []) as LeadRaw[]).find((r) => r.id === contact.customer_id);
       if (raw) lead = (await import("@/lib/crm-intel")).enrich([raw])[0] ?? null;
     }
-    const quotes = inbound ? await quotesFor(ctx, { text: inbound, productIds: [] }) : [];
+    // perfumes citados + os que o cliente olhou/tem no carrinho (para recomendar com preço real)
+    const extraIds = [
+      ...(lead?.cart?.products ?? []).map((p) => p.product_id),
+      ...(lead?.views?.top ?? []).filter((t) => !t.bought).map((t) => t.product_id),
+    ].filter((x): x is string => !!x);
+    const quotes = await quotesFor(ctx, {
+      text: inbound,
+      productIds: [...new Set(extraIds)].slice(0, inbound ? 2 : 3),
+    });
+    const ids = quotes.map((q) => q.product_id);
+    const [proof, promos] = ids.length
+      ? await Promise.all([salesProof(db, ids).catch(() => ({})), promoEnds(db, ids).catch(() => ({}))])
+      : [{}, {}];
     const pix = ps?.pix_discount_active ? Number(ps.pix_discount_percent ?? 0) : 0;
+    const waitingMin =
+      contact.last_from_me === false && contact.last_inbound_at
+        ? Math.round((Date.now() - new Date(contact.last_inbound_at).getTime()) / 60000)
+        : null;
 
     const facts = {
       cliente: {
-        nome: lead?.name ?? contact.push_name ?? null,
-        etapa: contact.stage,
+        nome: lead?.name ?? contact.saved_name ?? contact.push_name ?? null,
+        etapa_no_funil: contact.stage,
+        esperando_resposta_ha_minutos: waitingMin,
         ja_comprou: lead ? lead.orders_count > 0 : null,
         compras: lead?.orders_count ?? 0,
         ticket_medio: lead && lead.orders_count ? Math.round(lead.spent / lead.orders_count) : null,
-        perfil: lead?.profile ?? [],
-        sinais: lead?.reasons ?? [],
-        proxima_acao_sugerida: lead?.action.title ?? null,
-        carrinho: lead?.cart?.names ?? [],
+        prefere:
+          lead && lead.decant_units + lead.bottle_units > 0
+            ? lead.decant_units > lead.bottle_units
+              ? "decant"
+              : "frasco"
+            : null,
+        faixa_que_paga_no_frasco: lead?.avg_bottle_price
+          ? { media: lead.avg_bottle_price, maximo: lead.max_item_price }
+          : null,
+        sensivel_a_promocao:
+          lead && lead.total_items >= 2 ? lead.promo_items / lead.total_items >= 0.5 : null,
+        marcas_favoritas: lead?.top_brands ?? [],
+        ultimas_compras: (lead?.recent_items ?? [])
+          .slice(0, 4)
+          .map((r) => `${r.name}${r.decant ? " (decant)" : ""}`),
+        carrinho_aberto: lead?.cart?.names ?? [],
         favoritos: (lead?.favorites ?? []).slice(0, 4).map((f) => f.name),
-        mais_vistos: (lead?.views?.top ?? [])
-          .filter((t) => !t.bought)
-          .slice(0, 3)
-          .map((t) => t.name),
+        sinais: lead?.reasons ?? [],
       },
-      perfumes_citados: quotes.map((q) => ({
+      perfumes: quotes.map((q) => ({
         nome: q.name,
         marca: q.brand,
         ml: q.volume_ml,
+        citado_pelo_cliente: q.confidence !== "manual",
         frasco_pix: q.frasco?.pix ?? null,
         frasco_cartao: q.frasco?.card ?? null,
-        promocao_percent: q.frasco?.promo ?? null,
+        preco_cheio_antes_da_promocao: q.frasco?.promo ? q.frasco.base : null,
         decants: q.decants.map((d) => ({ ml: d.ml, pix: d.pix })),
-        pronta_na_loja: q.ready,
+        estoque_na_loja: q.stock,
+        pronta_entrega: q.ready,
+        ...((proof as Record<string, object>)[q.product_id] ?? {}),
+        ...((promos as Record<string, object>)[q.product_id] ?? {}),
       })),
       loja: {
         desconto_pix_percent: pix,
-        retirada: "grátis na loja",
+        retirada: "grátis na loja física (Rio de Janeiro)",
         entrega: "valor combinado pelo WhatsApp",
+        produtos: "originais e lacrados",
         site: "https://oriumperfumes.com",
       },
       conversa: history
-        .slice(-16)
+        .slice(-20)
         .map((m) => `${m.from_me ? "Orium" : "Cliente"}: ${m.body || `[${m.kind}]`}`),
-      pedido_do_vendedor: data.tone,
+      objetivo:
+        GOAL_TEXT[data.goal] ??
+        "Objetivo: a melhor próxima mensagem para vender, decidida por você.",
+      pedido_extra_do_vendedor: data.tone,
     };
 
     const { aiJson } = await import("@/lib/ai/engine.server");
-    const out = await aiJson<ReplySuggestion>({
+    const { SALES_SYSTEM, SALES_SCHEMA } = await import("@/lib/sales-playbook");
+    const out = await aiJson<import("@/lib/sales-playbook").ReplySuggestion>({
       feature: "crm_reply",
       profile: "advanced",
-      system: REPLY_SYSTEM,
-      prompt: `Dados (JSON):\n${JSON.stringify(facts)}\n\nEscreva a melhor resposta agora.`,
-      schema: {
-        name: "crm_reply",
-        schema: {
-          type: "object",
-          additionalProperties: false,
-          required: ["reply", "short", "why", "next_step"],
-          properties: {
-            reply: { type: "string", description: "Resposta pronta para enviar" },
-            short: { type: "string", description: "Versão ainda mais curta, 1 frase" },
-            why: {
-              type: "string",
-              description: "Por que essa resposta converte, 1 frase para o vendedor",
-            },
-            next_step: {
-              type: "string",
-              description: "O que o vendedor faz depois que o cliente responder, 1 frase",
-            },
-          },
-        },
-      },
+      system: SALES_SYSTEM,
+      prompt: `Dados reais (JSON):\n${JSON.stringify(facts)}\n\nEscreva a melhor próxima mensagem agora.`,
+      schema: SALES_SCHEMA as unknown as { name: string; schema: Record<string, unknown> },
     });
+    const s = (v: unknown) => String(v ?? "").trim();
     return {
-      reply: String(out.reply ?? "").trim(),
-      short: String(out.short ?? "").trim(),
-      why: String(out.why ?? "").trim(),
-      next_step: String(out.next_step ?? "").trim(),
-    };
+      situacao: s(out.situacao),
+      objecao: out.objecao ?? "nenhuma",
+      temperatura: out.temperatura ?? "morno",
+      tecnica: s(out.tecnica),
+      por_que: s(out.por_que),
+      reply: s(out.reply),
+      short: s(out.short),
+      alternativas: (out.alternativas ?? [])
+        .slice(0, 2)
+        .map((a) => ({ rotulo: s(a.rotulo), texto: s(a.texto) }))
+        .filter((a) => a.texto),
+      next_step: s(out.next_step),
+      se_nao_responder: s(out.se_nao_responder),
+      evitar: s(out.evitar),
+    } satisfies import("@/lib/sales-playbook").ReplySuggestion;
   });
 
 /** Apaga a conversa (contato + mensagens + fila) do CRM. Se o cliente escrever de novo, ela volta. */
