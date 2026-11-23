@@ -148,18 +148,19 @@ export const pricingSnapshot = createServerFn({ method: "POST" })
     const db = (await import("@/integrations/supabase/client.server")).supabaseAdmin as any;
     const { calculateProductPricing } = await import("@/lib/pricing.server");
 
-    const [{ data: product }, rules, { data: decantSettings }, { data: promoRows }] = await Promise.all([
-      db
-        .from("products")
-        .select(
-          "id, canonical_name, brand, image_url, volume_ml, concentration, source, sale_mode, manual_pricing, manual_cost, retail_price, wholesale_price, base_retail_price, base_wholesale_price, decant_price_2ml, decant_price_5ml, decant_price_10ml, product_costs(best_cost, updated_at, suppliers(name)), pricing_overrides(fixed_retail_price, fixed_wholesale_price)",
-        )
-        .eq("id", data.productId)
-        .maybeSingle(),
-      loadRules(db),
-      db.from("decant_settings").select("*").maybeSingle(),
-      db.from("promotions").select("*").eq("active", true),
-    ]);
+    const [{ data: product }, rules, { data: decantSettings }, { data: promoRows }] =
+      await Promise.all([
+        db
+          .from("products")
+          .select(
+            "id, canonical_name, brand, image_url, volume_ml, concentration, source, sale_mode, manual_pricing, manual_cost, retail_price, wholesale_price, base_retail_price, base_wholesale_price, decant_price_2ml, decant_price_5ml, decant_price_10ml, product_costs(best_cost, updated_at, suppliers(name)), pricing_overrides(fixed_retail_price, fixed_wholesale_price)",
+          )
+          .eq("id", data.productId)
+          .maybeSingle(),
+        loadRules(db),
+        db.from("decant_settings").select("*").maybeSingle(),
+        db.from("promotions").select("*").eq("active", true),
+      ]);
     if (!product) return null;
 
     const manual = product.manual_pricing === true;
@@ -171,7 +172,8 @@ export const pricingSnapshot = createServerFn({ method: "POST" })
         : null
       : (calc?.baseCost ?? null);
 
-    const winnerId = calc?.offers.find((o) => o.supplierId === calc?.winningSupplierId)?.supplierProductId ?? null;
+    const winnerId =
+      calc?.offers.find((o) => o.supplierId === calc?.winningSupplierId)?.supplierProductId ?? null;
     const offers: PricingOfferRow[] = (calc?.offers ?? []).map((o) => ({
       supplierName: o.supplierName ?? "Fornecedor",
       price: o.supplierPrice,
@@ -186,7 +188,9 @@ export const pricingSnapshot = createServerFn({ method: "POST" })
         .select("id, suppliers(name)")
         .eq("product_id", data.productId);
       const ids = (sp ?? []).map((r: any) => r.id);
-      const nameById = new Map((sp ?? []).map((r: any) => [r.id, r.suppliers?.name ?? "Fornecedor"]));
+      const nameById = new Map(
+        (sp ?? []).map((r: any) => [r.id, r.suppliers?.name ?? "Fornecedor"]),
+      );
       if (ids.length) {
         const { data: hist } = await db
           .from("supplier_price_history")
@@ -203,7 +207,8 @@ export const pricingSnapshot = createServerFn({ method: "POST" })
       }
     }
 
-    const retail = product.retail_price != null ? Number(product.retail_price) : (calc?.retailPrice ?? null);
+    const retail =
+      product.retail_price != null ? Number(product.retail_price) : (calc?.retailPrice ?? null);
     const now = Date.now();
     const promos = ((promoRows ?? []) as Promotion[]).filter((p) => isRunning(p, now));
     const promo = bestPromotion(promos, { productId: data.productId, variant: "FULL" }, now);
@@ -224,7 +229,9 @@ export const pricingSnapshot = createServerFn({ method: "POST" })
       saleMode: product.sale_mode,
       cost,
       costUpdatedAt: product.product_costs?.updated_at ?? null,
-      supplierName: manual ? null : (calc?.winningSupplierName ?? product.product_costs?.suppliers?.name ?? null),
+      supplierName: manual
+        ? null
+        : (calc?.winningSupplierName ?? product.product_costs?.suppliers?.name ?? null),
       usedOutOfStockCost: calc?.usedOutOfStockCost ?? false,
       retailMarkup: calc?.retailMarkup ?? rules.retailMarkup,
       wholesaleMarkup: calc?.wholesaleMarkup ?? rules.wholesaleMarkup,
@@ -237,7 +244,9 @@ export const pricingSnapshot = createServerFn({ method: "POST" })
           : null
         : (calc?.baseWholesalePrice ?? null),
       wholesale:
-        product.wholesale_price != null ? Number(product.wholesale_price) : (calc?.wholesalePrice ?? null),
+        product.wholesale_price != null
+          ? Number(product.wholesale_price)
+          : (calc?.wholesalePrice ?? null),
       psych: rules.psych,
       pixDiscountPercent: rules.pixDiscountPercent,
       pixDiscountActive: rules.pixDiscountActive,
@@ -266,8 +275,19 @@ export const pricingSnapshot = createServerFn({ method: "POST" })
     };
   });
 
-export type ImpactRow = { id: string; name: string; brand: string | null; from: number; to: number };
-export type PricingImpact = { checked: number; affected: number; sample: ImpactRow[]; delta: number };
+export type ImpactRow = {
+  id: string;
+  name: string;
+  brand: string | null;
+  from: number;
+  to: number;
+};
+export type PricingImpact = {
+  checked: number;
+  affected: number;
+  sample: ImpactRow[];
+  delta: number;
+};
 
 /** Quantos produtos mudam de preço com a nova regra — antes de salvar nada. */
 export const pricingImpact = createServerFn({ method: "POST" })
@@ -302,7 +322,13 @@ export const pricingImpact = createServerFn({ method: "POST" })
       const from = p.retail_price != null ? Number(p.retail_price) : null;
       if (next == null || from == null || money(from) === money(next)) continue;
       delta += next - from;
-      changes.push({ id: p.id, name: p.canonical_name, brand: p.brand, from: money(from), to: money(next) });
+      changes.push({
+        id: p.id,
+        name: p.canonical_name,
+        brand: p.brand,
+        from: money(from),
+        to: money(next),
+      });
     }
 
     changes.sort((a, b) => Math.abs(b.to - b.from) - Math.abs(a.to - a.from));
@@ -335,7 +361,11 @@ export const setProductPrice = createServerFn({ method: "POST" })
       const value = money(Number(data.retailPrice));
       const { error } = await db
         .from("products")
-        .update({ retail_price: value, base_retail_price: value, updated_at: new Date().toISOString() })
+        .update({
+          retail_price: value,
+          base_retail_price: value,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", data.productId);
       if (error) throw new Error(error.message);
     } else if (data.retailPrice == null) {
@@ -346,9 +376,15 @@ export const setProductPrice = createServerFn({ method: "POST" })
         .maybeSingle();
       if (current) {
         const empty =
-          current.fixed_wholesale_price == null && current.retail_markup == null && current.wholesale_markup == null;
+          current.fixed_wholesale_price == null &&
+          current.retail_markup == null &&
+          current.wholesale_markup == null;
         if (empty) await db.from("pricing_overrides").delete().eq("product_id", data.productId);
-        else await db.from("pricing_overrides").update({ fixed_retail_price: null }).eq("product_id", data.productId);
+        else
+          await db
+            .from("pricing_overrides")
+            .update({ fixed_retail_price: null })
+            .eq("product_id", data.productId);
       }
       await persistProductPricing(db, data.productId);
     } else {
@@ -367,7 +403,11 @@ export const setProductPrice = createServerFn({ method: "POST" })
       action: data.retailPrice == null ? "preço voltou ao automático" : "preço personalizado",
       entity: "products",
       entity_id: data.productId,
-      details: { product: product.canonical_name, from: product.retail_price, to: data.retailPrice },
+      details: {
+        product: product.canonical_name,
+        from: product.retail_price,
+        to: data.retailPrice,
+      },
     });
 
     return { ok: true };
@@ -393,7 +433,9 @@ export const pricingOverrides = createServerFn({ method: "POST" })
     const [{ data: fixed }, { data: manual }] = await Promise.all([
       db
         .from("pricing_overrides")
-        .select("product_id, fixed_retail_price, products(canonical_name, brand, image_url, retail_price, product_costs(best_cost))")
+        .select(
+          "product_id, fixed_retail_price, products(canonical_name, brand, image_url, retail_price, product_costs(best_cost))",
+        )
         .not("fixed_retail_price", "is", null)
         .limit(60),
       db
@@ -496,4 +538,33 @@ export const setBlackHero = createServerFn({ method: "POST" })
       details: { source: "admin", changes: [{ key: "black_hero", to: data.on }] },
     });
     return { on: data.on };
+  });
+
+/** Nome da campanha Black mostrado no site inteiro (ex.: "Black Orium"). Vazio = nome da promoção. */
+export const setBlackTitle = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { title: string }) => ({
+    title: String(data?.title ?? "")
+      .trim()
+      .replace(/\s+/g, " ")
+      .slice(0, 40),
+  }))
+  .handler(async ({ data, context }) => {
+    await assertStaff(context as Ctx);
+    const { supabase, userId } = context as Ctx;
+    const { data: rows, error } = await (supabase as any)
+      .from("pricing_settings")
+      .update({ black_title: data.title || null, updated_at: new Date().toISOString() })
+      .eq("id", true)
+      .select("black_title");
+    if (error) throw new Error(error.message);
+    if (!rows?.length) throw new Error("Só o dono da loja pode mudar esta opção.");
+    await supabase.from("activity_logs").insert({
+      user_id: userId,
+      action: "pricing_rules_update",
+      entity: "pricing_settings",
+      entity_id: null,
+      details: { source: "admin", changes: [{ key: "black_title", to: data.title || null }] },
+    });
+    return { title: data.title };
   });

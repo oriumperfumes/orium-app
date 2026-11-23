@@ -21,7 +21,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { brl, dateBR, productTitle } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
-import { deviceId, isRunning, isoToSaoPauloInput, saoPauloDateTimeToIso, applyPercent } from "@/lib/promotions";
+import {
+  deviceId,
+  isRunning,
+  isoToSaoPauloInput,
+  saoPauloDateTimeToIso,
+  applyPercent,
+} from "@/lib/promotions";
 import { adminUpdatePromotion } from "@/lib/promotions-admin.functions";
 import type { Tables } from "@/integrations/supabase/types";
 import { normalizeTheme, type CampaignVars } from "@/lib/campaign-message";
@@ -341,7 +347,12 @@ export function PromotionsPanel({
                       // tocar no card abre a edição; botões, menus e a área de comunicação têm ação própria
                       const t = e.target as HTMLElement;
                       if (!e.currentTarget.contains(t)) return;
-                      if (t.closest("button, a, input, textarea, select, label, [role=menuitem], [data-no-edit]")) return;
+                      if (
+                        t.closest(
+                          "button, a, input, textarea, select, label, [role=menuitem], [data-no-edit]",
+                        )
+                      )
+                        return;
                       setEditingId(p.id);
                     }}
                   >
@@ -587,7 +598,8 @@ function PromoPreviewCard({
       )}
       <p className="mt-3 text-[12.5px] font-semibold text-[#8C8C8C]">{periodText(starts, ends)}</p>
       <p className="mt-3 border-t border-white/10 pt-3 text-[12px] leading-snug text-[#A9A9A9]">
-        Na loja: selo Black nos cards, preço riscado, contagem até o fim, aviso de estoque baixo real e botão “Comprar agora”.
+        Na loja: selo Black nos cards, preço riscado, contagem até o fim, aviso de estoque baixo
+        real e botão “Comprar agora”.
       </p>
     </div>
   ) : (
@@ -630,7 +642,6 @@ function PromoPreviewCard({
       <p className="mt-3 text-[12.5px] font-semibold opacity-60">{periodText(starts, ends)}</p>
     </div>
   );
-
 }
 
 function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -687,18 +698,18 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
   const rows = priceMode === "price" ? (pricedRows ?? []).filter((r) => ids.includes(r.id)) : [];
   /** Preço final → percentual com 5 casas: o preço volta exato ao centavo. */
   const pctOf = (r: { id: string; retail_price: number | null }) => {
-    const b = Number(r.retail_price ?? 0), t = targets[r.id];
+    const b = Number(r.retail_price ?? 0),
+      t = targets[r.id];
     return b > 0 && t != null && t > 0 && t < b ? Math.round((1 - t / b) * 100 * 1e5) / 1e5 : 0;
   };
   const priceOk =
-    priceMode === "price" && ids.length > 0 && rows.length === ids.length && rows.every((r) => pctOf(r) > 0 && pctOf(r) <= 90);
+    priceMode === "price" &&
+    ids.length > 0 &&
+    rows.length === ids.length &&
+    rows.every((r) => pctOf(r) > 0 && pctOf(r) <= 90);
   const target = ids.length === 1 ? (targets[ids[0]!] ?? null) : null;
   const pct =
-    priceMode === "price"
-      ? priceOk
-        ? Math.max(...rows.map(pctOf))
-        : 0
-      : Number(percent) || 0;
+    priceMode === "price" ? (priceOk ? Math.max(...rows.map(pctOf)) : 0) : Number(percent) || 0;
   /** Na loja o percentual aparece inteiro ("25% OFF"); o preço é que fica exato. */
   const pctLabel = String(Math.round(pct));
   const promoVars: CampaignVars = {
@@ -738,7 +749,7 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
   const black = isBlack({ name });
   const applyBlackPreset = (kind: "esquenta" | "november") => {
     const year = new Date().getFullYear();
-    setName(kind === "esquenta" ? "Esquenta Black" : "Black November");
+    setName(kind === "esquenta" ? "Black Orium" : "Black November");
     if (priceMode === "percent" && !(pct >= 10)) setPercent(15);
     setEndPick(null);
     setEnds(kind === "esquenta" ? nextFridayMorning() : `${year}-11-30T23:59`);
@@ -746,7 +757,7 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
     setAnnounce(true);
     setCopy({
       ...emptyCampaignCopy(),
-      title: "Esquenta Black: até {discount}% OFF",
+      title: `${kind === "esquenta" ? "Black Orium" : "Black November"}: até {discount}% OFF`,
       message: "Perfumes árabes originais com preço de Black. Enquanto durar o estoque.",
       cta: "Ver ofertas",
       theme: "PROMO",
@@ -769,7 +780,7 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
     if (!(pct > 0 && pct <= 90)) {
       toast.error(
         priceMode === "price"
-          ? "Escolha os perfumes e preencha o \"por\" de cada um, menor que o preço atual (até 90% OFF)."
+          ? 'Escolha os perfumes e preencha o "por" de cada um, menor que o preço atual (até 90% OFF).'
           : "O desconto deve ficar entre 1% e 90%.",
       );
       setStep(0);
@@ -796,19 +807,36 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
         // uma linha por perfume, cada uma com o próprio percentual; o aviso sai uma vez só
         const { data: saved, error } = await supabase
           .from("promotions")
-          .insert(rows.map((r, i) => ({ ...common, discount_percent: pctOf(r), product_ids: [r.id], announce: announce && i === 0 })))
+          .insert(
+            rows.map((r, i) => ({
+              ...common,
+              discount_percent: pctOf(r),
+              product_ids: [r.id],
+              announce: announce && i === 0,
+            })),
+          )
           .select("product_ids, discount_percent");
         if (error) throw error;
         // confere o preço que o banco realmente vai cobrar
         const off = rows.filter((r) => {
           const row = (saved ?? []).find((x) => (x.product_ids ?? [])[0] === r.id);
-          const real = row ? applyPercent(Number(r.retail_price), Number(row.discount_percent)) : targets[r.id];
+          const real = row
+            ? applyPercent(Number(r.retail_price), Number(row.discount_percent))
+            : targets[r.id];
           return Math.abs(Number(real) - Number(targets[r.id])) >= 0.01;
         });
-        if (off.length) toast.warning(`Promoção criada. ${off.length} preço(s) ficaram alguns centavos diferentes porque o banco ainda arredonda o desconto.`);
-        else toast.success(rows.length === 1 ? "Promoção criada." : `Promoção criada com ${rows.length} perfumes.`);
+        if (off.length)
+          toast.warning(
+            `Promoção criada. ${off.length} preço(s) ficaram alguns centavos diferentes porque o banco ainda arredonda o desconto.`,
+          );
+        else
+          toast.success(
+            rows.length === 1 ? "Promoção criada." : `Promoção criada com ${rows.length} perfumes.`,
+          );
       } else {
-        const { error } = await supabase.from("promotions").insert({ ...common, discount_percent: pct, product_ids: ids, announce });
+        const { error } = await supabase
+          .from("promotions")
+          .insert({ ...common, discount_percent: pct, product_ids: ids, announce });
         if (error) throw error;
         toast.success("Promoção criada.");
       }
@@ -855,7 +883,17 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
       onStep={setStep}
       preview={card}
       summary={[
-        { label: "Desconto", value: priceMode === "price" ? (priceOk ? (rows.length === 1 ? `de ${brl(base)} por ${brl(target)}` : `${rows.length} perfumes, preço de cada um`) : "falta preencher") : `${pctLabel}% OFF` },
+        {
+          label: "Desconto",
+          value:
+            priceMode === "price"
+              ? priceOk
+                ? rows.length === 1
+                  ? `de ${brl(base)} por ${brl(target)}`
+                  : `${rows.length} perfumes, preço de cada um`
+                : "falta preencher"
+              : `${pctLabel}% OFF`,
+        },
         { label: "Produtos", value: scope },
         {
           label: "Vale para",
@@ -877,7 +915,7 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
           <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
             {(
               [
-                { kind: "esquenta", title: "Esquenta Black", sub: "Curta: termina sexta às 09:00" },
+                { kind: "esquenta", title: "Black Orium", sub: "Curta: termina sexta às 09:00" },
                 { kind: "november", title: "Black November", sub: "Até 30/11 às 23:59" },
               ] as const
             ).map((o) => {
@@ -903,7 +941,11 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
               );
             })}
           </div>
-          <PxField label="Nome da campanha" htmlFor="promo-name" hint="Qualquer nome com “Black” liga o visual Black na loja.">
+          <PxField
+            label="Nome da campanha"
+            htmlFor="promo-name"
+            hint="Qualquer nome com “Black” liga o visual Black na loja."
+          >
             <PxInput
               id="promo-name"
               autoFocus
@@ -913,7 +955,12 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
             />
           </PxField>
           <PxField label="Vale para">
-            <PxSeg label="O que entra na promoção" value={appliesTo} onChange={setAppliesTo} options={APPLIES_OPTIONS} />
+            <PxSeg
+              label="O que entra na promoção"
+              value={appliesTo}
+              onChange={setAppliesTo}
+              options={APPLIES_OPTIONS}
+            />
           </PxField>
           <PxField label="Desconto">
             <PxSeg
@@ -935,7 +982,10 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
             <>
               <ProductPicker ids={ids} setIds={setIds} />
               {ids.length === 0 ? (
-                <PxNote>Escolha os perfumes. Para cada um, digite o preço “por”; o “de” é o preço atual do frasco.</PxNote>
+                <PxNote>
+                  Escolha os perfumes. Para cada um, digite o preço “por”; o “de” é o preço atual do
+                  frasco.
+                </PxNote>
               ) : (
                 <div className="min-w-0 space-y-2">
                   {rows.map((r) => {
@@ -943,18 +993,35 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
                     const t = targets[r.id] ?? null;
                     const p = pctOf(r);
                     return (
-                      <div key={r.id} className="flex min-w-0 items-center gap-3 rounded-[18px] bg-[#1F1F1F] p-2.5">
+                      <div
+                        key={r.id}
+                        className="flex min-w-0 items-center gap-3 rounded-[18px] bg-[#1F1F1F] p-2.5"
+                      >
                         {r.image_url ? (
                           <span className="shrink-0 overflow-hidden rounded-[12px] bg-white">
                             <ItemThumb src={r.image_url} alt={r.canonical_name ?? ""} size={44} />
                           </span>
                         ) : null}
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[13.5px] font-semibold text-white">{productTitle(r.canonical_name ?? "")}</span>
+                          <span className="block truncate text-[13.5px] font-semibold text-white">
+                            {productTitle(r.canonical_name ?? "")}
+                          </span>
                           <span className="block truncate text-[12px] text-[#8C8C8C]">
-                            {b > 0 ? <>de <span className="line-through tabular-nums">{brl(b)}</span></> : "sem preço de frasco"}
-                            {p > 0 ? <span className="ml-1.5 font-bold text-[#FFD599]">{Math.round(p)}% OFF</span> : null}
-                            {t != null && b > 0 && t >= b ? <span className="ml-1.5 text-[#FF8A7A]">maior que o preço atual</span> : null}
+                            {b > 0 ? (
+                              <>
+                                de <span className="line-through tabular-nums">{brl(b)}</span>
+                              </>
+                            ) : (
+                              "sem preço de frasco"
+                            )}
+                            {p > 0 ? (
+                              <span className="ml-1.5 font-bold text-[#FFD599]">
+                                {Math.round(p)}% OFF
+                              </span>
+                            ) : null}
+                            {t != null && b > 0 && t >= b ? (
+                              <span className="ml-1.5 text-[#FF8A7A]">maior que o preço atual</span>
+                            ) : null}
                           </span>
                         </span>
                         <span className="w-[118px] shrink-0">
@@ -968,7 +1035,9 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
                     );
                   })}
                   {appliesTo !== "FULL" ? (
-                    <PxNote>Os decants de cada perfume recebem o mesmo percentual do frasco.</PxNote>
+                    <PxNote>
+                      Os decants de cada perfume recebem o mesmo percentual do frasco.
+                    </PxNote>
                   ) : null}
                 </div>
               )}
@@ -1077,7 +1146,11 @@ function NewPromotionSheet({ open, onClose }: { open: boolean; onClose: () => vo
 type PromotionRow = Tables<"promotions">;
 
 const EDIT_STEPS: PxStep[] = [
-  { key: "desconto", label: "Desconto", hint: "Nome, o que entra e o preço final ou o percentual." },
+  {
+    key: "desconto",
+    label: "Desconto",
+    hint: "Nome, o que entra e o preço final ou o percentual.",
+  },
   { key: "produtos", label: "Produtos", hint: "Perfumes e tamanhos de decant da promoção." },
   { key: "periodo", label: "Período", hint: "Estenda ou antecipe as datas, pause ou ative." },
   { key: "loja", label: "Na loja", hint: "Selo do app, cupom junto e o aviso ao cliente." },
@@ -1142,7 +1215,9 @@ function EditPromotionSheet({
   });
   const single = ids.length === 1 ? preview : null;
   const base =
-    single?.retail_price != null && Number(single.retail_price) > 0 ? Number(single.retail_price) : null;
+    single?.retail_price != null && Number(single.retail_price) > 0
+      ? Number(single.retail_price)
+      : null;
 
   /** Um perfume com preço → começa no "preço final" (o jeito como a campanha foi pensada). */
   const [priceMode, setPriceMode] = useState<"percent" | "price">(
@@ -1173,7 +1248,8 @@ function EditPromotionSheet({
     : !(pct > 0 && pct <= 90)
       ? "O desconto deve ficar entre 1% e 90%."
       : null;
-  const periodIssue = starts && ends && ends <= starts ? "O fim precisa ser depois do começo." : null;
+  const periodIssue =
+    starts && ends && ends <= starts ? "O fim precisa ser depois do começo." : null;
 
   const promoVars: CampaignVars = {
     discount: pctLabel,
@@ -1398,13 +1474,18 @@ function EditPromotionSheet({
           <PxField label="Termina" hint="Vazio = sem data final.">
             {ends ? (
               <PxQuick
-                options={[1, 2, 7].map((d) => ({ value: d, label: `+${d} dia${d === 1 ? "" : "s"}` }))}
+                options={[1, 2, 7].map((d) => ({
+                  value: d,
+                  label: `+${d} dia${d === 1 ? "" : "s"}`,
+                }))}
                 value={null}
                 onPick={(d) => {
                   const iso = saoPauloDateTimeToIso(ends);
                   if (iso)
                     setEnds(
-                      isoToSaoPauloInput(new Date(new Date(iso).getTime() + d * 86400_000).toISOString()),
+                      isoToSaoPauloInput(
+                        new Date(new Date(iso).getTime() + d * 86400_000).toISOString(),
+                      ),
                     );
                 }}
               />
@@ -1419,7 +1500,11 @@ function EditPromotionSheet({
           {periodIssue ? <PxNote tone="warning">{periodIssue}</PxNote> : null}
           <PxSwitchRow
             title="Promoção ativa"
-            hint={active ? "Desligue para pausar sem apagar." : "Pausada: o preço volta ao normal na loja."}
+            hint={
+              active
+                ? "Desligue para pausar sem apagar."
+                : "Pausada: o preço volta ao normal na loja."
+            }
             checked={active}
             onChange={setActive}
           />

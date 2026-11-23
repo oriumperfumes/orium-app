@@ -7,6 +7,7 @@
  * O assistente ao lado diz quem é o cliente e o que fazer. Nada sai sem clique.
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createPortal } from "react-dom";
 import {
   useEffect,
   useMemo,
@@ -1838,7 +1839,9 @@ function ContactMenu({
   const wa = whatsLink(c.phone_normalized);
   const name = contactName(c);
 
-  return (
+  if (typeof document === "undefined") return null;
+  // vai direto para o <body>: a moldura do CRM corta o que passa da borda
+  return createPortal(
     <>
       <div
         className="fixed inset-0 z-[80]"
@@ -1974,7 +1977,8 @@ function ContactMenu({
           </>
         )}
       </div>
-    </>
+    </>,
+    document.body,
   );
 }
 

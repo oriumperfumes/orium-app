@@ -28,7 +28,13 @@ import { placeCatalogOrder, type FulfillmentType } from "@/lib/catalog.functions
 import { deviceId } from "@/lib/promotions";
 import { usePublicCoupons } from "@/lib/use-promotions";
 import { CELEBRATION, ConfettiBurst, CountUp, useCelebrateOnce } from "@/lib/celebration";
-import { getPaymentPricing, paymentLabel, pixOffLabel, usePaymentSettings, type PaymentMethod } from "@/lib/payment";
+import {
+  getPaymentPricing,
+  paymentLabel,
+  pixOffLabel,
+  usePaymentSettings,
+  type PaymentMethod,
+} from "@/lib/payment";
 
 import { fetchAddressByCep } from "@/lib/shipping.functions";
 import { ProductImage } from "./ProductCard";
@@ -39,7 +45,7 @@ import { track } from "@/lib/analytics";
 import { useLead } from "@/lib/lead";
 import { ReadyTag } from "@/components/orium/badges";
 import { BlackCountdown, BlackOff, BlackTag } from "@/components/orium/black/Black";
-import { isBlack } from "@/lib/black";
+import { isBlack, useBlackTitle } from "@/lib/black";
 import { DecantComboBag } from "@/components/orium/DecantCombo";
 import { OrderSuccess, type OrderDone } from "@/components/orium/OrderSuccess";
 import { StepBar } from "@/components/orium/StepProgress";
@@ -89,13 +95,19 @@ export function CartDrawer() {
       <div
         aria-hidden
         onClick={() => cart.setOpen(false)}
-        className={cn("side-scrim fixed inset-0 z-[59] hidden bg-black/55 lg:block", cart.open ? "is-in" : "is-out")}
+        className={cn(
+          "side-scrim fixed inset-0 z-[59] hidden bg-black/55 lg:block",
+          cart.open ? "is-in" : "is-out",
+        )}
       />
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Sacola"
-        className={cn("cart-page fixed inset-0 z-[60] flex flex-col bg-[#101010] text-white", cart.open ? "is-in" : "is-out")}
+        className={cn(
+          "cart-page fixed inset-0 z-[60] flex flex-col bg-[#101010] text-white",
+          cart.open ? "is-in" : "is-out",
+        )}
       >
         <CartBody keyboardOpen={false} onClose={() => cart.setOpen(false)} />
       </div>
@@ -114,8 +126,15 @@ const emptyAddress = {
   state: "",
 };
 
-function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: boolean; onClose: () => void }) {
+function CartBody({
+  keyboardOpen: _keyboardOpen,
+  onClose,
+}: {
+  keyboardOpen: boolean;
+  onClose: () => void;
+}) {
   const cart = useCart();
+  const blackName = useBlackTitle();
   const { readyIds, resolved: readyResolved } = useReadyToDeliverSnapshot();
   const hasSpecialOrder = readyResolved && cart.items.some((item) => !readyIds.has(item.productId));
   const { session } = useAuth();
@@ -130,7 +149,10 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
   // ...a não ser que a Sacola só tenha perfumes da Black (esses vendem pelo site)
   const onRequestAll =
     usePricesOnRequestAll() &&
-    !(cart.items.length > 0 && cart.items.every((i) => blackOpen.all || blackOpen.ids.has(i.productId)));
+    !(
+      cart.items.length > 0 &&
+      cart.items.every((i) => blackOpen.all || blackOpen.ids.has(i.productId))
+    );
 
   // mantém o campo tocado visível acima do teclado, sem pulos
   const onFieldFocus = (event: React.FocusEvent<HTMLDivElement>) => {
@@ -181,7 +203,6 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
     setPhone((p) => (p.trim() ? p : lead.phone ? maskPhone(lead.phone) : ""));
   }, [lead]);
 
-
   const cepDigits = address.cep.replace(/\D/g, "");
   // Entrega: valor e prazo são combinados pelo WhatsApp antes do pagamento,
   // então nunca entram no total do pedido feito pelo site.
@@ -220,7 +241,13 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
           toast.error("CEP não encontrado. Confira o número.");
           return;
         }
-        setAddress((a) => ({ ...a, street: found.street || a.street, district: found.district || a.district, city: found.city, state: found.state }));
+        setAddress((a) => ({
+          ...a,
+          street: found.street || a.street,
+          district: found.district || a.district,
+          city: found.city,
+          state: found.state,
+        }));
       })
       .finally(() => !cancelled && setCepBusy(false));
     return () => {
@@ -257,10 +284,13 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
       if (res.couponMessage) toast.info(res.couponMessage);
       if (res.changed.length) toast.info(`O preço de ${res.changed.join(", ")} foi atualizado.`);
       if (res.unavailable.length) {
-        toast.warning(`Sem estoque no momento: ${res.unavailable.join(", ")}. Vamos confirmar no WhatsApp.`);
+        toast.warning(
+          `Sem estoque no momento: ${res.unavailable.join(", ")}. Vamos confirmar no WhatsApp.`,
+        );
       }
 
-      if (res.lines.some((l) => l.variant === "DECANT")) trackDecant("decant_checkout", { details: { orderId: res.orderId } });
+      if (res.lines.some((l) => l.variant === "DECANT"))
+        trackDecant("decant_checkout", { details: { orderId: res.orderId } });
 
       const linhaItem = (l: (typeof res.lines)[number]) =>
         l.quantity > 1
@@ -270,7 +300,9 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
         list.length ? `${title}\n${list.map(linhaItem).join("\n")}` : "";
       const decantLines = res.lines.filter((l) => l.variant === "DECANT");
       const bottleLines = res.lines.filter((l) => l.variant !== "DECANT");
-      const linhas = [bloco("🧪 Decants", decantLines), bloco("🧴 Frascos", bottleLines)].filter(Boolean).join("\n\n");
+      const linhas = [bloco("🧪 Decants", decantLines), bloco("🧴 Frascos", bottleLines)]
+        .filter(Boolean)
+        .join("\n\n");
 
       const first = name.trim().split(/\s+/)[0] ?? "";
       const addr = `${address.street}, ${address.number}${address.complement ? ` - ${address.complement}` : ""} — ${address.district}, ${address.city}/${address.state} (CEP ${address.cep})`;
@@ -306,12 +338,16 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
         number: res.orderNumber ?? null,
         url: waUrl,
         total: res.finalTotal,
-        receive: fulfillment === "PICKUP" ? "Retirada na loja" : "Entrega (valor e prazo a confirmar)",
+        receive:
+          fulfillment === "PICKUP" ? "Retirada na loja" : "Entrega (valor e prazo a confirmar)",
         deliveryPending: entregaPendente,
         payment: paymentLabel(res.paymentMethod),
         firstName: name.trim().split(/\s+/)[0] ?? "",
         // economia real: preço cheio dos itens − o que ele pagou pelos itens (sem frete)
-        savings: Math.max(0, Number((cart.retailTotal - (res.finalTotal - (res.shippingPrice ?? 0))).toFixed(2))),
+        savings: Math.max(
+          0,
+          Number((cart.retailTotal - (res.finalTotal - (res.shippingPrice ?? 0))).toFixed(2)),
+        ),
         items: cart.items.slice(0, 4).map((i) => ({ image: i.image, name: i.name })),
         count: cart.totalQuantity,
         fresh: true,
@@ -326,7 +362,11 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
       // registro em segundo plano: o WhatsApp abre na hora, sem esperar nada
       track("order_created", { price: res.finalTotal, meta: { order: res.orderNumber ?? "" } });
       track("whatsapp_checkout_clicked", { price: res.finalTotal });
-      updateLead({ name: name.trim(), phone: phone.replace(/\D/g, ""), customerId: lead?.customerId ?? null });
+      updateLead({
+        name: name.trim(),
+        phone: phone.replace(/\D/g, ""),
+        customerId: lead?.customerId ?? null,
+      });
 
       // o WhatsApp abre no fim da animação de "pedido feito" (OrderSuccess)
     } catch (e) {
@@ -378,13 +418,17 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
       <>
         {topBar(onClose)}
         <div className="cart-step-in mx-auto w-full max-w-xl px-5 pt-3">
-          <h1 className="text-[40px] leading-[1.15] font-bold tracking-[-0.035em] text-white">Sacola</h1>
+          <h1 className="text-[40px] leading-[1.15] font-bold tracking-[-0.035em] text-white">
+            Sacola
+          </h1>
           <p className="mt-1 text-[16px] text-[#BABABA]">Nenhum item ainda</p>
           <div className="mt-10 flex flex-col items-center text-center">
             <span className="grid size-[84px] place-items-center rounded-full bg-[#1A1A1A] text-[#FFD599]">
               <ShoppingBag className="size-9" strokeWidth={1.8} />
             </span>
-            <p className="mt-6 text-[22px] font-bold tracking-[-0.02em] text-white">Sua sacola está vazia</p>
+            <p className="mt-6 text-[22px] font-bold tracking-[-0.02em] text-white">
+              Sua sacola está vazia
+            </p>
             <p className="mt-2 max-w-[28ch] text-[16px] leading-relaxed text-[#BABABA]">
               Comece por um decant: você prova antes de levar o frasco.
             </p>
@@ -409,14 +453,20 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
   ].filter(Boolean) as string[];
   const missingText = missingList.length
     ? `Para continuar, preencha ${
-        missingList.length > 1 ? `${missingList.slice(0, -1).join(", ")} e ${missingList.at(-1)}` : missingList[0]
+        missingList.length > 1
+          ? `${missingList.slice(0, -1).join(", ")} e ${missingList.at(-1)}`
+          : missingList[0]
       }.`
     : null;
 
   return (
     <>
       {topBar(step === "bag" ? onClose : () => go("bag"))}
-      <div ref={scrollRef} onFocusCapture={onFieldFocus} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <div
+        ref={scrollRef}
+        onFocusCapture={onFieldFocus}
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+      >
         <div
           key={step}
           className={cn(
@@ -433,22 +483,35 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
   // ———————————————————— Sacola com preços sob consulta ————————————————————
   function renderOnRequestBag() {
     const list = cart.items
-      .map((i) => `• ${i.quantity}x ${[i.brand, productTitle(i.name)].filter(Boolean).join(" ")}${i.variant === "DECANT" ? ` (decant ${i.decantMl} ml)` : ""}`)
+      .map(
+        (i) =>
+          `• ${i.quantity}x ${[i.brand, productTitle(i.name)].filter(Boolean).join(" ")}${i.variant === "DECANT" ? ` (decant ${i.decantMl} ml)` : ""}`,
+      )
       .join("\n");
     const msg = `Oi, Orium! Queria saber o preço destes perfumes:\n${list}`;
     return (
       <>
-        <h1 className="text-[40px] leading-[1.15] font-bold tracking-[-0.035em] text-white">Sacola</h1>
+        <h1 className="text-[40px] leading-[1.15] font-bold tracking-[-0.035em] text-white">
+          Sacola
+        </h1>
         <p className="mt-1 text-[16px] text-[#BABABA] tabular-nums">
           {cart.totalQuantity} {cart.totalQuantity === 1 ? "item" : "itens"}
         </p>
         <ul className="mt-5 space-y-2">
           {cart.items.map((i) => (
-            <li key={i.key} className="flex items-center justify-between gap-3 rounded-[18px] bg-[#1A1A1A] px-4 py-3">
+            <li
+              key={i.key}
+              className="flex items-center justify-between gap-3 rounded-[18px] bg-[#1A1A1A] px-4 py-3"
+            >
               <span className="min-w-0">
-                <span className="block truncate text-[15px] font-semibold text-white">{productTitle(i.name)}</span>
+                <span className="block truncate text-[15px] font-semibold text-white">
+                  {productTitle(i.name)}
+                </span>
                 <span className="block text-[13px] text-[#8C8C8C]">
-                  {[i.brand, i.variant === "DECANT" ? `Decant ${i.decantMl} ml` : "Frasco"].filter(Boolean).join(" · ")} · {i.quantity}x
+                  {[i.brand, i.variant === "DECANT" ? `Decant ${i.decantMl} ml` : "Frasco"]
+                    .filter(Boolean)
+                    .join(" · ")}{" "}
+                  · {i.quantity}x
                 </span>
               </span>
               <button
@@ -464,14 +527,17 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
         <div className="mt-6 rounded-[24px] bg-[#1A1A1A] p-5">
           <p className="text-[20px] font-bold text-[#FFD599]">Preços sob consulta</p>
           <p className="mt-1 text-[15px] leading-snug text-[#A9A9A9]">
-            No momento os preços são informados pelo WhatsApp. Mande a sua lista e a Orium responde com valores e disponibilidade.
+            No momento os preços são informados pelo WhatsApp. Mande a sua lista e a Orium responde
+            com valores e disponibilidade.
           </p>
         </div>
         <a
           href={`https://wa.me/${ORIUM_WHATSAPP}?text=${encodeURIComponent(msg)}`}
           target="_blank"
           rel="noreferrer"
-          onClick={() => track("consultant_help_clicked", { meta: { reason: "sob-consulta-sacola" } })}
+          onClick={() =>
+            track("consultant_help_clicked", { meta: { reason: "sob-consulta-sacola" } })
+          }
           className="press mt-6 flex h-[60px] w-full items-center justify-center gap-2 rounded-full bg-[#FFD599] text-[17px] font-bold text-[#15130F]"
         >
           Consultar no WhatsApp <ArrowRight className="size-5" strokeWidth={2.4} />
@@ -485,7 +551,9 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
     if (onRequestAll) return renderOnRequestBag();
     return (
       <>
-        <h1 className="text-[40px] leading-[1.15] font-bold tracking-[-0.035em] text-white">Sacola</h1>
+        <h1 className="text-[40px] leading-[1.15] font-bold tracking-[-0.035em] text-white">
+          Sacola
+        </h1>
         <p className="mt-1 text-[16px] text-[#BABABA] tabular-nums">
           {cart.totalQuantity} {cart.totalQuantity === 1 ? "item" : "itens"}
         </p>
@@ -508,24 +576,37 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
           {cart.tier === "atacado" && cart.retailTotal > cart.subtotal ? (
             <>
               <Row label="Subtotal" value={brl(cart.retailTotal)} />
-              <Row label={`Atacado · ${cart.bottleQuantity} frascos`} value={`– ${brl(cart.retailTotal - cart.subtotal)}`} gold />
+              <Row
+                label={`Atacado · ${cart.bottleQuantity} frascos`}
+                value={`– ${brl(cart.retailTotal - cart.subtotal)}`}
+                gold
+              />
             </>
           ) : (
             <Row label="Subtotal" value={brl(cart.subtotal)} />
           )}
-          {cart.comboDiscount > 0 ? <Row label="Combo de decants" value={`– ${brl(cart.comboDiscount)}`} gold /> : null}
+          {cart.comboDiscount > 0 ? (
+            <Row label="Combo de decants" value={`– ${brl(cart.comboDiscount)}`} gold />
+          ) : null}
           {cart.promotionDiscount - cart.comboDiscount > 0.004 ? (
             <Row
-              label={cart.promoItems.some((i) => isBlack(cart.promotionOf(i))) ? "Black November" : "Promoção"}
+              label={
+                cart.promoItems.some((i) => isBlack(cart.promotionOf(i))) ? blackName : "Promoção"
+              }
               value={`– ${brl(cart.promotionDiscount - cart.comboDiscount)}`}
               gold
             />
           ) : null}
-          {cart.couponDiscount > 0 ? <Row label={`Cupom ${cart.couponCode}`} value={`– ${brl(cart.couponDiscount)}`} gold /> : null}
+          {cart.couponDiscount > 0 ? (
+            <Row label={`Cupom ${cart.couponCode}`} value={`– ${brl(cart.couponDiscount)}`} gold />
+          ) : null}
           <Row label="Entrega" value="escolhida no próximo passo" muted />
           <div className="mt-3 flex items-baseline justify-between border-t border-white/10 pt-4">
             <span className="text-[17px] font-bold text-white">Total</span>
-            <span key={cart.total} className="value-in text-[30px] leading-none font-bold tracking-[-0.03em] text-white tabular-nums">
+            <span
+              key={cart.total}
+              className="value-in text-[30px] leading-none font-bold tracking-[-0.03em] text-white tabular-nums"
+            >
               {brl(cart.total)}
             </span>
           </div>
@@ -563,13 +644,18 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
           }}
           className="relative size-[94px] shrink-0 overflow-hidden rounded-[16px] bg-white"
         >
-          <ProductImage product={{ image_url: item.image, brand: item.brand, canonical_name: item.name }} variant="thumb" />
+          <ProductImage
+            product={{ image_url: item.image, brand: item.brand, canonical_name: item.name }}
+            variant="thumb"
+          />
         </Link>
         <div className="flex min-w-0 flex-1 flex-col">
           {item.brand ? <p className="truncate text-[13px] text-[#A9A9A9]">{item.brand}</p> : null}
           <p className="line-clamp-2 text-[17px] leading-snug font-bold text-white">{item.name}</p>
           <p className="text-[14px] text-[#FFD599]">
-            {isDecant ? `Decant · ${item.decantMl} ml` : `Frasco${item.volumeMl ? ` · ${item.volumeMl} ml` : ""}`}
+            {isDecant
+              ? `Decant · ${item.decantMl} ml`
+              : `Frasco${item.volumeMl ? ` · ${item.volumeMl} ml` : ""}`}
           </p>
           {promo ? (
             <span className="mt-1.5 flex items-center gap-2">
@@ -581,7 +667,9 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
                 </span>
               )}
               <BlackOff
-                percent={(1 - cart.unitPrice(item) / Math.max(0.01, cart.baseUnitPrice(item))) * 100}
+                percent={
+                  (1 - cart.unitPrice(item) / Math.max(0.01, cart.baseUnitPrice(item))) * 100
+                }
                 className="text-[12px]"
               />
             </span>
@@ -593,11 +681,22 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
                 type="button"
                 className="press grid size-9 place-items-center rounded-full text-white"
                 aria-label={item.quantity === 1 ? `Remover ${item.name}` : "Diminuir quantidade"}
-                onClick={() => (item.quantity === 1 ? cart.remove(item.key) : cart.setQuantity(item.key, item.quantity - 1))}
+                onClick={() =>
+                  item.quantity === 1
+                    ? cart.remove(item.key)
+                    : cart.setQuantity(item.key, item.quantity - 1)
+                }
               >
-                {item.quantity === 1 ? <Trash2 className="size-[15px]" strokeWidth={2.2} /> : <Minus className="size-4" strokeWidth={2.4} />}
+                {item.quantity === 1 ? (
+                  <Trash2 className="size-[15px]" strokeWidth={2.2} />
+                ) : (
+                  <Minus className="size-4" strokeWidth={2.4} />
+                )}
               </button>
-              <span key={item.quantity} className="value-in min-w-5 text-center text-[15px] font-semibold text-white tabular-nums">
+              <span
+                key={item.quantity}
+                className="value-in min-w-5 text-center text-[15px] font-semibold text-white tabular-nums"
+              >
                 {item.quantity}
               </span>
               <button
@@ -610,11 +709,16 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
               </button>
             </div>
             <div className="text-right">
-              <p key={cart.lineTotal(item)} className="value-in text-[17px] font-bold text-white tabular-nums">
+              <p
+                key={cart.lineTotal(item)}
+                className="value-in text-[17px] font-bold text-white tabular-nums"
+              >
                 {brl(cart.lineTotal(item))}
               </p>
               {promo || cart.comboOf(item) > 0 ? (
-                <p className="text-[12px] text-[#8C8C8C] line-through tabular-nums">{brl(cart.baseUnitPrice(item) * item.quantity)}</p>
+                <p className="text-[12px] text-[#8C8C8C] line-through tabular-nums">
+                  {brl(cart.baseUnitPrice(item) * item.quantity)}
+                </p>
               ) : null}
               {promo ? (
                 <p className="text-[11.5px] font-semibold text-[#FFD599] tabular-nums">
@@ -632,8 +736,12 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
   function renderCheckout() {
     return (
       <>
-        <h1 className="text-[40px] leading-[1.12] font-bold tracking-[-0.035em] text-white">Finalizar pedido</h1>
-        <p className="mt-1.5 text-[16px] leading-snug text-[#BABABA]">Só falta saber quem é você e como quer receber.</p>
+        <h1 className="text-[40px] leading-[1.12] font-bold tracking-[-0.035em] text-white">
+          Finalizar pedido
+        </h1>
+        <p className="mt-1.5 text-[16px] leading-snug text-[#BABABA]">
+          Só falta saber quem é você e como quer receber.
+        </p>
 
         {/* seus dados */}
         <p className="mt-8 mb-2.5 text-[15px] font-semibold text-[#CFCFCF]">Seus dados</p>
@@ -666,7 +774,9 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
         {phone && !isValidPhoneBR(phone) ? (
           <p className="mt-2 text-[13px] text-[#FFB4A8]">Confira o DDD e o número.</p>
         ) : (
-          <p className="mt-2.5 text-[13px] text-[#8C8C8C]">Usamos só para confirmar o pedido com você.</p>
+          <p className="mt-2.5 text-[13px] text-[#8C8C8C]">
+            Usamos só para confirmar o pedido com você.
+          </p>
         )}
 
         {/* recebimento */}
@@ -691,13 +801,19 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
           <div className="cart-step-in">
             <div className="mt-4 rounded-[20px] bg-[#1A1A1A] p-4" role="note">
               <p className="text-[14px] leading-relaxed text-[#E6E6E6]">
-                Seu pedido é registrado agora, mas o <strong>valor e o prazo da entrega</strong> serão confirmados com você pelo
-                WhatsApp <strong>antes do pagamento</strong>. Nada é cobrado pelo site.
+                Seu pedido é registrado agora, mas o <strong>valor e o prazo da entrega</strong>{" "}
+                serão confirmados com você pelo WhatsApp <strong>antes do pagamento</strong>. Nada é
+                cobrado pelo site.
               </p>
             </div>
-            <p className="mt-8 mb-2.5 text-[15px] font-semibold text-[#CFCFCF]">Endereço de entrega</p>
+            <p className="mt-8 mb-2.5 text-[15px] font-semibold text-[#CFCFCF]">
+              Endereço de entrega
+            </p>
             <div className="overflow-hidden rounded-[20px] bg-[#1A1A1A]">
-              <GroupField label="CEP" aside={cepBusy ? <Loader2 className="size-4 animate-spin text-[#A9A9A9]" /> : null}>
+              <GroupField
+                label="CEP"
+                aside={cepBusy ? <Loader2 className="size-4 animate-spin text-[#A9A9A9]" /> : null}
+              >
                 <input
                   value={address.cep}
                   onChange={(e) => setAddress({ ...address, cep: maskCep(e.target.value) })}
@@ -709,28 +825,71 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
                 />
               </GroupField>
               <GroupField label="Rua" divider>
-                <input value={address.street} onChange={(e) => setAddress({ ...address, street: e.target.value })} placeholder="Nome da rua" autoComplete="address-line1" className="g-input" aria-label="Rua" />
+                <input
+                  value={address.street}
+                  onChange={(e) => setAddress({ ...address, street: e.target.value })}
+                  placeholder="Nome da rua"
+                  autoComplete="address-line1"
+                  className="g-input"
+                  aria-label="Rua"
+                />
               </GroupField>
               <div className="grid grid-cols-[0.8fr_1.2fr] border-t border-white/10">
                 <GroupField label="Número">
-                  <input value={address.number} onChange={(e) => setAddress({ ...address, number: e.target.value })} placeholder="Nº" inputMode="numeric" className="g-input" aria-label="Número" />
+                  <input
+                    value={address.number}
+                    onChange={(e) => setAddress({ ...address, number: e.target.value })}
+                    placeholder="Nº"
+                    inputMode="numeric"
+                    className="g-input"
+                    aria-label="Número"
+                  />
                 </GroupField>
                 <div className="border-l border-white/10">
                   <GroupField label="Complemento">
-                    <input value={address.complement} onChange={(e) => setAddress({ ...address, complement: e.target.value })} placeholder="Opcional" autoComplete="address-line2" className="g-input" aria-label="Complemento" />
+                    <input
+                      value={address.complement}
+                      onChange={(e) => setAddress({ ...address, complement: e.target.value })}
+                      placeholder="Opcional"
+                      autoComplete="address-line2"
+                      className="g-input"
+                      aria-label="Complemento"
+                    />
                   </GroupField>
                 </div>
               </div>
               <GroupField label="Bairro" divider>
-                <input value={address.district} onChange={(e) => setAddress({ ...address, district: e.target.value })} placeholder="Bairro" className="g-input" aria-label="Bairro" />
+                <input
+                  value={address.district}
+                  onChange={(e) => setAddress({ ...address, district: e.target.value })}
+                  placeholder="Bairro"
+                  className="g-input"
+                  aria-label="Bairro"
+                />
               </GroupField>
               <div className="grid grid-cols-[1fr_92px] border-t border-white/10">
                 <GroupField label="Cidade">
-                  <input value={address.city} onChange={(e) => setAddress({ ...address, city: e.target.value })} placeholder="Cidade" autoComplete="address-level2" className="g-input" aria-label="Cidade" />
+                  <input
+                    value={address.city}
+                    onChange={(e) => setAddress({ ...address, city: e.target.value })}
+                    placeholder="Cidade"
+                    autoComplete="address-level2"
+                    className="g-input"
+                    aria-label="Cidade"
+                  />
                 </GroupField>
                 <div className="border-l border-white/10">
                   <GroupField label="UF">
-                    <input value={address.state} onChange={(e) => setAddress({ ...address, state: e.target.value.toUpperCase().slice(0, 2) })} placeholder="RJ" autoComplete="address-level1" className="g-input uppercase" aria-label="Estado" />
+                    <input
+                      value={address.state}
+                      onChange={(e) =>
+                        setAddress({ ...address, state: e.target.value.toUpperCase().slice(0, 2) })
+                      }
+                      placeholder="RJ"
+                      autoComplete="address-level1"
+                      className="g-input uppercase"
+                      aria-label="Estado"
+                    />
                   </GroupField>
                 </div>
               </div>
@@ -772,9 +931,19 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
               value={brl(cart.lineTotal(i))}
             />
           ))}
-          {cart.comboDiscount > 0 ? <Row label="Combo de decants" value={`– ${brl(cart.comboDiscount)}`} gold /> : null}
-          {cart.promotionDiscount - cart.comboDiscount > 0.004 ? <Row label="Promoção" value={`– ${brl(cart.promotionDiscount - cart.comboDiscount)}`} gold /> : null}
-          {cart.couponDiscount > 0 ? <Row label={`Cupom ${cart.couponCode}`} value={`– ${brl(cart.couponDiscount)}`} gold /> : null}
+          {cart.comboDiscount > 0 ? (
+            <Row label="Combo de decants" value={`– ${brl(cart.comboDiscount)}`} gold />
+          ) : null}
+          {cart.promotionDiscount - cart.comboDiscount > 0.004 ? (
+            <Row
+              label="Promoção"
+              value={`– ${brl(cart.promotionDiscount - cart.comboDiscount)}`}
+              gold
+            />
+          ) : null}
+          {cart.couponDiscount > 0 ? (
+            <Row label={`Cupom ${cart.couponCode}`} value={`– ${brl(cart.couponDiscount)}`} gold />
+          ) : null}
           {payment.active && paymentMethod === "PIX" && payment.pixSavings > 0 ? (
             <Row label="Desconto no Pix" value={`– ${brl(payment.pixSavings)}`} gold />
           ) : null}
@@ -790,8 +959,13 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
             strong
           />
           <div className="mt-3 flex items-baseline justify-between border-t border-white/10 pt-4">
-            <span className="text-[17px] font-bold text-white">{fulfillment === "LOCAL" ? "Total dos produtos" : "Total"}</span>
-            <span key={grandTotal} className="value-in text-[30px] leading-none font-bold tracking-[-0.03em] text-white tabular-nums">
+            <span className="text-[17px] font-bold text-white">
+              {fulfillment === "LOCAL" ? "Total dos produtos" : "Total"}
+            </span>
+            <span
+              key={grandTotal}
+              className="value-in text-[30px] leading-none font-bold tracking-[-0.03em] text-white tabular-nums"
+            >
               {brl(grandTotal)}
             </span>
           </div>
@@ -799,7 +973,8 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
 
         {fulfillment === "LOCAL" ? (
           <p className="mt-3 text-[13px] leading-relaxed text-[#BABABA]">
-            A entrega não está neste total. A Orium confirma o valor e o prazo pelo WhatsApp antes de você pagar.
+            A entrega não está neste total. A Orium confirma o valor e o prazo pelo WhatsApp antes
+            de você pagar.
           </p>
         ) : null}
 
@@ -812,10 +987,17 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
             canSubmit ? "bg-[#FFD599] text-[#15130F]" : "bg-[#2A2A2A] text-[#8C8C8C]",
           )}
         >
-          {sending ? <Loader2 className="size-5 animate-spin" /> : <MessageCircle className="size-5" strokeWidth={2.2} />}
+          {sending ? (
+            <Loader2 className="size-5 animate-spin" />
+          ) : (
+            <MessageCircle className="size-5" strokeWidth={2.2} />
+          )}
           {sending ? "Enviando pedido…" : "Enviar pedido pelo WhatsApp"}
         </button>
-        <p key={missingText ?? "ok"} className="value-in mx-auto mt-4 max-w-[34ch] text-center text-[14px] leading-relaxed text-[#A9A9A9]">
+        <p
+          key={missingText ?? "ok"}
+          className="value-in mx-auto mt-4 max-w-[34ch] text-center text-[14px] leading-relaxed text-[#A9A9A9]"
+        >
           {missingText ?? "Você confirma tudo com a Orium no WhatsApp."}
         </p>
       </>
@@ -824,7 +1006,19 @@ function CartBody({ keyboardOpen: _keyboardOpen, onClose }: { keyboardOpen: bool
 }
 
 /** Linha do resumo: rótulo à esquerda, valor à direita. */
-function Row({ label, value, gold, muted, strong }: { label: string; value: string; gold?: boolean; muted?: boolean; strong?: boolean }) {
+function Row({
+  label,
+  value,
+  gold,
+  muted,
+  strong,
+}: {
+  label: string;
+  value: string;
+  gold?: boolean;
+  muted?: boolean;
+  strong?: boolean;
+}) {
   return (
     <div className="flex items-baseline justify-between gap-4 py-1.5">
       <span className="min-w-0 text-[15px] text-[#A9A9A9]">{label}</span>
@@ -893,16 +1087,32 @@ function ReceiveOption({
       className={cn(
         "cart-opt press flex w-full items-center gap-3 rounded-[20px] text-left disabled:opacity-45",
         compact ? "p-4" : "p-5",
-        active ? "bg-[#221C14] ring-1 ring-[#FFD599] ring-inset" : "bg-[#1A1A1A] ring-1 ring-white/10 ring-inset",
+        active
+          ? "bg-[#221C14] ring-1 ring-[#FFD599] ring-inset"
+          : "bg-[#1A1A1A] ring-1 ring-white/10 ring-inset",
       )}
     >
       <span className="min-w-0 flex-1">
-        <span className={cn("block font-bold text-white", compact ? "text-[17px]" : "text-[19px]")}>{title}</span>
-        <span className={cn("mt-0.5 block text-[#A9A9A9]", compact ? "text-[15px] font-semibold text-white tabular-nums" : "text-[15px] leading-snug")}>
+        <span className={cn("block font-bold text-white", compact ? "text-[17px]" : "text-[19px]")}>
+          {title}
+        </span>
+        <span
+          className={cn(
+            "mt-0.5 block text-[#A9A9A9]",
+            compact
+              ? "text-[15px] font-semibold text-white tabular-nums"
+              : "text-[15px] leading-snug",
+          )}
+        >
           {subtitle}
         </span>
         {extra ? (
-          <span className={cn("mt-1 block text-[14px] font-bold", gold ? "text-[#FFD599]" : compact ? "font-medium text-[#A9A9A9]" : "text-white")}>
+          <span
+            className={cn(
+              "mt-1 block text-[14px] font-bold",
+              gold ? "text-[#FFD599]" : compact ? "font-medium text-[#A9A9A9]" : "text-white",
+            )}
+          >
             {extra}
           </span>
         ) : null}
@@ -935,7 +1145,10 @@ function TryMore() {
   if (!base || list.length === 0) return null;
 
   const reason = (p: (typeof list)[number]) => {
-    const shared = (p.shared_accords ?? []).filter(Boolean).slice(0, 2).map((a) => a.toLowerCase());
+    const shared = (p.shared_accords ?? [])
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((a) => a.toLowerCase());
     const accords = (p.accords ?? []).slice(0, 2).map((a) => a.toLowerCase());
     if (shared.length) {
       const words = shared.length > 1 ? `${shared[0]} e ${shared[1]}` : shared[0]!;
@@ -953,18 +1166,27 @@ function TryMore() {
       <span className="inline-flex rounded-full bg-[#2A2217] px-3 py-1.5 text-[13px] font-bold text-[#FFD599] tabular-nums">
         Só {brl(price2)} cada
       </span>
-      <h2 className="mt-3 text-[26px] leading-tight font-bold tracking-[-0.025em] text-white">Leve mais um para provar</h2>
+      <h2 className="mt-3 text-[26px] leading-tight font-bold tracking-[-0.025em] text-white">
+        Leve mais um para provar
+      </h2>
       <p className="mt-2 text-[16px] leading-relaxed text-[#A9A9A9]">
         Decants de 2 ml de perfumes parecidos com o que você escolheu. Vão no mesmo pacote.
       </p>
       <div className="scrollbar-none -mx-5 mt-4 flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-px-5 px-5 pb-1">
         {list.map((p) => (
-          <div key={p.id} className="flex w-[190px] shrink-0 snap-start flex-col rounded-[24px] bg-[#1A1A1A] p-3.5">
+          <div
+            key={p.id}
+            className="flex w-[190px] shrink-0 snap-start flex-col rounded-[24px] bg-[#1A1A1A] p-3.5"
+          >
             <span className="relative block aspect-square w-full overflow-hidden rounded-[16px] bg-white">
               <ProductImage product={p} />
             </span>
-            <p className="mt-3 line-clamp-1 text-[17px] font-bold text-white">{productTitle(p.canonical_name)}</p>
-            <p className="mt-0.5 line-clamp-2 min-h-[2.6em] text-[14px] leading-snug text-[#FFD599]">{reason(p)}</p>
+            <p className="mt-3 line-clamp-1 text-[17px] font-bold text-white">
+              {productTitle(p.canonical_name)}
+            </p>
+            <p className="mt-0.5 line-clamp-2 min-h-[2.6em] text-[14px] leading-snug text-[#FFD599]">
+              {reason(p)}
+            </p>
             <button
               type="button"
               onClick={() => {
@@ -984,7 +1206,11 @@ function TryMore() {
                   },
                   1,
                 );
-                trackDecant("decant_added", { productId: p.id, variant: "DECANT_2", details: { source: "sacola_leve_mais" } });
+                trackDecant("decant_added", {
+                  productId: p.id,
+                  variant: "DECANT_2",
+                  details: { source: "sacola_leve_mais" },
+                });
               }}
               className="press mt-3 flex h-12 w-full items-center justify-center rounded-full bg-[#FFD599] text-[15px] font-bold text-[#15130F] tabular-nums"
             >
@@ -1005,9 +1231,13 @@ function CouponBox() {
   const [nudge, setNudge] = useState(0);
   const applied = cart.couponFeedback.status === "OK";
   const problem =
-    cart.couponFeedback.status !== "OK" && cart.couponFeedback.status !== "NONE" ? cart.couponFeedback.message : null;
+    cart.couponFeedback.status !== "OK" && cart.couponFeedback.status !== "NONE"
+      ? cart.couponFeedback.message
+      : null;
   const celebrate = useCelebrateOnce(
-    applied && cart.couponCode && cart.couponDiscount > 0 ? `coupon-applied:${cart.couponCode}` : null,
+    applied && cart.couponCode && cart.couponDiscount > 0
+      ? `coupon-applied:${cart.couponCode}`
+      : null,
     CELEBRATION.micro,
   );
   useEffect(() => {
@@ -1022,7 +1252,9 @@ function CouponBox() {
           <ConfettiBurst active={celebrate} intensity="soft" />
           <span className="flex h-full items-center gap-2.5 border-r border-dashed border-white/15 pr-4 pl-4">
             <Ticket className="size-[18px] text-[#FFD599]" strokeWidth={2.2} />
-            <span className="text-[16px] font-bold tracking-[0.06em] text-white">{cart.couponCode}</span>
+            <span className="text-[16px] font-bold tracking-[0.06em] text-white">
+              {cart.couponCode}
+            </span>
           </span>
           <span className="min-w-0 flex-1 truncate px-4 text-[14px] text-[#A9A9A9]">
             {cart.couponDiscount > 0 ? (
@@ -1080,7 +1312,9 @@ function CouponBox() {
                   className="press inline-flex h-9 items-center gap-1.5 rounded-full bg-[#1F1F1F] px-3.5 text-[13px] font-semibold text-white"
                 >
                   {c.code}
-                  <span className="text-[#FFD599]">{Math.round(Number(c.discount_percent))}% off</span>
+                  <span className="text-[#FFD599]">
+                    {Math.round(Number(c.discount_percent))}% off
+                  </span>
                 </button>
               ))}
             </div>
@@ -1134,7 +1368,8 @@ function WholesaleLine() {
         {unlocked ? (
           only ? (
             <>
-              {brl(only.wholesalePrice)} cada, em vez de <span className="line-through">{brl(only.retailPrice)}</span>
+              {brl(only.wholesalePrice)} cada, em vez de{" "}
+              <span className="line-through">{brl(only.retailPrice)}</span>
             </>
           ) : (
             "Aplicado em todos os frascos."
@@ -1144,7 +1379,9 @@ function WholesaleLine() {
             {missing === 1 ? "Falta 1 frasco" : `Faltam ${missing} frascos`} para liberar
             {only ? (
               <>
-                {" "}· cada um sai por <span className="font-semibold text-[#FFD599]">{brl(only.wholesalePrice)}</span>
+                {" "}
+                · cada um sai por{" "}
+                <span className="font-semibold text-[#FFD599]">{brl(only.wholesalePrice)}</span>
               </>
             ) : null}
             .
@@ -1163,6 +1400,7 @@ function WholesaleLine() {
  */
 function PromoSavingsCard() {
   const cart = useCart();
+  const blackName = useBlackTitle();
   const promos = cart.promoItems.map((i) => cart.promotionOf(i)).filter(Boolean) as NonNullable<
     ReturnType<typeof cart.promotionOf>
   >[];
@@ -1175,7 +1413,12 @@ function PromoSavingsCard() {
   );
   // confete uma vez por combinação de itens em promoção (entrou um novo = festa de novo)
   const celebrate = useCelebrateOnce(
-    cart.promoSavings > 0 ? `promo-bag:${cart.promoItems.map((i) => i.key).sort().join("|")}` : null,
+    cart.promoSavings > 0
+      ? `promo-bag:${cart.promoItems
+          .map((i) => i.key)
+          .sort()
+          .join("|")}`
+      : null,
     CELEBRATION.micro,
   );
   if (!lead || !(cart.promoSavings > 0)) return null;
@@ -1197,9 +1440,12 @@ function PromoSavingsCard() {
         <CountUp value={cart.promoSavings} format={brl} />
       </p>
       <p className="mt-2 text-[13.5px] leading-snug text-[#CFCFCF]">
-        {units === 1 ? "1 perfume" : `${units} perfumes`} com preço {black ? "de Black November" : "de promoção"}.
+        {units === 1 ? "1 perfume" : `${units} perfumes`} com preço{" "}
+        {black ? `de ${blackName}` : "de promoção"}.
       </p>
-      {lead.ends_at ? <BlackCountdown endsAt={lead.ends_at} className="mt-3" label="Acaba em" /> : null}
+      {lead.ends_at ? (
+        <BlackCountdown endsAt={lead.ends_at} className="mt-3" label="Acaba em" />
+      ) : null}
     </div>
   );
 }

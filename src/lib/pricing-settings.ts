@@ -16,6 +16,8 @@ export type PublicPricingSettings = {
   prices_on_request?: boolean | null;
   /** Admin → Precificação: abertura da Home em modo Black (padrão: ligada). */
   black_hero?: boolean | null;
+  /** Admin → Precificação: nome da campanha Black (ex.: "Black Orium"). Vazio = nome da promoção. */
+  black_title?: string | null;
 };
 
 export async function fetchPublicPricingSettings(): Promise<PublicPricingSettings | null> {

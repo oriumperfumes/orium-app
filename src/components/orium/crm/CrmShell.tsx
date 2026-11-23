@@ -98,7 +98,7 @@ export function CrmShell({
   const online = bridgeOnline(pulse);
 
   return (
-    <div className="crm-frame -mx-4 flex min-w-0 flex-col gap-3 sm:mx-0 lg:h-[calc(100dvh-148px)] lg:min-h-[620px] lg:flex-row lg:gap-0 lg:overflow-hidden lg:rounded-[34px] lg:border lg:border-white/[0.06] lg:bg-[#141414]">
+    <div className="crm-frame -mx-4 flex min-w-0 flex-col gap-3 sm:mx-0 lg:-mb-12 lg:h-[calc(100dvh-136px)] lg:min-h-[620px] lg:flex-row lg:gap-0 lg:overflow-hidden lg:rounded-[34px] lg:border lg:border-white/[0.06] lg:bg-[#141414]">
       {/* menu lateral (computador) */}
       <nav
         aria-label="CRM"

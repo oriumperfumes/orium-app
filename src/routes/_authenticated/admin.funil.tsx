@@ -6,6 +6,7 @@
  * WhatsApp; sem conversa, é deduzida pelo comportamento no app.
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createPortal } from "react-dom";
 import {
   useCallback,
   useEffect,
@@ -513,25 +514,28 @@ function FunilPage() {
         </div>
       </div>
 
-      {/* cliente sendo arrastado */}
-      {drag ? (
-        <div
-          className="pointer-events-none fixed z-[90]"
-          style={{ left: drag.x - drag.dx, top: drag.y - drag.dy, width: drag.w }}
-        >
-          <div className="flex rotate-[2deg] items-center gap-2.5 rounded-[18px] bg-[#FFD599] p-2.5 text-[#15130F] shadow-[0_18px_50px_rgba(0,0,0,0.55)]">
-            <Avatar name={drag.item.name} size={38} />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13.5px] font-bold">{drag.item.name}</span>
-              <span className="block truncate text-[12px] text-[#15130F]/65">
-                {drag.over && drag.over !== drag.item.stage
-                  ? `Soltar em ${COLS.find((c) => c.v === drag.over)?.label}`
-                  : drag.item.sub}
-              </span>
-            </span>
-          </div>
-        </div>
-      ) : null}
+      {/* cliente sendo arrastado (no <body>, fora da moldura que corta) */}
+      {drag && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="pointer-events-none fixed z-[90]"
+              style={{ left: drag.x - drag.dx, top: drag.y - drag.dy, width: drag.w }}
+            >
+              <div className="flex rotate-[2deg] items-center gap-2.5 rounded-[18px] bg-[#FFD599] p-2.5 text-[#15130F] shadow-[0_18px_50px_rgba(0,0,0,0.55)]">
+                <Avatar name={drag.item.name} size={38} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13.5px] font-bold">{drag.item.name}</span>
+                  <span className="block truncate text-[12px] text-[#15130F]/65">
+                    {drag.over && drag.over !== drag.item.stage
+                      ? `Soltar em ${COLS.find((c) => c.v === drag.over)?.label}`
+                      : drag.item.sub}
+                  </span>
+                </span>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
 
       <LeadPanel lead={lead} originEl={open?.el ?? null} onClose={() => setOpen(null)} />
     </AdminShell>

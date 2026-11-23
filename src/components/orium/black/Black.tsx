@@ -4,7 +4,7 @@
  * Nada aqui decide preço: tudo recebe o que `priceUnit` já calculou.
  */
 import type { Promotion } from "@/lib/promotions";
-import { blackLabel, remaining, scarcity, useNowSeconds } from "@/lib/black";
+import { blackLabel, remaining, scarcity, useBlackTitle, useNowSeconds } from "@/lib/black";
 import { brl } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -18,7 +18,7 @@ export function BlackTag({
   size?: "xs" | "sm" | "md" | "lg";
   className?: string;
 }) {
-  const { a, b } = blackLabel(promotion);
+  const { a, b } = blackLabel(useBlackTitle(promotion));
   return (
     <span
       className={cn(
@@ -29,24 +29,38 @@ export function BlackTag({
         size === "lg" && "rounded-[9px] text-[13px]",
         className,
       )}
-      aria-label={`${a} ${b}`}
+      aria-label={`${a} ${b}`.trim()}
     >
       <span
         className={cn(
           "bg-white text-black",
-          size === "xs" ? "px-1 py-[3px]" : size === "sm" ? "px-1.5 py-1" : size === "md" ? "px-2 py-[5px]" : "px-2.5 py-1.5",
+          size === "xs"
+            ? "px-1 py-[3px]"
+            : size === "sm"
+              ? "px-1.5 py-1"
+              : size === "md"
+                ? "px-2 py-[5px]"
+                : "px-2.5 py-1.5",
         )}
       >
         {a}
       </span>
-      <span
-        className={cn(
-          "bg-black text-white",
-          size === "xs" ? "px-1 py-[3px]" : size === "sm" ? "px-1.5 py-1" : size === "md" ? "px-2 py-[5px]" : "px-2.5 py-1.5",
-        )}
-      >
-        {b}
-      </span>
+      {b ? (
+        <span
+          className={cn(
+            "bg-black text-white",
+            size === "xs"
+              ? "px-1 py-[3px]"
+              : size === "sm"
+                ? "px-1.5 py-1"
+                : size === "md"
+                  ? "px-2 py-[5px]"
+                  : "px-2.5 py-1.5",
+          )}
+        >
+          {b}
+        </span>
+      ) : null}
     </span>
   );
 }
@@ -55,7 +69,9 @@ export function BlackTag({
 export function BlackOff({ percent, className }: { percent: number; className?: string }) {
   if (!(percent > 0)) return null;
   return (
-    <span className={cn("font-extrabold tracking-[-0.01em] text-[#FFD599] tabular-nums", className)}>
+    <span
+      className={cn("font-extrabold tracking-[-0.01em] text-[#FFD599] tabular-nums", className)}
+    >
       {Math.round(percent)}% OFF
     </span>
   );
@@ -95,7 +111,8 @@ export function BlackCountdown({
   className?: string;
 }) {
   const now = useNowSeconds();
-  const end = endsAt == null ? NaN : typeof endsAt === "number" ? endsAt : new Date(endsAt).getTime();
+  const end =
+    endsAt == null ? NaN : typeof endsAt === "number" ? endsAt : new Date(endsAt).getTime();
   if (!Number.isFinite(end)) return null;
   const r = remaining(end, now);
   if (!r) {
@@ -104,9 +121,17 @@ export function BlackCountdown({
   }
 
   if (variant === "inline") {
-    const text = r.d > 0 ? `${r.d}d ${pad(r.h)}:${pad(r.m)}:${pad(r.s)}` : `${pad(r.h)}:${pad(r.m)}:${pad(r.s)}`;
+    const text =
+      r.d > 0
+        ? `${r.d}d ${pad(r.h)}:${pad(r.m)}:${pad(r.s)}`
+        : `${pad(r.h)}:${pad(r.m)}:${pad(r.s)}`;
     return (
-      <span className={cn("inline-flex items-center gap-1 text-[10.5px] font-semibold text-[#CFCFCF] tabular-nums", className)}>
+      <span
+        className={cn(
+          "inline-flex items-center gap-1 text-[10.5px] font-semibold text-[#CFCFCF] tabular-nums",
+          className,
+        )}
+      >
         <span aria-hidden className="black-dot size-1.5 rounded-full bg-[#FFD599]" />
         {label} <span className="font-bold text-white">{text}</span>
       </span>
@@ -121,31 +146,35 @@ export function BlackCountdown({
   ];
   return (
     <div className={cn("flex flex-col items-start gap-1.5", className)}>
-    <div className="flex items-center gap-2.5" role="timer" aria-live="off">
-      <span className="text-[12px] font-semibold text-[#A9A9A9]">{label}</span>
-      <span className="flex items-start gap-1">
-        {parts.map(([v, unit], i) => (
-          <span key={unit} className="flex items-start gap-1">
-            {i > 0 ? <span className="pt-[5px] text-[13px] font-bold text-[#5C5C5C]">:</span> : null}
-            <span className="flex flex-col items-center">
-              <span
-                key={unit === "seg" ? v : undefined}
-                className={cn(
-                  "grid h-[30px] min-w-[32px] place-items-center rounded-[8px] bg-black px-1 text-[15px] font-extrabold text-white tabular-nums ring-1 ring-white/12",
-                  unit === "seg" && "black-sec",
-                )}
-              >
-                {unit === "dias" ? v : pad(v)}
+      <div className="flex items-center gap-2.5" role="timer" aria-live="off">
+        <span className="text-[12px] font-semibold text-[#A9A9A9]">{label}</span>
+        <span className="flex items-start gap-1">
+          {parts.map(([v, unit], i) => (
+            <span key={unit} className="flex items-start gap-1">
+              {i > 0 ? (
+                <span className="pt-[5px] text-[13px] font-bold text-[#5C5C5C]">:</span>
+              ) : null}
+              <span className="flex flex-col items-center">
+                <span
+                  key={unit === "seg" ? v : undefined}
+                  className={cn(
+                    "grid h-[30px] min-w-[32px] place-items-center rounded-[8px] bg-black px-1 text-[15px] font-extrabold text-white tabular-nums ring-1 ring-white/12",
+                    unit === "seg" && "black-sec",
+                  )}
+                >
+                  {unit === "dias" ? v : pad(v)}
+                </span>
+                <span className="mt-1 text-[9.5px] font-semibold tracking-wide text-[#7A7A7A] uppercase">
+                  {unit}
+                </span>
               </span>
-              <span className="mt-1 text-[9.5px] font-semibold tracking-wide text-[#7A7A7A] uppercase">{unit}</span>
             </span>
-          </span>
-        ))}
-      </span>
-    </div>
-    {showDate && blackEndText(end) ? (
-      <p className="text-[11.5px] font-semibold text-[#8C8C8C]">Termina {blackEndText(end)}</p>
-    ) : null}
+          ))}
+        </span>
+      </div>
+      {showDate && blackEndText(end) ? (
+        <p className="text-[11.5px] font-semibold text-[#8C8C8C]">Termina {blackEndText(end)}</p>
+      ) : null}
     </div>
   );
 }
@@ -164,7 +193,9 @@ export function BlackScarcity({
   if (!s) return null;
   if (variant === "inline") {
     return (
-      <span className={cn("inline-flex items-center gap-1 text-[11px] font-bold text-white", className)}>
+      <span
+        className={cn("inline-flex items-center gap-1 text-[11px] font-bold text-white", className)}
+      >
         <span aria-hidden className="black-dot size-1.5 rounded-full bg-white" />
         {s.text}!
       </span>
@@ -177,10 +208,15 @@ export function BlackScarcity({
       <p className="flex items-center gap-1.5 text-[13.5px] font-bold text-white">
         <span aria-hidden className="black-dot size-2 rounded-full bg-white" />
         {s.text}!
-        <span className="font-medium text-[#A9A9A9]">{s.left === 1 ? "Depois dela, acabou." : "Garanta a sua."}</span>
+        <span className="font-medium text-[#A9A9A9]">
+          {s.left === 1 ? "Depois dela, acabou." : "Garanta a sua."}
+        </span>
       </p>
       <span className="mt-2 block h-[5px] w-full overflow-hidden rounded-full bg-white/10">
-        <span className="black-bar block h-full rounded-full bg-white" style={{ width: `${fill}%` }} />
+        <span
+          className="black-bar block h-full rounded-full bg-white"
+          style={{ width: `${fill}%` }}
+        />
       </span>
     </div>
   );
@@ -212,12 +248,17 @@ export function BlackPrice({
         <span
           className={cn(
             "leading-none font-extrabold tracking-tight text-white tabular-nums",
-            page ? "text-[36px] tracking-[-0.035em]" : "text-[18px] tab:text-[20px] @min-[220px]/card:text-[22px]",
+            page
+              ? "text-[36px] tracking-[-0.035em]"
+              : "text-[18px] tab:text-[20px] @min-[220px]/card:text-[22px]",
           )}
         >
           {brl(final)}
         </span>
-        <BlackOff percent={percent} className={page ? "text-[17px]" : "text-[12px] @min-[220px]/card:text-[13px]"} />
+        <BlackOff
+          percent={percent}
+          className={page ? "text-[17px]" : "text-[12px] @min-[220px]/card:text-[13px]"}
+        />
         {suffix}
       </p>
     </div>

@@ -22,6 +22,7 @@ import {
   pricingImpact,
   setPricesOnRequest,
   setBlackHero,
+  setBlackTitle,
   updatePricingRules,
   type PricingImpact,
 } from "@/lib/pricing-admin.functions";
@@ -36,6 +37,7 @@ import {
   PxSecondary,
   PxSwitchRow,
 } from "@/components/orium/admin/PricingUI";
+import { blackLabel } from "@/lib/black";
 import { cn } from "@/lib/utils";
 import { MoneyInput, PercentInput } from "@/components/orium/admin/PriceBits";
 
@@ -197,9 +199,33 @@ export function PricesOnRequestCard() {
 export function BlackHeroCard() {
   const qc = useQueryClient();
   const save = useServerFn(setBlackHero);
+  const saveTitle = useServerFn(setBlackTitle);
   const { settings, loading } = usePricingRules();
   const [busy, setBusy] = useState(false);
   const on = (settings as { black_hero?: boolean } | null | undefined)?.black_hero !== false;
+  const savedTitle = (
+    (settings as { black_title?: string | null } | null | undefined)?.black_title ?? ""
+  ).trim();
+  const [title, setTitle] = useState(savedTitle);
+  const [savingTitle, setSavingTitle] = useState(false);
+  useEffect(() => setTitle(savedTitle), [savedTitle]);
+  const shown = title.trim() || "Black November";
+  const tag = blackLabel(shown);
+  const commitTitle = async (next: string) => {
+    setSavingTitle(true);
+    try {
+      await saveTitle({ data: { title: next } });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["admin-pricing-rules"] }),
+        qc.invalidateQueries({ queryKey: ["pricing-settings"] }),
+      ]);
+      toast.success(`Campanha agora se chama “${next.trim() || "nome da promoção"}” no site.`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não foi possível salvar.");
+    } finally {
+      setSavingTitle(false);
+    }
+  };
 
   const toggle = async (next: boolean) => {
     setBusy(true);
@@ -209,7 +235,9 @@ export function BlackHeroCard() {
         qc.invalidateQueries({ queryKey: ["admin-pricing-rules"] }),
         qc.invalidateQueries({ queryKey: ["pricing-settings"] }),
       ]);
-      toast.success(next ? "Abertura Black ligada na Home." : "A Home voltou para a abertura normal.");
+      toast.success(
+        next ? "Abertura Black ligada na Home." : "A Home voltou para a abertura normal.",
+      );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Não foi possível salvar.");
     } finally {
@@ -218,39 +246,96 @@ export function BlackHeroCard() {
   };
 
   return (
-    <section
-      className="adm-rise dash-card flex min-w-0 flex-col gap-4 p-5 sm:flex-row sm:items-center lg:p-6"
-      style={{ ["--i" as string]: 3 }}
-    >
-      <span className="inline-flex h-7 shrink-0 items-stretch self-start overflow-hidden rounded-[7px] text-[11px] leading-none font-black tracking-[0.06em] ring-1 ring-white/25 sm:self-center">
-        <span className="flex items-center bg-white px-2 text-black">BLACK</span>
-        <span className="flex items-center bg-black px-2 text-white">NOVEMBER</span>
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <h2 className="text-[19px] font-bold tracking-[-0.02em]">Abertura da Home em modo Black</h2>
-          <span
-            className={cn(
-              "inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-bold",
-              on ? "bg-white text-black" : "bg-[#232323] text-[#A9A9A9]",
-            )}
-          >
-            {on ? "Ligada" : "Desligada"}
-          </span>
+    <section className="adm-rise dash-card min-w-0 p-5 lg:p-6" style={{ ["--i" as string]: 3 }}>
+      <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center">
+        <span className="inline-flex h-7 shrink-0 items-stretch self-start overflow-hidden rounded-[7px] text-[11px] leading-none font-black tracking-[0.06em] ring-1 ring-white/25 sm:self-center">
+          <span className="flex items-center bg-white px-2 text-black">{tag.a}</span>
+          {tag.b ? (
+            <span className="flex items-center bg-black px-2 text-white">{tag.b}</span>
+          ) : null}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h2 className="text-[19px] font-bold tracking-[-0.02em]">
+              Abertura da Home em modo Black
+            </h2>
+            <span
+              className={cn(
+                "inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-bold",
+                on ? "bg-white text-black" : "bg-[#232323] text-[#A9A9A9]",
+              )}
+            >
+              {on ? "Ligada" : "Desligada"}
+            </span>
+          </div>
+          <p className="mt-1 max-w-[70ch] text-[14px] leading-snug text-[#A9A9A9]">
+            {on
+              ? `Enquanto houver campanha com “Black” no nome, o vídeo do topo da Home mostra a ${shown}: desconto, contagem, o Asad Bourbon em oferta e o botão para a vitrine.`
+              : "A Home mostra a abertura normal (“Encontre aqui o seu próximo perfume”)."}
+          </p>
         </div>
-        <p className="mt-1 max-w-[70ch] text-[14px] leading-snug text-[#A9A9A9]">
-          {on
-            ? "Enquanto houver campanha com “Black” no nome, o vídeo do topo da Home mostra a Black November: desconto, contagem, o Asad Bourbon em oferta e o botão para a vitrine."
-            : "A Home mostra a abertura normal (“Encontre aqui o seu próximo perfume”)."}
-        </p>
+        <div className="flex shrink-0 items-center gap-3 max-sm:justify-between">
+          <span className="text-[14px] font-semibold text-[#A9A9A9] sm:hidden">
+            {on ? "Desligar" : "Ligar"}
+          </span>
+          {loading || busy ? (
+            <Loader2 className="size-6 animate-spin text-[#A9A9A9]" />
+          ) : (
+            <Switch
+              className="scale-125"
+              checked={on}
+              onCheckedChange={(v) => void toggle(v)}
+              aria-label="Abertura da Home em modo Black"
+            />
+          )}
+        </div>
       </div>
-      <div className="flex shrink-0 items-center gap-3 max-sm:justify-between">
-        <span className="text-[14px] font-semibold text-[#A9A9A9] sm:hidden">{on ? "Desligar" : "Ligar"}</span>
-        {loading || busy ? (
-          <Loader2 className="size-6 animate-spin text-[#A9A9A9]" />
-        ) : (
-          <Switch className="scale-125" checked={on} onCheckedChange={(v) => void toggle(v)} aria-label="Abertura da Home em modo Black" />
-        )}
+      <div className="mt-5 border-t border-white/[0.06] pt-5">
+        <label htmlFor="black-title" className="text-[14px] font-bold">
+          Nome da campanha no site
+        </label>
+        <p className="mt-0.5 text-[13px] text-[#8C8C8C]">
+          Aparece na abertura, na vitrine, no selo dos perfumes e no carrinho.
+        </p>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <input
+            id="black-title"
+            value={title}
+            maxLength={40}
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && title.trim() !== savedTitle) void commitTitle(title);
+            }}
+            placeholder="Ex.: Black Orium"
+            className="h-12 min-w-0 flex-1 rounded-[18px] bg-[#1A1A1A] px-4 text-[15px] font-semibold outline-none placeholder:text-[#6F6F6F] focus:ring-2 focus:ring-[#FFD599]/40"
+          />
+          <button
+            type="button"
+            disabled={savingTitle || title.trim() === savedTitle}
+            onClick={() => void commitTitle(title)}
+            className="press inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-full bg-[#FFD599] px-6 text-[14px] font-bold text-[#15130F] disabled:opacity-40"
+          >
+            {savingTitle ? <Loader2 className="size-4 animate-spin" /> : null}
+            Salvar nome
+          </button>
+        </div>
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          {["Black Orium", "Black November", "Black Friday", "Esquenta Black"].map((n) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => setTitle(n)}
+              className={cn(
+                "press h-8 rounded-full px-3 text-[12.5px] font-bold",
+                title.trim() === n
+                  ? "bg-white text-[#15130F]"
+                  : "bg-[#1F1F1F] text-[#A9A9A9] hover:text-white",
+              )}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
       </div>
     </section>
   );

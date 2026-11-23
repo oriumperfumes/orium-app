@@ -13,6 +13,7 @@
  */
 import { useSyncExternalStore } from "react";
 import { isRunning, type Promotion } from "@/lib/promotions";
+import { usePublicPricingSettings } from "@/lib/pricing-settings";
 
 export const BLACK_RE = /\bblack\b/i;
 
@@ -20,9 +21,30 @@ export function isBlack(promotion: Pick<Promotion, "name"> | null | undefined): 
   return !!promotion && BLACK_RE.test(promotion.name ?? "");
 }
 
-/** Rótulo do selo: "Black Friday" quando o nome pede, senão "Black November". */
-export function blackLabel(promotion: Pick<Promotion, "name"> | null | undefined): { a: string; b: string } {
-  return /friday/i.test(promotion?.name ?? "") ? { a: "BLACK", b: "FRIDAY" } : { a: "BLACK", b: "NOVEMBER" };
+/**
+ * Nome da campanha mostrado no site. O Admin manda (Precificação → nome da campanha);
+ * vazio, vale o nome da promoção com "Black" (ex.: "Black November").
+ */
+export function blackTitle(
+  custom: string | null | undefined,
+  promotionName?: string | null,
+): string {
+  const c = (custom ?? "").trim();
+  if (c) return c;
+  const n = (promotionName ?? "").trim();
+  return n && BLACK_RE.test(n) ? n : "Black November";
+}
+
+/** Nome da campanha em uso agora (lê a configuração pública da loja). */
+export function useBlackTitle(promotion?: Pick<Promotion, "name"> | null): string {
+  const { data } = usePublicPricingSettings();
+  return blackTitle(data?.black_title, promotion?.name);
+}
+
+/** Selo em duas partes: "Black Orium" → BLACK | ORIUM. */
+export function blackLabel(title: string): { a: string; b: string } {
+  const words = title.trim().split(/\s+/).filter(Boolean);
+  return { a: (words[0] ?? "Black").toUpperCase(), b: words.slice(1).join(" ").toUpperCase() };
 }
 
 /** Promoções Black em vigor agora. */
@@ -84,7 +106,11 @@ function subscribe(fn: () => void) {
 
 /** Hora atual que avança de segundo em segundo (0 no servidor: nada de hidratação errada). */
 export function useNowSeconds(): number {
-  return useSyncExternalStore(subscribe, () => tick, () => 0);
+  return useSyncExternalStore(
+    subscribe,
+    () => tick,
+    () => 0,
+  );
 }
 
 export type Remaining = { d: number; h: number; m: number; s: number; total: number };

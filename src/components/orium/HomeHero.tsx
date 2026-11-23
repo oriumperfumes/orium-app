@@ -8,7 +8,7 @@ import { Link } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { usePromotions } from "@/lib/use-promotions";
 import { usePublicPricingSettings } from "@/lib/pricing-settings";
-import { blackEndsAt, blackMaxPercent, runningBlack } from "@/lib/black";
+import { blackEndsAt, blackMaxPercent, runningBlack, blackTitle } from "@/lib/black";
 import { priceUnit } from "@/lib/promotions";
 import { brl, productTitle } from "@/lib/format";
 import { BlackCountdown, BlackTag } from "@/components/orium/black/Black";
@@ -37,9 +37,17 @@ function useHeroBlack() {
         .eq("active", true);
       const rows = (data ?? [])
         .filter((r) => r.retail_price != null && r.in_stock !== false)
-        .map((r) => ({ ...r, priced: priceUnit(Number(r.retail_price), promotions, { productId: r.id, variant: "FULL" }) }))
+        .map((r) => ({
+          ...r,
+          priced: priceUnit(Number(r.retail_price), promotions, {
+            productId: r.id,
+            variant: "FULL",
+          }),
+        }))
         .filter((r) => r.priced.percent > 0);
-      const asad = rows.find((r) => /asad/i.test(r.canonical_name ?? "") && /bourbon/i.test(r.canonical_name ?? ""));
+      const asad = rows.find(
+        (r) => /asad/i.test(r.canonical_name ?? "") && /bourbon/i.test(r.canonical_name ?? ""),
+      );
       return asad ?? rows.sort((a, b) => b.priced.percent - a.priced.percent)[0] ?? null;
     },
   });
@@ -47,8 +55,8 @@ function useHeroBlack() {
     on,
     pct: Math.round(blackMaxPercent(black)),
     endsAt: blackEndsAt(black),
-    title: black.some((p) => /esquenta/i.test(p.name)) ? "Esquenta Black" : /friday/i.test(black[0]?.name ?? "") ? "Black Friday" : "Black November",
-    name: black[0]?.name ?? "Black November",
+    title: blackTitle(settings?.black_title, black[0]?.name),
+    name: blackTitle(settings?.black_title, black[0]?.name),
     deal: deal ?? null,
   };
 }
@@ -57,7 +65,10 @@ function useHeroBlack() {
 function goToBlack(fallback: () => void) {
   const el = document.getElementById("black-november");
   if (!el) return fallback();
-  el.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+  el.scrollIntoView({
+    behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+    block: "start",
+  });
 }
 
 /** Vídeo do Asad Bourbon com grãos de cacau caindo — 8s, loop contínuo. */
@@ -108,8 +119,13 @@ export function HomeHero({ onExplore }: { onExplore: () => void }) {
       done = true;
       setVideoOn(true);
     };
-    const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number };
-    const idle = () => (w.requestIdleCallback ? w.requestIdleCallback(start, { timeout: 900 }) : window.setTimeout(start, 200));
+    const w = window as Window & {
+      requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number;
+    };
+    const idle = () =>
+      w.requestIdleCallback
+        ? w.requestIdleCallback(start, { timeout: 900 })
+        : window.setTimeout(start, 200);
     if (document.readyState === "complete") idle();
     else window.addEventListener("load", idle, { once: true });
     // rede lenta não pode segurar o vídeo para sempre
@@ -192,7 +208,8 @@ export function HomeHero({ onExplore }: { onExplore: () => void }) {
       if (inView) tryPlay();
     };
     const unlockEvents = ["touchstart", "pointerdown", "scroll", "keydown"] as const;
-    for (const ev of unlockEvents) window.addEventListener(ev, unlock, { passive: true, once: true });
+    for (const ev of unlockEvents)
+      window.addEventListener(ev, unlock, { passive: true, once: true });
 
     const io =
       typeof IntersectionObserver !== "undefined"
@@ -262,15 +279,27 @@ export function HomeHero({ onExplore }: { onExplore: () => void }) {
       ) : null}
 
       {/* topo escurecido para o header respirar sobre o vídeo */}
-      <div aria-hidden className="absolute inset-x-0 top-0 -z-10 h-56 bg-gradient-to-b from-black/45 to-transparent" />
+      <div
+        aria-hidden
+        className="absolute inset-x-0 top-0 -z-10 h-56 bg-gradient-to-b from-black/45 to-transparent"
+      />
       {/* base escurecida só onde o texto mora */}
-      <div aria-hidden className="absolute inset-x-0 bottom-0 -z-10 h-[46%] bg-gradient-to-t from-[#101010]/80 via-[#101010]/35 to-transparent tab:h-[60%]" />
+      <div
+        aria-hidden
+        className="absolute inset-x-0 bottom-0 -z-10 h-[46%] bg-gradient-to-t from-[#101010]/80 via-[#101010]/35 to-transparent tab:h-[60%]"
+      />
       {/* modo Black: base mais escura para o título grande e o botão */}
       {black.on ? (
-        <div aria-hidden className="absolute inset-x-0 bottom-0 -z-10 h-[64%] bg-gradient-to-t from-black/90 via-black/55 to-transparent" />
+        <div
+          aria-hidden
+          className="absolute inset-x-0 bottom-0 -z-10 h-[64%] bg-gradient-to-t from-black/90 via-black/55 to-transparent"
+        />
       ) : null}
       {/* tablet e computador: o texto fica à esquerda, então a sombra vem da esquerda */}
-      <div aria-hidden className="absolute inset-y-0 left-0 -z-10 hidden w-[62%] bg-gradient-to-r from-black/55 via-black/20 to-transparent tab:block" />
+      <div
+        aria-hidden
+        className="absolute inset-y-0 left-0 -z-10 hidden w-[62%] bg-gradient-to-r from-black/55 via-black/20 to-transparent tab:block"
+      />
 
       {black.on ? (
         <>
@@ -283,7 +312,9 @@ export function HomeHero({ onExplore }: { onExplore: () => void }) {
               aria-label={`${productTitle(black.deal.canonical_name ?? "")}: de ${brl(black.deal.priced.basePrice)} por ${brl(black.deal.priced.finalPrice)}`}
             >
               <span className="flex items-center justify-between gap-2">
-                <span className="text-[10.5px] font-bold tracking-[0.08em] text-[#A9A9A9] uppercase">No vídeo</span>
+                <span className="text-[10.5px] font-bold tracking-[0.08em] text-[#A9A9A9] uppercase">
+                  No vídeo
+                </span>
                 <span className="rounded-full bg-[#FFD599] px-2 py-0.5 text-[11.5px] font-black text-black tabular-nums">
                   -{Math.round(black.deal.priced.percent)}%
                 </span>
@@ -308,14 +339,19 @@ export function HomeHero({ onExplore }: { onExplore: () => void }) {
             <p className="hero-line mt-3 max-w-[22em] text-[16.5px] leading-snug font-semibold text-[#E5E5E5] [animation-delay:140ms] tab:mt-4 tab:text-[19px]">
               {black.pct > 0 ? (
                 <>
-                  Até <span className="font-black text-[#FFD599]">{black.pct}% OFF</span> em perfumes árabes originais.
+                  Até <span className="font-black text-[#FFD599]">{black.pct}% OFF</span> em
+                  perfumes árabes originais.
                 </>
               ) : (
                 "Preços de Black em perfumes árabes originais."
               )}
             </p>
             {black.endsAt ? (
-              <BlackCountdown endsAt={black.endsAt} label="Acaba em" className="hero-line mt-2 [animation-delay:180ms] tab:text-[13px]" />
+              <BlackCountdown
+                endsAt={black.endsAt}
+                label="Acaba em"
+                className="hero-line mt-2 [animation-delay:180ms] tab:text-[13px]"
+              />
             ) : null}
             {/* celular: a oferta do vídeo numa linha, entre o texto e o botão */}
             {black.deal ? (
@@ -325,10 +361,14 @@ export function HomeHero({ onExplore }: { onExplore: () => void }) {
                 className="hero-line press mt-4 flex w-full max-w-[360px] items-center gap-3 rounded-[16px] bg-black/70 px-3.5 py-2.5 ring-1 ring-white/12 [animation-delay:200ms] tab:hidden"
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] font-bold text-white">{productTitle(black.deal.canonical_name ?? "")}</span>
+                  <span className="block truncate text-[13px] font-bold text-white">
+                    {productTitle(black.deal.canonical_name ?? "")}
+                  </span>
                   <span className="block text-[12px] text-[#A9A9A9] tabular-nums">
                     de <span className="line-through">{brl(black.deal.priced.basePrice)}</span> por{" "}
-                    <span className="font-extrabold text-white">{brl(black.deal.priced.finalPrice)}</span>
+                    <span className="font-extrabold text-white">
+                      {brl(black.deal.priced.finalPrice)}
+                    </span>
                   </span>
                 </span>
                 <span className="shrink-0 rounded-full bg-[#FFD599] px-2.5 py-1 text-[12.5px] font-black text-black tabular-nums">
@@ -351,7 +391,7 @@ export function HomeHero({ onExplore }: { onExplore: () => void }) {
           </div>
         </>
       ) : (
-      <div className="hero-copy-depth shell absolute inset-x-0 bottom-0 pb-[calc(4rem+env(safe-area-inset-bottom))] tab:pb-16 lg:pb-[clamp(4rem,9vh,6.5rem)]">
+        <div className="hero-copy-depth shell absolute inset-x-0 bottom-0 pb-[calc(4rem+env(safe-area-inset-bottom))] tab:pb-16 lg:pb-[clamp(4rem,9vh,6.5rem)]">
           <h1 className="hero-line max-w-[11.5em] text-[32px] leading-[1.22] font-bold tracking-[-0.02em] text-balance [text-shadow:0_2px_24px_rgba(0,0,0,0.35)] tab:text-[52px] tab:leading-[1.06] tab:tracking-[-0.03em] lg:text-[clamp(56px,5.2vw,76px)]">
             Encontre aqui o seu próximo perfume.
           </h1>
