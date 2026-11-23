@@ -82,7 +82,9 @@ import {
   waLinkCustomer,
   waSend,
   waThread,
+  waAnalyze,
   waDeleteContact,
+  waInsight,
   waUpdateContact,
   type PerfumeQuote,
   type ReplySuggestion,
@@ -238,6 +240,10 @@ function ConversasPage() {
         { event: "*", schema: "public", table: "wa_bridge_state" },
         () => void qc.invalidateQueries({ queryKey: ["wa-inbox"] }),
       )
+      .on("postgres_changes", { event: "*", schema: "public", table: "wa_insights" }, (p) => {
+        void qc.invalidateQueries({ queryKey: ["wa-insight", (p.new as { jid?: string })?.jid] });
+        void qc.invalidateQueries({ queryKey: ["crm-leads"] });
+      })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "wa_messages" }, (p) => {
         void qc.invalidateQueries({ queryKey: ["wa-thread", (p.new as { jid?: string })?.jid] });
       })
@@ -1584,6 +1590,8 @@ function Assistant({
         ) : null}
       </div>
 
+      <ConversationInsight contact={contact} />
+
       {!contact.customer_id ? <LinkCustomer contact={contact} /> : null}
 
       {/* dica */}
@@ -2146,5 +2154,248 @@ function MenuItem({
       <span className="grid size-5 shrink-0 place-items-center opacity-80">{icon}</span>
       {label}
     </button>
+  );
+}
+
+/* ───────────────────────── análise da conversa ───────────────────────── */
+
+const INS_STATUS: Record<string, { label: string; cls: string }> = {
+  comprou: { label: "Comprou", cls: "bg-[#7FCF9F] text-[#15130F]" },
+  negociando: { label: "Negociando", cls: "bg-[#FFD599] text-[#15130F]" },
+  interessado: { label: "Interessado", cls: "bg-[#F2C46D]/20 text-[#F2C46D]" },
+  perdido: { label: "Perdido", cls: "bg-[#FF9A8A]/15 text-[#FFB3A7]" },
+  so_duvida: { label: "Só dúvida", cls: "bg-white/[0.08] text-[#D4D4D4]" },
+  pos_venda: { label: "Pós-venda", cls: "bg-[#7FCF9F]/15 text-[#7FCF9F]" },
+  sem_interesse: { label: "Não é venda", cls: "bg-[#232323] text-[#8C8C8C]" },
+};
+const INS_MOTIVO: Record<string, string> = {
+  preco: "Achou caro",
+  vou_pensar: "Ficou de pensar",
+  sumiu: "Parou de responder",
+  sem_estoque: "Queria algo sem estoque",
+  confianca: "Dúvida se é original",
+  entrega_prazo: "Entrega / prazo",
+  comparando: "Comparando com outra loja",
+  indeciso: "Indeciso",
+  outro: "Outro motivo",
+};
+const INTERESSE: Record<string, string> = {
+  perguntou: "perguntou",
+  quer: "quer",
+  comprou: "comprou",
+  recusou: "recusou",
+  comparou: "comparou",
+};
+
+/** O que a IA entendeu da conversa: o cliente, o que quer, por que travou e o que fazer. */
+function ConversationInsight({ contact }: { contact: WaContact }) {
+  const qc = useQueryClient();
+  const tried = useRef(false);
+  const q = useQuery({
+    queryKey: ["wa-insight", contact.jid],
+    queryFn: () => waInsight({ data: { jid: contact.jid } }),
+    staleTime: 30_000,
+  });
+  const run = useMutation({
+    mutationFn: () => waAnalyze({ data: { jid: contact.jid } }),
+    onSuccess: (row) => {
+      qc.setQueryData(["wa-insight", contact.jid], row);
+      void qc.invalidateQueries({ queryKey: ["crm-leads"] });
+      void qc.invalidateQueries({ queryKey: ["wa-inbox"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "A análise falhou agora"),
+  });
+  const row = q.data;
+  const stale =
+    !!row?.last_msg_ts &&
+    !!contact.last_message_at &&
+    new Date(contact.last_message_at) > new Date(row.last_msg_ts);
+  // primeira vez que abre uma conversa sem análise: analisa na hora
+  useEffect(() => {
+    if (tried.current || q.isPending || run.isPending) return;
+    if ((!row || !row.resumo) && contact.last_inbound_at) {
+      tried.current = true;
+      run.mutate();
+    }
+  }, [row, q.isPending, run, contact.last_inbound_at]);
+
+  const d = (row?.data ?? {}) as Partial<import("@/lib/wa-insights.server").InsightData>;
+  const st = row?.status ? INS_STATUS[row.status] : null;
+  const chance = row?.chance ?? null;
+
+  return (
+    <Block
+      title="Análise da conversa"
+      icon={<Sparkles />}
+      badge={row?.analyzed_at ? ago(row.analyzed_at) : undefined}
+    >
+      {run.isPending ? (
+        <div className="flex items-center gap-2.5 rounded-[18px] border border-[#FFD599]/25 bg-[#FFD599]/[0.06] p-3.5">
+          <Sparkles className="size-4 shrink-0 animate-pulse text-[#FFD599]" />
+          <p className="text-[13px] font-semibold text-[#FFD599]">Lendo a conversa inteira…</p>
+        </div>
+      ) : !row?.resumo ? (
+        <div className="rounded-[18px] bg-[#1C1C1C] p-3.5">
+          <p className="text-[13px] text-[#8C8C8C]">
+            {contact.last_inbound_at
+              ? "Ainda sem análise."
+              : "A análise começa quando o cliente mandar a primeira mensagem."}
+          </p>
+          {contact.last_inbound_at ? (
+            <button
+              type="button"
+              onClick={() => run.mutate()}
+              className="press mt-2.5 inline-flex h-9 items-center gap-1.5 rounded-full bg-[#FFD599] px-3.5 text-[12.5px] font-bold text-[#15130F]"
+            >
+              <Sparkles className="size-4" /> Analisar agora
+            </button>
+          ) : null}
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          <div className="rounded-[18px] bg-[#1C1C1C] p-3.5">
+            <div className="flex items-center gap-2">
+              {st ? (
+                <span className={cn("rounded-full px-2.5 py-1 text-[11.5px] font-bold", st.cls)}>
+                  {st.label}
+                </span>
+              ) : null}
+              {chance != null && row.status !== "comprou" && row.status !== "sem_interesse" ? (
+                <span className="ml-auto text-[12px] font-bold text-[#D4D4D4] tabular-nums">
+                  {chance}% de chance
+                </span>
+              ) : null}
+            </div>
+            {chance != null && row.status !== "comprou" && row.status !== "sem_interesse" ? (
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#2A2A2A]">
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${chance}%`,
+                    background: chance >= 70 ? "#7FCF9F" : chance >= 40 ? "#FFD599" : "#FF9A8A",
+                  }}
+                />
+              </div>
+            ) : null}
+            <p className="mt-2.5 text-[13.5px] leading-snug text-[#E5E5E5]">{row.resumo}</p>
+          </div>
+
+          {row.motivo && row.motivo !== "nao_se_aplica" ? (
+            <div className="rounded-[18px] border border-[#FF9A8A]/25 bg-[#FF9A8A]/[0.07] p-3">
+              <p className="text-[12.5px] font-bold text-[#FFB3A7]">
+                Por que não comprou: {INS_MOTIVO[row.motivo] ?? row.motivo}
+              </p>
+              {d.motivo_detalhe ? (
+                <p className="mt-0.5 text-[12.5px] text-[#D4D4D4]">{d.motivo_detalhe}</p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {d.alerta ? (
+            <p className="flex gap-1.5 rounded-[16px] bg-[#FF9A8A]/10 p-2.5 text-[12.5px] font-semibold text-[#FFB3A7]">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" /> {d.alerta}
+            </p>
+          ) : null}
+
+          {(d.perfumes ?? []).length ? (
+            <div>
+              <p className="mb-1.5 text-[11.5px] font-semibold text-[#8C8C8C]">
+                Perfumes na conversa
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {(d.perfumes ?? []).slice(0, 6).map((p) => (
+                  <span
+                    key={p.nome}
+                    className="rounded-full bg-[#1C1C1C] px-2.5 py-1 text-[12px] font-semibold text-[#E5E5E5]"
+                  >
+                    {p.nome}{" "}
+                    <span className="text-[#8C8C8C]">
+                      · {INTERESSE[p.interesse] ?? p.interesse}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {(d.estilo ?? []).length ||
+          d.orcamento ||
+          d.ocasiao ||
+          (d.prefere && d.prefere !== "indefinido") ||
+          d.para_quem === "presente" ? (
+            <div>
+              <p className="mb-1.5 text-[11.5px] font-semibold text-[#8C8C8C]">O que ele gosta</p>
+              <div className="flex flex-wrap gap-1.5">
+                {(d.estilo ?? []).slice(0, 5).map((e) => (
+                  <span
+                    key={e}
+                    className="rounded-full bg-[#FFD599]/12 px-2.5 py-1 text-[12px] font-bold text-[#FFD599]"
+                  >
+                    {e}
+                  </span>
+                ))}
+                {d.orcamento ? (
+                  <span className="rounded-full bg-[#1C1C1C] px-2.5 py-1 text-[12px] font-semibold text-[#E5E5E5]">
+                    💰 {d.orcamento}
+                  </span>
+                ) : null}
+                {d.ocasiao ? (
+                  <span className="rounded-full bg-[#1C1C1C] px-2.5 py-1 text-[12px] font-semibold text-[#E5E5E5]">
+                    {d.ocasiao}
+                  </span>
+                ) : null}
+                {d.prefere && d.prefere !== "indefinido" ? (
+                  <span className="rounded-full bg-[#1C1C1C] px-2.5 py-1 text-[12px] font-semibold text-[#E5E5E5]">
+                    prefere {d.prefere}
+                  </span>
+                ) : null}
+                {d.para_quem === "presente" ? (
+                  <span className="rounded-full bg-[#1C1C1C] px-2.5 py-1 text-[12px] font-semibold text-[#E5E5E5]">
+                    🎁 presente
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          {(d.objecoes ?? []).length ? (
+            <p className="text-[12.5px] text-[#D4D4D4]">
+              <span className="font-bold text-white">Objeções: </span>
+              {(d.objecoes ?? []).join(" · ")}
+            </p>
+          ) : null}
+
+          {d.proximo_passo ? (
+            <div className="rounded-[18px] border border-[#FFD599]/25 bg-[#FFD599]/[0.06] p-3">
+              <p className="text-[12.5px] font-bold text-[#FFD599]">Próximo passo</p>
+              <p className="mt-0.5 text-[13px] text-[#E5E5E5]">{d.proximo_passo}</p>
+              {d.mensagem_sugerida && row.status !== "sem_interesse" ? (
+                <button
+                  type="button"
+                  onClick={() => compose(d.mensagem_sugerida!)}
+                  className="press mt-2.5 inline-flex h-9 items-center rounded-full bg-[#FFD599] px-3.5 text-[12.5px] font-bold text-[#15130F]"
+                >
+                  Usar mensagem sugerida
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={() => run.mutate()}
+            className={cn(
+              "press inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[12.5px] font-bold",
+              stale
+                ? "bg-[#FFD599] text-[#15130F]"
+                : "bg-white/[0.07] text-[#D4D4D4] hover:text-white",
+            )}
+          >
+            <RefreshCw className="size-3.5" />{" "}
+            {stale ? "Mensagens novas: analisar de novo" : "Analisar de novo"}
+          </button>
+        </div>
+      )}
+    </Block>
   );
 }

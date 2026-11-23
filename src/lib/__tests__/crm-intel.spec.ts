@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nextAction, profileOf, scoreLead, segmentsOf, type LeadRaw } from "../crm-intel";
+import { enrich, factsOf, nextAction, profileOf, scoreLead, segmentsOf, taskOf, type LeadRaw } from "../crm-intel";
 import { buildMentionIndex, findMentions } from "../perfume-mentions";
 
 const NOW = new Date("2026-11-23T15:00:00Z").getTime();
@@ -101,6 +101,45 @@ describe("crm-intel", () => {
     const p = profileOf(r, NOW).join(" | ");
     expect(p).toMatch(/Compra mais decant/);
     expect(p).toMatch(/Faixa confortável/);
+  });
+});
+
+describe("análise da conversa", () => {
+  const ins = (p: Record<string, unknown>) =>
+    base({
+      insight: {
+        status: "interessado",
+        chance: 65,
+        motivo: "preco",
+        resumo: "Quis o Khamrah mas achou caro.",
+        analyzed_at: ago(1),
+        data: { motivo_detalhe: "achou R$ 340 alto", mensagem_sugerida: "Oi! Consigo te mostrar o decant do Khamrah. Quer?", estilo: ["doce", "amadeirado"], orcamento: "até R$ 250" },
+        ...p,
+      },
+    });
+
+  it("achou caro vira tarefa de contornar preço com a mensagem da conversa", () => {
+    const [l] = enrich([ins({})], NOW);
+    expect(taskOf(l!)).toBe("price");
+    expect(l!.action.message).toContain("decant");
+    expect(l!.reasons.join(" ")).toMatch(/Achou caro: achou R\$ 340 alto/);
+  });
+
+  it("sumiu vira retomar conversa", () => {
+    const [l] = enrich([ins({ motivo: "sumiu" })], NOW);
+    expect(taskOf(l!)).toBe("revive");
+  });
+
+  it("estilo e orçamento entram no perfil e nos fatos", () => {
+    const r = ins({});
+    expect(profileOf(r, NOW).join(" | ")).toMatch(/Estilo: doce, amadeirado/);
+    const [l] = enrich([r], NOW);
+    expect(factsOf(l!, NOW).map((f) => f.label)).toEqual(expect.arrayContaining(["Estilo", "Orçamento", "Chance de compra"]));
+  });
+
+  it("análise velha (mais de 21 dias) não manda", () => {
+    const [l] = enrich([ins({ analyzed_at: ago(30) })], NOW);
+    expect(taskOf(l!)).not.toBe("price");
   });
 });
 

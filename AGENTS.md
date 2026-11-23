@@ -67,3 +67,5 @@
 - CRM: `CrmShell` (menu lateral) envolve as rotas de cliente via AdminShell; Hoje = `/admin/leads`, painel do cliente = `crm/LeadPanel.tsx`; Funil tem arrasto livre (pointer events).
 - WhatsApp: tabelas `wa_*`; a ponte `bridge/` (Baileys, conexão não oficial) só fala com o banco por `wa_bridge_*` + token (hash em `wa_bridge_state`). Enviar = inserir em `wa_outbox`; nunca envio em massa ou automático.
 - Perfume citado no chat: `src/lib/perfume-mentions.ts` + `crmPerfumeQuote` (preço/custo via ferramentas do Copilot).
+- Análise de conversas (IA): `src/lib/wa-insights.server.ts` grava em `wa_insights`; roda sozinha via pg_cron (`wa-insights-5min` → `/api/public/hooks/wa-insights`) e no botão "Analisar". Cria ficha no CRM para conversa com interesse real. `crm_leads()` traz `insight`; `crm-intel` usa nas tarefas (price/revive/negotiate), perfil e fatos.
+- Resposta ideal: método em `src/lib/sales-playbook.ts` (técnicas com base em pesquisa, nada inventado).

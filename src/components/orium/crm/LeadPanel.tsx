@@ -177,6 +177,25 @@ export function LeadPanel({
                   </div>
                 </Step>
 
+                {l.insight?.resumo ? (
+                  <section className="rounded-[22px] bg-[#1A1A1A] p-4">
+                    <p className="text-[12.5px] font-bold text-[#FFD599]">O que a conversa no WhatsApp diz</p>
+                    <p className="mt-1 text-[14px] leading-snug text-[#E5E5E5]">{l.insight.resumo}</p>
+                    {(l.insight.data?.estilo ?? []).length ? (
+                      <div className="mt-2.5 flex flex-wrap gap-1.5">
+                        {(l.insight.data?.estilo ?? []).slice(0, 5).map((e) => (
+                          <span key={e} className="rounded-full bg-[#FFD599]/12 px-2.5 py-1 text-[12px] font-bold text-[#FFD599]">
+                            {e}
+                          </span>
+                        ))}
+                        {l.insight.data?.orcamento ? (
+                          <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[12px] font-semibold text-[#E5E5E5]">💰 {l.insight.data.orcamento}</span>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </section>
+                ) : null}
+
                 {/* 2. mensagem */}
                 <Step n={2} title="Mensagem" hint="Escolha uma versão e ajuste se quiser">
                   <div className="adm-scroll -mx-1 mb-2.5 flex gap-1.5 overflow-x-auto px-1">

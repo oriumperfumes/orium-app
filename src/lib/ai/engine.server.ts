@@ -15,6 +15,7 @@ export type AiFeature =
   | "catalog_research"
   | "fragrance"
   | "crm_reply"
+  | "crm_insight"
   | "test";
 
 export type AiConfig = {

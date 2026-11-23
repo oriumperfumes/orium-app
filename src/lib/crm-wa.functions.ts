@@ -535,6 +535,11 @@ export const crmSuggestReply = createServerFn({ method: "POST" })
     const history = (
       (msgs ?? []) as Array<{ from_me: boolean; body: string | null; kind: string; ts: string }>
     ).reverse();
+    const { data: insightRow } = await db
+      .from("wa_insights")
+      .select("data")
+      .eq("jid", data.jid)
+      .maybeSingle();
     const inbound = history
       .filter((m) => !m.from_me && m.body)
       .slice(-8)
@@ -558,7 +563,10 @@ export const crmSuggestReply = createServerFn({ method: "POST" })
     });
     const ids = quotes.map((q) => q.product_id);
     const [proof, promos] = ids.length
-      ? await Promise.all([salesProof(db, ids).catch(() => ({})), promoEnds(db, ids).catch(() => ({}))])
+      ? await Promise.all([
+          salesProof(db, ids).catch(() => ({})),
+          promoEnds(db, ids).catch(() => ({})),
+        ])
       : [{}, {}];
     const pix = ps?.pix_discount_active ? Number(ps.pix_discount_percent ?? 0) : 0;
     const waitingMin =
@@ -614,6 +622,7 @@ export const crmSuggestReply = createServerFn({ method: "POST" })
         produtos: "originais e lacrados",
         site: "https://oriumperfumes.com",
       },
+      analise_da_conversa: insightRow?.data ?? null,
       conversa: history
         .slice(-20)
         .map((m) => `${m.from_me ? "Orium" : "Cliente"}: ${m.body || `[${m.kind}]`}`),
@@ -663,4 +672,46 @@ export const waDeleteContact = createServerFn({ method: "POST" })
     const { error } = await ctx.adminDb.from("wa_contacts").delete().eq("jid", data.jid);
     if (error) throw new Error(error.message);
     return { ok: true };
+  });
+
+// ---------- análise da conversa (IA) ----------
+
+export type WaInsight = {
+  jid: string;
+  analyzed_at: string;
+  last_msg_ts: string | null;
+  status: string | null;
+  chance: number | null;
+  motivo: string | null;
+  resumo: string | null;
+  data: import("@/lib/wa-insights.server").InsightData | Record<string, never>;
+  error: string | null;
+};
+
+export const waInsight = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { jid: string }) => ({ jid: String(d.jid) }))
+  .handler(async ({ data, context }) => {
+    const { data: row } = await (context.supabase as any)
+      .from("wa_insights")
+      .select("*")
+      .eq("jid", data.jid)
+      .maybeSingle();
+    return (row ?? null) as WaInsight | null;
+  });
+
+/** Analisa a conversa agora (botão "Analisar de novo"). */
+export const waAnalyze = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { jid: string }) => ({ jid: String(d.jid) }))
+  .handler(async ({ data, context }) => {
+    const ctx = await staffCtx(context as any);
+    const { analyzeConversation } = await import("@/lib/wa-insights.server");
+    await analyzeConversation(ctx.adminDb, data.jid);
+    const { data: row } = await ctx.adminDb
+      .from("wa_insights")
+      .select("*")
+      .eq("jid", data.jid)
+      .maybeSingle();
+    return (row ?? null) as WaInsight | null;
   });

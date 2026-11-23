@@ -56,6 +56,7 @@ import { Route as ApiPublicHooksCatalogHygieneRouteImport } from './routes/api/p
 import { Route as ApiPublicHooksConsultEnrichRouteImport } from './routes/api/public/hooks/consult-enrich'
 import { Route as ApiPublicHooksEnrichFragrancesRouteImport } from './routes/api/public/hooks/enrich-fragrances'
 import { Route as ApiPublicHooksSyncSuppliersRouteImport } from './routes/api/public/hooks/sync-suppliers'
+import { Route as ApiPublicHooksWaInsightsRouteImport } from './routes/api/public/hooks/wa-insights'
 import { Route as ApiPublicHooksWhatsappRouteImport } from './routes/api/public/hooks/whatsapp'
 
 const IndexRoute = IndexRouteImport.update({
@@ -319,6 +320,12 @@ const ApiPublicHooksSyncSuppliersRoute =
     path: '/api/public/hooks/sync-suppliers',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksWaInsightsRoute =
+  ApiPublicHooksWaInsightsRouteImport.update({
+    id: '/api/public/hooks/wa-insights',
+    path: '/api/public/hooks/wa-insights',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksWhatsappRoute = ApiPublicHooksWhatsappRouteImport.update({
   id: '/api/public/hooks/whatsapp',
   path: '/api/public/hooks/whatsapp',
@@ -372,6 +379,7 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/consult-enrich': typeof ApiPublicHooksConsultEnrichRoute
   '/api/public/hooks/enrich-fragrances': typeof ApiPublicHooksEnrichFragrancesRoute
   '/api/public/hooks/sync-suppliers': typeof ApiPublicHooksSyncSuppliersRoute
+  '/api/public/hooks/wa-insights': typeof ApiPublicHooksWaInsightsRoute
   '/api/public/hooks/whatsapp': typeof ApiPublicHooksWhatsappRoute
 }
 export interface FileRoutesByTo {
@@ -420,6 +428,7 @@ export interface FileRoutesByTo {
   '/api/public/hooks/consult-enrich': typeof ApiPublicHooksConsultEnrichRoute
   '/api/public/hooks/enrich-fragrances': typeof ApiPublicHooksEnrichFragrancesRoute
   '/api/public/hooks/sync-suppliers': typeof ApiPublicHooksSyncSuppliersRoute
+  '/api/public/hooks/wa-insights': typeof ApiPublicHooksWaInsightsRoute
   '/api/public/hooks/whatsapp': typeof ApiPublicHooksWhatsappRoute
 }
 export interface FileRoutesById {
@@ -471,6 +480,7 @@ export interface FileRoutesById {
   '/api/public/hooks/consult-enrich': typeof ApiPublicHooksConsultEnrichRoute
   '/api/public/hooks/enrich-fragrances': typeof ApiPublicHooksEnrichFragrancesRoute
   '/api/public/hooks/sync-suppliers': typeof ApiPublicHooksSyncSuppliersRoute
+  '/api/public/hooks/wa-insights': typeof ApiPublicHooksWaInsightsRoute
   '/api/public/hooks/whatsapp': typeof ApiPublicHooksWhatsappRoute
 }
 export interface FileRouteTypes {
@@ -522,6 +532,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/consult-enrich'
     | '/api/public/hooks/enrich-fragrances'
     | '/api/public/hooks/sync-suppliers'
+    | '/api/public/hooks/wa-insights'
     | '/api/public/hooks/whatsapp'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -570,6 +581,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/consult-enrich'
     | '/api/public/hooks/enrich-fragrances'
     | '/api/public/hooks/sync-suppliers'
+    | '/api/public/hooks/wa-insights'
     | '/api/public/hooks/whatsapp'
   id:
     | '__root__'
@@ -620,6 +632,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/consult-enrich'
     | '/api/public/hooks/enrich-fragrances'
     | '/api/public/hooks/sync-suppliers'
+    | '/api/public/hooks/wa-insights'
     | '/api/public/hooks/whatsapp'
   fileRoutesById: FileRoutesById
 }
@@ -644,6 +657,7 @@ export interface RootRouteChildren {
   ApiPublicHooksConsultEnrichRoute: typeof ApiPublicHooksConsultEnrichRoute
   ApiPublicHooksEnrichFragrancesRoute: typeof ApiPublicHooksEnrichFragrancesRoute
   ApiPublicHooksSyncSuppliersRoute: typeof ApiPublicHooksSyncSuppliersRoute
+  ApiPublicHooksWaInsightsRoute: typeof ApiPublicHooksWaInsightsRoute
   ApiPublicHooksWhatsappRoute: typeof ApiPublicHooksWhatsappRoute
 }
 
@@ -978,6 +992,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksSyncSuppliersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/wa-insights': {
+      id: '/api/public/hooks/wa-insights'
+      path: '/api/public/hooks/wa-insights'
+      fullPath: '/api/public/hooks/wa-insights'
+      preLoaderRoute: typeof ApiPublicHooksWaInsightsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/whatsapp': {
       id: '/api/public/hooks/whatsapp'
       path: '/api/public/hooks/whatsapp'
@@ -1095,6 +1116,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicHooksConsultEnrichRoute: ApiPublicHooksConsultEnrichRoute,
   ApiPublicHooksEnrichFragrancesRoute: ApiPublicHooksEnrichFragrancesRoute,
   ApiPublicHooksSyncSuppliersRoute: ApiPublicHooksSyncSuppliersRoute,
+  ApiPublicHooksWaInsightsRoute: ApiPublicHooksWaInsightsRoute,
   ApiPublicHooksWhatsappRoute: ApiPublicHooksWhatsappRoute,
 }
 export const routeTree = rootRouteImport

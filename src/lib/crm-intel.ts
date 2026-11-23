@@ -9,6 +9,15 @@ export type LeadRaw = {
   name: string | null;
   /** foto de perfil do WhatsApp */
   avatar?: string | null;
+  /** análise mais recente da conversa do WhatsApp (IA) */
+  insight?: {
+    status: string | null;
+    chance: number | null;
+    motivo: string | null;
+    resumo: string | null;
+    analyzed_at: string;
+    data: Partial<import("@/lib/wa-insights.server").InsightData>;
+  } | null;
   phone: string | null;
   user_id: string | null;
   created_at: string;
@@ -151,6 +160,25 @@ const brl = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 export const firstName = (name: string | null) => (name ?? "").trim().split(/\s+/)[0] || "";
 
+/** Análise da conversa ainda vale (até 21 dias) e é de venda. */
+export function liveInsight(r: LeadRaw, now = Date.now()) {
+  const i = r.insight;
+  if (!i?.resumo || daysSince(i.analyzed_at, now) > 21) return null;
+  if (i.status === "sem_interesse") return null;
+  return i;
+}
+
+const MOTIVO_TXT: Record<string, string> = {
+  preco: "Achou caro",
+  vou_pensar: "Disse que ia pensar",
+  sumiu: "Parou de responder",
+  sem_estoque: "Queria um perfume sem estoque",
+  confianca: "Teve dúvida se é original",
+  entrega_prazo: "Travou na entrega/prazo",
+  comparando: "Está comparando com outra loja",
+  indeciso: "Ficou indeciso",
+};
+
 /** Aguardando resposta: a última mensagem da conversa veio do cliente. */
 export function awaitingReply(r: LeadRaw) {
   return !!r.wa?.last_inbound_at && r.wa.last_from_me === false;
@@ -234,6 +262,14 @@ export function scoreLead(
 
   if (repurchaseDue(r, now)) add(20, "Chegou a época de recompra");
   if (upgradeCandidate(r, now)) add(10, "Provou um decant recentemente");
+  const ins = liveInsight(r, now);
+  if (ins && ins.status !== "comprou" && ins.status !== "pos_venda") {
+    const ch = ins.chance ?? 0;
+    if (ch >= 70) add(25, `Conversa indica compra provável (${ch}%)`);
+    else if (ch >= 40) add(12, `Conversa com interesse real (${ch}%)`);
+    const why = ins.motivo ? MOTIVO_TXT[ins.motivo] : null;
+    if (why) reasons.push(ins.data?.motivo_detalhe ? `${why}: ${ins.data.motivo_detalhe}` : why);
+  }
   if (r.orders_count >= 3) add(10, "Cliente fiel");
   else if (r.orders_count >= 1) add(5, "Já comprou antes");
 
@@ -300,6 +336,18 @@ export function profileOf(r: LeadRaw, now = Date.now()): string[] {
       out.push("Compra a preço cheio: não precisa de desconto");
   }
   if (r.top_brands?.length) out.push(`Marcas preferidas: ${r.top_brands.join(", ")}`);
+  const ins = liveInsight(r, now);
+  if (ins?.data) {
+    const d = ins.data;
+    if (d.estilo?.length) out.unshift(`Estilo: ${d.estilo.slice(0, 4).join(", ")}`);
+    if (d.orcamento) out.push(`Orçamento dito: ${d.orcamento}`);
+    if (d.ocasiao) out.push(`Ocasião: ${d.ocasiao}`);
+    if (d.para_quem === "presente") out.push("Está comprando para presente");
+    const quer = (d.perfumes ?? [])
+      .filter((p) => p.interesse === "quer" || p.interesse === "perguntou")
+      .map((p) => p.nome);
+    if (quer.length) out.unshift(`Quer: ${quer.slice(0, 3).join(", ")}`);
+  }
   if (r.avg_interval_days && r.avg_interval_days > 3) {
     const next = new Date(new Date(r.last_order_at!).getTime() + r.avg_interval_days * DAY);
     out.push(
@@ -345,6 +393,30 @@ export function nextAction(r: LeadRaw, now = Date.now()): NextAction {
       why: "Pediu aviso e o perfume está disponível",
       message: `${hi} O ${ready.name} que você queria acabou de chegar aqui na Orium ✨ Quer que eu separe um pra você?`,
     };
+  const ins = liveInsight(r, now);
+  if (
+    ins?.data?.mensagem_sugerida &&
+    ["interessado", "negociando", "perdido", "so_duvida"].includes(ins.status ?? "")
+  ) {
+    const m = ins.motivo ?? "";
+    const key =
+      m === "preco"
+        ? "price"
+        : ["vou_pensar", "sumiu", "indeciso", "comparando"].includes(m) || ins.status === "perdido"
+          ? "revive"
+          : "negotiate";
+    return {
+      key,
+      title:
+        key === "price"
+          ? "Contornar o preço"
+          : key === "revive"
+            ? "Retomar a conversa"
+            : "Avançar a negociação",
+      why: ins.data.motivo_detalhe || ins.resumo || "Conversa parada no WhatsApp",
+      message: ins.data.mensagem_sugerida,
+    };
+  }
   if (r.cart && r.cart.items > 0) {
     const item = r.cart.names?.[0];
     return {
@@ -424,6 +496,9 @@ export type TaskKey =
   | "checkout"
   | "cart"
   | "arrived"
+  | "price"
+  | "revive"
+  | "negotiate"
   | "stuck"
   | "upgrade"
   | "repurchase"
@@ -436,6 +511,12 @@ export const TASKS: Record<TaskKey, { title: string; hint: string }> = {
   checkout: { title: "Ajudar a fechar", hint: "Estão finalizando o pedido agora" },
   cart: { title: "Recuperar carrinho", hint: "Separaram perfumes e não fecharam" },
   arrived: { title: "Avisar que chegou", hint: "Pediram aviso e o perfume chegou" },
+  price: { title: "Contornar o preço", hint: "Acharam caro na conversa; ofereça decant ou Pix" },
+  revive: { title: "Retomar a conversa", hint: "Ficaram de pensar ou pararam de responder" },
+  negotiate: {
+    title: "Avançar a negociação",
+    hint: "Conversa com interesse real, falta o empurrão",
+  },
   stuck: { title: "Destravar interesse", hint: "Voltaram várias vezes no mesmo perfume" },
   upgrade: { title: "Oferecer o frasco", hint: "Provaram no decant há pouco tempo" },
   repurchase: { title: "Puxar recompra", hint: "Chegou a época em que costumam voltar" },
@@ -447,6 +528,9 @@ export const TASK_ORDER: TaskKey[] = [
   "checkout",
   "cart",
   "arrived",
+  "price",
+  "negotiate",
+  "revive",
   "stuck",
   "upgrade",
   "repurchase",
@@ -534,6 +618,15 @@ export function factsOf(l: Lead, now = Date.now()): Fact[] {
   }
   if (l.views?.d7) f.push({ label: "Visitas na semana", value: `${l.views.d7} perfumes` });
   if (l.top_brands?.length) f.push({ label: "Marcas", value: l.top_brands.slice(0, 2).join(", ") });
+  const ins = liveInsight(l, now);
+  if (ins?.data) {
+    if (ins.data.estilo?.length)
+      f.unshift({ label: "Estilo", value: ins.data.estilo.slice(0, 3).join(", "), strong: true });
+    if (ins.data.orcamento) f.push({ label: "Orçamento", value: ins.data.orcamento });
+    if (ins.data.ocasiao) f.push({ label: "Ocasião", value: ins.data.ocasiao });
+    if (ins.chance != null && ins.status !== "comprou")
+      f.push({ label: "Chance de compra", value: `${ins.chance}%` });
+  }
   return f;
 }
 
