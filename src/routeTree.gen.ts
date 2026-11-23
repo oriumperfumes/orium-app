@@ -28,11 +28,13 @@ import { Route as AuthenticatedAdminAtendimentoRouteImport } from './routes/_aut
 import { Route as AuthenticatedAdminClientesRouteImport } from './routes/_authenticated/admin.clientes'
 import { Route as AuthenticatedAdminConfiguracoesRouteImport } from './routes/_authenticated/admin.configuracoes'
 import { Route as AuthenticatedAdminConversaoRouteImport } from './routes/_authenticated/admin.conversao'
+import { Route as AuthenticatedAdminConversasRouteImport } from './routes/_authenticated/admin.conversas'
 import { Route as AuthenticatedAdminDiagnosticoRouteImport } from './routes/_authenticated/admin.diagnostico'
 import { Route as AuthenticatedAdminEstoqueRouteImport } from './routes/_authenticated/admin.estoque'
 import { Route as AuthenticatedAdminFornecedoresRouteImport } from './routes/_authenticated/admin.fornecedores'
 import { Route as AuthenticatedAdminFornecedoresRotaRouteImport } from './routes/_authenticated/admin.fornecedores-rota'
 import { Route as AuthenticatedAdminIntegridadeRouteImport } from './routes/_authenticated/admin.integridade'
+import { Route as AuthenticatedAdminLeadsRouteImport } from './routes/_authenticated/admin.leads'
 import { Route as AuthenticatedAdminManutencaoRouteImport } from './routes/_authenticated/admin.manutencao'
 import { Route as AuthenticatedAdminMarcasRouteImport } from './routes/_authenticated/admin.marcas'
 import { Route as AuthenticatedAdminNegociacaoRouteImport } from './routes/_authenticated/admin.negociacao'
@@ -154,6 +156,12 @@ const AuthenticatedAdminConversaoRoute =
     path: '/conversao',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAdminConversasRoute =
+  AuthenticatedAdminConversasRouteImport.update({
+    id: '/conversas',
+    path: '/conversas',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
 const AuthenticatedAdminDiagnosticoRoute =
   AuthenticatedAdminDiagnosticoRouteImport.update({
     id: '/diagnostico',
@@ -184,6 +192,11 @@ const AuthenticatedAdminIntegridadeRoute =
     path: '/integridade',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAdminLeadsRoute = AuthenticatedAdminLeadsRouteImport.update({
+  id: '/leads',
+  path: '/leads',
+  getParentRoute: () => AuthenticatedAdminRoute,
+} as any)
 const AuthenticatedAdminManutencaoRoute =
   AuthenticatedAdminManutencaoRouteImport.update({
     id: '/manutencao',
@@ -324,11 +337,13 @@ export interface FileRoutesByFullPath {
   '/admin/clientes': typeof AuthenticatedAdminClientesRoute
   '/admin/configuracoes': typeof AuthenticatedAdminConfiguracoesRoute
   '/admin/conversao': typeof AuthenticatedAdminConversaoRoute
+  '/admin/conversas': typeof AuthenticatedAdminConversasRoute
   '/admin/diagnostico': typeof AuthenticatedAdminDiagnosticoRoute
   '/admin/estoque': typeof AuthenticatedAdminEstoqueRoute
   '/admin/fornecedores': typeof AuthenticatedAdminFornecedoresRoute
   '/admin/fornecedores-rota': typeof AuthenticatedAdminFornecedoresRotaRoute
   '/admin/integridade': typeof AuthenticatedAdminIntegridadeRoute
+  '/admin/leads': typeof AuthenticatedAdminLeadsRoute
   '/admin/manutencao': typeof AuthenticatedAdminManutencaoRoute
   '/admin/marcas': typeof AuthenticatedAdminMarcasRoute
   '/admin/negociacao': typeof AuthenticatedAdminNegociacaoRoute
@@ -369,11 +384,13 @@ export interface FileRoutesByTo {
   '/admin/clientes': typeof AuthenticatedAdminClientesRoute
   '/admin/configuracoes': typeof AuthenticatedAdminConfiguracoesRoute
   '/admin/conversao': typeof AuthenticatedAdminConversaoRoute
+  '/admin/conversas': typeof AuthenticatedAdminConversasRoute
   '/admin/diagnostico': typeof AuthenticatedAdminDiagnosticoRoute
   '/admin/estoque': typeof AuthenticatedAdminEstoqueRoute
   '/admin/fornecedores': typeof AuthenticatedAdminFornecedoresRoute
   '/admin/fornecedores-rota': typeof AuthenticatedAdminFornecedoresRotaRoute
   '/admin/integridade': typeof AuthenticatedAdminIntegridadeRoute
+  '/admin/leads': typeof AuthenticatedAdminLeadsRoute
   '/admin/manutencao': typeof AuthenticatedAdminManutencaoRoute
   '/admin/marcas': typeof AuthenticatedAdminMarcasRoute
   '/admin/negociacao': typeof AuthenticatedAdminNegociacaoRoute
@@ -417,11 +434,13 @@ export interface FileRoutesById {
   '/_authenticated/admin/clientes': typeof AuthenticatedAdminClientesRoute
   '/_authenticated/admin/configuracoes': typeof AuthenticatedAdminConfiguracoesRoute
   '/_authenticated/admin/conversao': typeof AuthenticatedAdminConversaoRoute
+  '/_authenticated/admin/conversas': typeof AuthenticatedAdminConversasRoute
   '/_authenticated/admin/diagnostico': typeof AuthenticatedAdminDiagnosticoRoute
   '/_authenticated/admin/estoque': typeof AuthenticatedAdminEstoqueRoute
   '/_authenticated/admin/fornecedores': typeof AuthenticatedAdminFornecedoresRoute
   '/_authenticated/admin/fornecedores-rota': typeof AuthenticatedAdminFornecedoresRotaRoute
   '/_authenticated/admin/integridade': typeof AuthenticatedAdminIntegridadeRoute
+  '/_authenticated/admin/leads': typeof AuthenticatedAdminLeadsRoute
   '/_authenticated/admin/manutencao': typeof AuthenticatedAdminManutencaoRoute
   '/_authenticated/admin/marcas': typeof AuthenticatedAdminMarcasRoute
   '/_authenticated/admin/negociacao': typeof AuthenticatedAdminNegociacaoRoute
@@ -465,11 +484,13 @@ export interface FileRouteTypes {
     | '/admin/clientes'
     | '/admin/configuracoes'
     | '/admin/conversao'
+    | '/admin/conversas'
     | '/admin/diagnostico'
     | '/admin/estoque'
     | '/admin/fornecedores'
     | '/admin/fornecedores-rota'
     | '/admin/integridade'
+    | '/admin/leads'
     | '/admin/manutencao'
     | '/admin/marcas'
     | '/admin/negociacao'
@@ -510,11 +531,13 @@ export interface FileRouteTypes {
     | '/admin/clientes'
     | '/admin/configuracoes'
     | '/admin/conversao'
+    | '/admin/conversas'
     | '/admin/diagnostico'
     | '/admin/estoque'
     | '/admin/fornecedores'
     | '/admin/fornecedores-rota'
     | '/admin/integridade'
+    | '/admin/leads'
     | '/admin/manutencao'
     | '/admin/marcas'
     | '/admin/negociacao'
@@ -557,11 +580,13 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/clientes'
     | '/_authenticated/admin/configuracoes'
     | '/_authenticated/admin/conversao'
+    | '/_authenticated/admin/conversas'
     | '/_authenticated/admin/diagnostico'
     | '/_authenticated/admin/estoque'
     | '/_authenticated/admin/fornecedores'
     | '/_authenticated/admin/fornecedores-rota'
     | '/_authenticated/admin/integridade'
+    | '/_authenticated/admin/leads'
     | '/_authenticated/admin/manutencao'
     | '/_authenticated/admin/marcas'
     | '/_authenticated/admin/negociacao'
@@ -745,6 +770,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminConversaoRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/admin/conversas': {
+      id: '/_authenticated/admin/conversas'
+      path: '/conversas'
+      fullPath: '/admin/conversas'
+      preLoaderRoute: typeof AuthenticatedAdminConversasRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/_authenticated/admin/diagnostico': {
       id: '/_authenticated/admin/diagnostico'
       path: '/diagnostico'
@@ -778,6 +810,13 @@ declare module '@tanstack/react-router' {
       path: '/integridade'
       fullPath: '/admin/integridade'
       preLoaderRoute: typeof AuthenticatedAdminIntegridadeRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/leads': {
+      id: '/_authenticated/admin/leads'
+      path: '/leads'
+      fullPath: '/admin/leads'
+      preLoaderRoute: typeof AuthenticatedAdminLeadsRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
     '/_authenticated/admin/manutencao': {
@@ -950,11 +989,13 @@ interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminClientesRoute: typeof AuthenticatedAdminClientesRoute
   AuthenticatedAdminConfiguracoesRoute: typeof AuthenticatedAdminConfiguracoesRoute
   AuthenticatedAdminConversaoRoute: typeof AuthenticatedAdminConversaoRoute
+  AuthenticatedAdminConversasRoute: typeof AuthenticatedAdminConversasRoute
   AuthenticatedAdminDiagnosticoRoute: typeof AuthenticatedAdminDiagnosticoRoute
   AuthenticatedAdminEstoqueRoute: typeof AuthenticatedAdminEstoqueRoute
   AuthenticatedAdminFornecedoresRoute: typeof AuthenticatedAdminFornecedoresRoute
   AuthenticatedAdminFornecedoresRotaRoute: typeof AuthenticatedAdminFornecedoresRotaRoute
   AuthenticatedAdminIntegridadeRoute: typeof AuthenticatedAdminIntegridadeRoute
+  AuthenticatedAdminLeadsRoute: typeof AuthenticatedAdminLeadsRoute
   AuthenticatedAdminManutencaoRoute: typeof AuthenticatedAdminManutencaoRoute
   AuthenticatedAdminMarcasRoute: typeof AuthenticatedAdminMarcasRoute
   AuthenticatedAdminNegociacaoRoute: typeof AuthenticatedAdminNegociacaoRoute
@@ -975,12 +1016,14 @@ const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
   AuthenticatedAdminClientesRoute: AuthenticatedAdminClientesRoute,
   AuthenticatedAdminConfiguracoesRoute: AuthenticatedAdminConfiguracoesRoute,
   AuthenticatedAdminConversaoRoute: AuthenticatedAdminConversaoRoute,
+  AuthenticatedAdminConversasRoute: AuthenticatedAdminConversasRoute,
   AuthenticatedAdminDiagnosticoRoute: AuthenticatedAdminDiagnosticoRoute,
   AuthenticatedAdminEstoqueRoute: AuthenticatedAdminEstoqueRoute,
   AuthenticatedAdminFornecedoresRoute: AuthenticatedAdminFornecedoresRoute,
   AuthenticatedAdminFornecedoresRotaRoute:
     AuthenticatedAdminFornecedoresRotaRoute,
   AuthenticatedAdminIntegridadeRoute: AuthenticatedAdminIntegridadeRoute,
+  AuthenticatedAdminLeadsRoute: AuthenticatedAdminLeadsRoute,
   AuthenticatedAdminManutencaoRoute: AuthenticatedAdminManutencaoRoute,
   AuthenticatedAdminMarcasRoute: AuthenticatedAdminMarcasRoute,
   AuthenticatedAdminNegociacaoRoute: AuthenticatedAdminNegociacaoRoute,

@@ -95,10 +95,12 @@ export const NAV_HUBS: NavHub[] = [
     ],
   },
   {
-    to: "/admin/clientes",
+    to: "/admin/leads",
     label: "Clientes",
     icon: Users,
     sections: [
+      { to: "/admin/leads", label: "Leads" },
+      { to: "/admin/conversas", label: "Conversas" },
       { to: "/admin/clientes", label: "Clientes" },
       { to: "/admin/aovivo", label: "Ao vivo" },
       { to: "/admin/conversao", label: "Conversão" },
