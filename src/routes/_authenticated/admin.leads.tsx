@@ -39,9 +39,9 @@ import { brl } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/admin/leads")({
-  head: () => ({
-    meta: [{ title: "Leads — Orium Admin" }, { name: "robots", content: "noindex" }],
-  }),
+  validateSearch: (s: Record<string, unknown>): { lista?: SegmentKey } =>
+    typeof s.lista === "string" ? { lista: s.lista as SegmentKey } : {},
+  head: () => ({ meta: [{ title: "Painel — Orium CRM" }, { name: "robots", content: "noindex" }] }),
   component: LeadsPage,
 });
 
@@ -49,7 +49,11 @@ type View = "radar" | SegmentKey;
 
 function LeadsPage() {
   const qc = useQueryClient();
-  const [view, setView] = useState<View>("radar");
+  const { lista } = Route.useSearch();
+  const [view, setView] = useState<View>(lista && lista in SEGMENTS ? lista : "radar");
+  useEffect(() => {
+    if (lista && lista in SEGMENTS) setView(lista);
+  }, [lista]);
   const [q, setQ] = useState("");
   const [open, setOpen] = useState<{ id: string; el: HTMLElement | null } | null>(null);
 
@@ -108,7 +112,7 @@ function LeadsPage() {
 
   return (
     <AdminShell
-      title="Leads"
+      title="Painel"
       action={
         <button
           type="button"

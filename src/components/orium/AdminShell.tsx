@@ -31,6 +31,7 @@ import symbolLight from "@/assets/orium-symbol-light.png.asset.json";
 import { CopilotProvider, useCopilot } from "@/components/orium/copilot/CopilotPanel";
 import { CopilotOrb } from "@/components/orium/copilot/CopilotOrb";
 import { AdminTopBar, CommandPalette } from "@/components/orium/admin/AdminTopBar";
+import { CrmShell, isCrmPath } from "@/components/orium/crm/CrmShell";
 
 /**
  * ADMIN DA ORIUM — mesma linguagem da loja.
@@ -96,11 +97,12 @@ export const NAV_HUBS: NavHub[] = [
   },
   {
     to: "/admin/leads",
-    label: "Clientes",
+    label: "CRM",
     icon: Users,
     sections: [
-      { to: "/admin/leads", label: "Leads" },
+      { to: "/admin/leads", label: "Painel" },
       { to: "/admin/conversas", label: "Conversas" },
+      { to: "/admin/funil", label: "Funil" },
       { to: "/admin/clientes", label: "Clientes" },
       { to: "/admin/aovivo", label: "Ao vivo" },
       { to: "/admin/conversao", label: "Conversão" },
@@ -600,6 +602,15 @@ export function AdminShell({
   useEffect(() => {
     setTitle(title);
   }, [title, setTitle]);
+  const crmPath = useRouterState({ select: (s) => s.location.pathname });
+
+  // telas de cliente moram dentro do CRM (menu lateral próprio)
+  if (isCrmPath(crmPath))
+    return (
+      <CrmShell title={title} action={action} flush={bare}>
+        {children}
+      </CrmShell>
+    );
 
   return (
     <div
