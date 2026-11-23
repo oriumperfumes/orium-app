@@ -1,9 +1,10 @@
 /**
  * CRM → CONVERSAS.
- * O WhatsApp da loja dentro do CRM, em tempo real, em quatro colunas:
- * caixas (filtros e etapas) | mensagens | conversa | perfil do cliente.
- * No perfil: próxima ação, perfumes citados com preço final, custo e lucro,
- * calor, perfil de compra e interesses. Nada é enviado sem clique.
+ * O WhatsApp da loja dentro do CRM, em tempo real:
+ * caixas | mensagens | conversa | assistente.
+ * A conversa tem ajuda embutida: preço do perfume citado logo abaixo da mensagem,
+ * botão "Resposta ideal" (IA focada em fechar a venda) e respostas rápidas.
+ * O assistente ao lado diz quem é o cliente e o que fazer. Nada sai sem clique.
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
@@ -20,19 +21,24 @@ import {
   Copy,
   Flame,
   Inbox,
+  Lightbulb,
   Link2,
   MailOpen,
   MessagesSquare,
   PanelRightClose,
   PanelRightOpen,
-  Plus,
+  PencilLine,
+  RefreshCw,
   Search,
   SendHorizontal,
+  Sparkles,
   Star,
   UserPlus,
   UserRound,
   UserX,
   Users,
+  X,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AdminShell } from "@/components/orium/AdminShell";
@@ -41,30 +47,35 @@ import { SidePanel } from "@/components/orium/admin/orders/model";
 import { PanelHeader, PanelScroll } from "@/components/orium/admin/PanelKit";
 import { pxInputClass } from "@/components/orium/admin/PricingUI";
 import { WhatsMark } from "@/components/orium/crm/CrmShell";
-import {
-  Avatar,
-  LeadReading,
-  PerfumeQuoteCard,
-  TEMP,
-  TempPill,
-  ago,
-  fmtPhone,
-} from "@/components/orium/crm/shared";
+import { Avatar, TEMP, ago, fmtPhone } from "@/components/orium/crm/shared";
 import { supabase } from "@/integrations/supabase/client";
-import { enrich, type Lead } from "@/lib/crm-intel";
+import {
+  TASKS,
+  enrich,
+  factsOf,
+  interestsOf,
+  messageOptions,
+  taskOf,
+  type Lead,
+} from "@/lib/crm-intel";
 import {
   crmCustomerSearch,
   crmLeads,
   crmPerfumeQuote,
+  crmSuggestReply,
   waInbox,
   waLinkCustomer,
   waSend,
   waThread,
   waUpdateContact,
+  type PerfumeQuote,
+  type ReplySuggestion,
   type WaBridge,
   type WaContact,
   type WaMessage,
 } from "@/lib/crm-wa.functions";
+import { brl } from "@/lib/format";
+import { flat } from "@/lib/perfume-mentions";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/admin/conversas")({
@@ -101,17 +112,52 @@ const QUICK = [
     label: "Retirada grátis",
     text: "A retirada na loja é grátis! Te aviso assim que estiver separado ✨",
   },
-  { label: "Pix", text: "No Pix tem desconto! Quer que eu te mande a chave?" },
+  { label: "Chave Pix", text: "No Pix tem desconto! Quer que eu te mande a chave?" },
   {
     label: "Catálogo",
     text: "Dá uma olhada no nosso catálogo completo: https://oriumperfumes.com 🛍️",
   },
+  { label: "Separar", text: "Separo um pra você? Assim garante o seu ✨" },
 ];
 
 const contactName = (c: WaContact) =>
   c.customer?.name || c.push_name || fmtPhone(c.phone_normalized) || c.jid.split("@")[0];
 const compose = (t: string) =>
   window.dispatchEvent(new CustomEvent("orium-crm-compose", { detail: t }));
+
+/** Texto pronto com o preço de um perfume (só dados reais). */
+function pricePitch(q: PerfumeQuote) {
+  const f = q.frasco;
+  if (!f) return `O ${q.name} eu consigo pra você! Vou confirmar o valor e já te passo 😊`;
+  const card = f.card && f.card !== f.pix ? ` ou ${brl(f.card)} no cartão` : "";
+  return `O ${q.name}${q.volume_ml ? ` ${q.volume_ml}ml` : ""} sai por ${brl(f.pix)} no Pix${card} ✨${f.promo ? ` Já com ${Math.round(f.promo)}% de desconto.` : ""}${q.ready ? " Tenho aqui pra retirar hoje." : ""} Separo um pra você?`;
+}
+
+/** Conversa + perfumes citados pelo cliente (mesma consulta usada no chat e no assistente). */
+function useThread(jid: string) {
+  return useQuery({
+    queryKey: ["wa-thread", jid],
+    queryFn: () => waThread({ data: { jid } }),
+    staleTime: 3_000,
+  });
+}
+function useQuotes(jid: string, msgs: WaMessage[] | undefined) {
+  const inboundText = useMemo(
+    () =>
+      (msgs ?? [])
+        .filter((m) => !m.from_me && m.body)
+        .slice(-8)
+        .map((m) => m.body)
+        .join("\n"),
+    [msgs],
+  );
+  return useQuery({
+    queryKey: ["crm-quote", jid, inboundText],
+    queryFn: () => crmPerfumeQuote({ data: { text: inboundText } }),
+    enabled: !!inboundText,
+    staleTime: 60_000,
+  });
+}
 
 function ConversasPage() {
   const qc = useQueryClient();
@@ -120,8 +166,8 @@ function ConversasPage() {
   const [box, setBox] = useState<Box>("todas");
   const [q, setQ] = useState("");
   const [sort, setSort] = useState<"recentes" | "quentes">("recentes");
-  const [profileOpen, setProfileOpen] = useState(true);
-  const [profileSheet, setProfileSheet] = useState(false);
+  const [assistOpen, setAssistOpen] = useState(true);
+  const [assistSheet, setAssistSheet] = useState(false);
 
   const inbox = useQuery({
     queryKey: ["wa-inbox"],
@@ -210,7 +256,7 @@ function ConversasPage() {
     <AdminShell title="Conversas" bare>
       <div className="flex min-h-[calc(100dvh-210px)] min-w-0 flex-1 lg:h-full lg:min-h-0">
         {/* 1. caixas */}
-        <aside className="adm-scroll hidden w-[232px] shrink-0 overflow-y-auto border-r border-white/[0.06] px-3 py-5 2xl:block">
+        <aside className="adm-scroll hidden w-[228px] shrink-0 overflow-y-auto border-r border-white/[0.06] px-3 py-5 min-[1700px]:block">
           <div className="px-2">
             <p className="text-[17px] font-bold tracking-[-0.02em]">Caixa de entrada</p>
             <p className="mt-0.5 truncate text-[12.5px] text-[#8C8C8C]">
@@ -296,11 +342,11 @@ function ConversasPage() {
         {/* 2. mensagens */}
         <section
           className={cn(
-            "flex min-h-0 w-full flex-col border-white/[0.06] lg:w-[340px] lg:shrink-0 lg:border-r",
+            "flex min-h-0 w-full flex-col border-white/[0.06] lg:w-[330px] lg:shrink-0 lg:border-r",
             selected && "max-lg:hidden",
           )}
         >
-          <div className="space-y-3 px-4 pt-1 pb-3 lg:px-4 lg:pt-5">
+          <div className="space-y-3 px-4 pt-1 pb-3 lg:pt-5">
             <div className="flex items-center justify-between gap-3">
               <h1 className="text-[22px] font-bold tracking-[-0.03em]">Mensagens</h1>
               <button
@@ -317,12 +363,11 @@ function ConversasPage() {
               <input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="Buscar mensagem ou nome"
+                placeholder="Buscar nome ou mensagem"
                 className={cn(pxInputClass, "pl-11")}
               />
             </label>
-            {/* caixas viram chips quando a coluna de caixas não cabe */}
-            <div className="adm-scroll -mx-1 flex gap-1.5 overflow-x-auto px-1 2xl:hidden">
+            <div className="adm-scroll -mx-1 flex gap-1.5 overflow-x-auto px-1 min-[1700px]:hidden">
               {(
                 [
                   ["todas", "Todas"],
@@ -362,7 +407,7 @@ function ConversasPage() {
           <div className="adm-scroll min-h-0 flex-1 overflow-y-auto px-2 pb-3">
             {inbox.isPending ? (
               [0, 1, 2, 3, 4].map((i) => (
-                <div key={i} className="admin-skeleton mx-2 my-2 h-[78px] rounded-[20px]" />
+                <div key={i} className="admin-skeleton mx-2 my-2 h-[72px] rounded-[20px]" />
               ))
             ) : list.length === 0 ? (
               <div className="grid h-full min-h-[240px] place-items-center p-6 text-center">
@@ -395,7 +440,7 @@ function ConversasPage() {
         {/* 3. conversa */}
         <section
           className={cn(
-            "flex min-h-[72dvh] min-w-0 flex-1 flex-col lg:min-h-0",
+            "flex min-w-0 flex-1 flex-col max-lg:h-[calc(100dvh-218px)] max-lg:min-h-[420px] lg:min-h-0",
             !selected && "max-lg:hidden",
           )}
         >
@@ -408,53 +453,53 @@ function ConversasPage() {
               lead={lead}
               bridge={bridge}
               onBack={() => select(undefined)}
-              profileOpen={profileOpen}
-              onToggleProfile={() => {
-                if (window.matchMedia("(min-width: 1280px)").matches) setProfileOpen((v) => !v);
-                else setProfileSheet(true);
+              assistOpen={assistOpen}
+              onToggleAssist={() => {
+                if (window.matchMedia("(min-width: 1280px)").matches) setAssistOpen((v) => !v);
+                else setAssistSheet(true);
               }}
             />
           ) : (
             <div className="grid h-full place-items-center p-8 text-center">
-              <div>
+              <div className="max-w-sm">
                 <span className="dash-ico mx-auto">
                   <MessagesSquare className="size-[18px]" strokeWidth={2.2} />
                 </span>
                 <h2 className="mt-4 text-[19px] font-bold tracking-[-0.02em]">
                   Escolha uma conversa
                 </h2>
-                <p className="mx-auto mt-1.5 max-w-sm text-[14px] text-[#8C8C8C]">
-                  Ao lado aparecem o calor do cliente, o que ele costuma comprar e o preço dos
-                  perfumes citados.
+                <p className="mt-1.5 text-[14px] text-[#8C8C8C]">
+                  Dentro da conversa você tem o preço dos perfumes citados e o botão Resposta ideal
+                  para quando não souber o que responder.
                 </p>
               </div>
             </div>
           )}
         </section>
 
-        {/* 4. perfil */}
-        {current && profileOpen ? (
-          <aside className="adm-scroll hidden w-[350px] shrink-0 overflow-y-auto border-l border-white/[0.06] p-4 xl:block 2xl:w-[372px]">
-            <Profile contact={current} lead={lead} onClose={() => setProfileOpen(false)} />
+        {/* 4. assistente */}
+        {current && assistOpen ? (
+          <aside className="adm-scroll hidden w-[340px] shrink-0 overflow-y-auto border-l border-white/[0.06] p-4 xl:block 2xl:w-[364px]">
+            <Assistant contact={current} lead={lead} onClose={() => setAssistOpen(false)} />
           </aside>
         ) : null}
       </div>
 
       <SidePanel
-        open={profileSheet && !!current}
-        onClose={() => setProfileSheet(false)}
-        label="Cliente"
+        open={assistSheet && !!current}
+        onClose={() => setAssistSheet(false)}
+        label="Assistente"
       >
         {current ? (
           <>
             <PanelHeader
-              title={contactName(current)}
-              subtitle={fmtPhone(current.phone_normalized)}
-              onClose={() => setProfileSheet(false)}
+              title="Assistente"
+              subtitle={contactName(current)}
+              onClose={() => setAssistSheet(false)}
             />
             <PanelScroll swapKey={current.jid}>
               <div className="px-5 pb-6 lg:px-6">
-                <Profile contact={current} lead={lead} />
+                <Assistant contact={current} lead={lead} />
               </div>
             </PanelScroll>
           </>
@@ -463,6 +508,8 @@ function ConversasPage() {
     </AdminShell>
   );
 }
+
+/* ───────────────────────── lista ───────────────────────── */
 
 function BoxGroup({ title, children }: { title: string; children: ReactNode }) {
   const [open, setOpen] = useState(true);
@@ -540,6 +587,7 @@ function ContactRow({
     mutationFn: () => waUpdateContact({ data: { jid: c.jid, pinned: !c.pinned } }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["wa-inbox"] }),
   });
+  const waiting = c.last_from_me === false;
   return (
     <div
       role="button"
@@ -566,44 +614,46 @@ function ContactRow({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <p className="min-w-0 flex-1 truncate text-[14.5px] font-bold">{contactName(c)}</p>
-          <button
-            type="button"
-            aria-label={c.pinned ? "Desafixar" : "Fixar"}
-            onClick={(e) => {
-              e.stopPropagation();
-              pin.mutate();
-            }}
+          <span
             className={cn(
-              "shrink-0 rounded-full p-0.5",
-              c.pinned
-                ? "text-[#FFD599]"
-                : "text-[#4A4A4A] opacity-0 group-hover:opacity-100 hover:text-white",
+              "shrink-0 text-[11.5px] tabular-nums",
+              c.unread ? "font-bold text-[#FFD599]" : "text-[#6F6F6F]",
             )}
           >
-            <Star className="size-4" fill={c.pinned ? "currentColor" : "none"} />
-          </button>
+            {ago(c.last_message_at)}
+          </span>
         </div>
         <div className="mt-0.5 flex items-end gap-2">
           <p className="line-clamp-2 min-w-0 flex-1 text-[13px] leading-snug text-[#8C8C8C]">
             {c.last_from_me ? <span className="text-[#6F6F6F]">Você: </span> : null}
             {c.last_message_preview ?? ""}
           </p>
-          <div className="flex shrink-0 flex-col items-end gap-1">
-            <span
+          {c.unread ? (
+            <span className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-[#FFD599] px-1.5 text-[11px] font-bold text-[#15130F] tabular-nums">
+              {c.unread}
+            </span>
+          ) : (
+            <button
+              type="button"
+              aria-label={c.pinned ? "Desafixar" : "Fixar"}
+              onClick={(e) => {
+                e.stopPropagation();
+                pin.mutate();
+              }}
               className={cn(
-                "text-[11.5px] tabular-nums",
-                c.unread ? "font-bold text-[#FFD599]" : "text-[#6F6F6F]",
+                "shrink-0 rounded-full p-0.5",
+                c.pinned
+                  ? "text-[#FFD599]"
+                  : "text-[#4A4A4A] opacity-0 group-hover:opacity-100 hover:text-white",
               )}
             >
-              {ago(c.last_message_at)}
-            </span>
-            {c.unread ? (
-              <span className="grid h-5 min-w-5 place-items-center rounded-full bg-[#FFD599] px-1.5 text-[11px] font-bold text-[#15130F] tabular-nums">
-                {c.unread}
-              </span>
-            ) : null}
-          </div>
+              <Star className="size-4" fill={c.pinned ? "currentColor" : "none"} />
+            </button>
+          )}
         </div>
+        {waiting ? (
+          <p className="mt-1 text-[11.5px] font-bold text-[#FFD599]">Esperando sua resposta</p>
+        ) : null}
       </div>
     </div>
   );
@@ -652,31 +702,33 @@ function QrCard({ qr }: { qr: string }) {
   );
 }
 
+/* ───────────────────────── conversa ───────────────────────── */
+
 function Thread({
   contact,
   lead,
   bridge,
   onBack,
-  profileOpen,
-  onToggleProfile,
+  assistOpen,
+  onToggleAssist,
 }: {
   contact: WaContact;
   lead: Lead | null;
   bridge?: WaBridge;
   onBack: () => void;
-  profileOpen: boolean;
-  onToggleProfile: () => void;
+  assistOpen: boolean;
+  onToggleAssist: () => void;
 }) {
   const qc = useQueryClient();
   const [text, setText] = useState("");
   const [quick, setQuick] = useState(false);
+  const [stageOpen, setStageOpen] = useState(false);
+  const [ai, setAi] = useState<ReplySuggestion | null>(null);
+  const [aiShort, setAiShort] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
-  const thread = useQuery({
-    queryKey: ["wa-thread", contact.jid],
-    queryFn: () => waThread({ data: { jid: contact.jid } }),
-    staleTime: 3_000,
-  });
+  const thread = useThread(contact.jid);
+  const quotes = useQuotes(contact.jid, thread.data);
 
   useEffect(() => {
     if (contact.unread)
@@ -686,7 +738,7 @@ function Thread({
   }, [contact.jid, contact.unread, qc]);
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
-  }, [thread.data?.length]);
+  }, [thread.data?.length, ai]);
   useEffect(() => {
     const on = (e: Event) => {
       const t = (e as CustomEvent<string>).detail;
@@ -701,6 +753,7 @@ function Thread({
     mutationFn: (body: string) => waSend({ data: { jid: contact.jid, body } }),
     onMutate: async (body) => {
       setText("");
+      setAi(null);
       const key = ["wa-thread", contact.jid];
       const prev = qc.getQueryData<WaMessage[]>(key);
       qc.setQueryData<WaMessage[]>(key, [
@@ -729,9 +782,17 @@ function Thread({
       waUpdateContact({ data: { jid: contact.jid, stage: s } }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["wa-inbox"] }),
   });
+  const suggest = useMutation({
+    mutationFn: () => crmSuggestReply({ data: { jid: contact.jid } }),
+    onMutate: () => {
+      setAi(null);
+      setAiShort(false);
+    },
+    onSuccess: (r) => setAi(r),
+    onError: (e) => toast.error(e instanceof Error ? e.message : "A IA não respondeu agora"),
+  });
 
-  const submit = () => {
-    const body = text.trim();
+  const submit = (body = text.trim()) => {
     if (body && !send.isPending) send.mutate(body);
   };
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -744,6 +805,16 @@ function Thread({
   const msgs = thread.data ?? [];
   const name = contactName(contact);
   const live = lead?.live?.active;
+  const quoteList = quotes.data ?? [];
+  const st = STAGES.find((s) => s.v === contact.stage) ?? STAGES[0];
+  const waitingReply = contact.last_from_me === false;
+  const aiText = ai ? (aiShort && ai.short ? ai.short : ai.reply) : "";
+  // perfume citado em cada mensagem do cliente → cartão de preço logo abaixo
+  const quoteFor = (body: string | null) => {
+    if (!body) return [];
+    const f = ` ${flat(body)} `;
+    return quoteList.filter((qt) => qt.term && f.includes(` ${qt.term} `));
+  };
 
   return (
     <>
@@ -780,42 +851,59 @@ function Thread({
             )}
           </p>
         </div>
-        {lead ? <TempPill temp={lead.temp} score={lead.score} className="max-sm:hidden" /> : null}
+        {/* etapa num menu só */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setStageOpen((v) => !v)}
+            className="press inline-flex h-10 items-center gap-2 rounded-full bg-[#1F1F1F] px-3.5 text-[13px] font-bold text-[#D4D4D4] hover:text-white"
+          >
+            <span className="size-2 rounded-full" style={{ background: st.dot }} />
+            <span className="max-sm:hidden">{st.label}</span>
+            <ChevronDown className="size-4 text-[#8C8C8C]" />
+          </button>
+          {stageOpen ? (
+            <>
+              <button
+                type="button"
+                aria-label="Fechar"
+                className="fixed inset-0 z-20 cursor-default"
+                onClick={() => setStageOpen(false)}
+              />
+              <div className="absolute right-0 z-30 mt-2 w-[200px] rounded-[20px] border border-white/[0.08] bg-[#1C1C1C] p-1.5 shadow-2xl">
+                <p className="px-3 pt-2 pb-1 text-[11.5px] font-semibold text-[#6F6F6F]">
+                  Etapa da venda
+                </p>
+                {STAGES.map((s) => (
+                  <button
+                    key={s.v}
+                    type="button"
+                    onClick={() => {
+                      stage.mutate(s.v);
+                      setStageOpen(false);
+                    }}
+                    className={cn(
+                      "flex h-10 w-full items-center gap-2.5 rounded-[14px] px-3 text-left text-[14px] font-semibold hover:bg-white/[0.06]",
+                      s.v === contact.stage && "bg-white/[0.06]",
+                    )}
+                  >
+                    <span className="size-2.5 rounded-full" style={{ background: s.dot }} />
+                    <span className="flex-1">{s.label}</span>
+                    {s.v === contact.stage ? <Check className="size-4 text-[#FFD599]" /> : null}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : null}
+        </div>
         <IconBtn
-          label="Copiar número"
-          onClick={() => {
-            void navigator.clipboard?.writeText(contact.phone_normalized ?? "");
-            toast.success("Número copiado");
-          }}
+          label={assistOpen ? "Fechar assistente" : "Abrir assistente"}
+          onClick={onToggleAssist}
         >
-          <Copy />
-        </IconBtn>
-        <IconBtn label={profileOpen ? "Fechar perfil" : "Ver perfil"} onClick={onToggleProfile}>
-          {profileOpen ? <PanelRightClose className="max-xl:hidden" /> : null}
-          <PanelRightOpen className={cn(profileOpen && "xl:hidden")} />
+          {assistOpen ? <PanelRightClose className="max-xl:hidden" /> : null}
+          <PanelRightOpen className={cn(assistOpen && "xl:hidden")} />
         </IconBtn>
       </header>
-
-      <div className="adm-scroll flex items-center gap-1.5 overflow-x-auto border-b border-white/[0.06] px-3 py-2.5 sm:px-5">
-        <span className="mr-1 shrink-0 text-[12px] font-semibold text-[#6F6F6F]">Etapa</span>
-        {STAGES.map((s) => (
-          <button
-            key={s.v}
-            type="button"
-            aria-pressed={contact.stage === s.v}
-            onClick={() => stage.mutate(s.v)}
-            className={cn(
-              "press inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-bold",
-              contact.stage === s.v
-                ? "bg-white text-[#15130F]"
-                : "bg-[#1F1F1F] text-[#A9A9A9] hover:text-white",
-            )}
-          >
-            <span className="size-2 rounded-full" style={{ background: s.dot }} />
-            {s.label}
-          </button>
-        ))}
-      </div>
 
       <div className="adm-scroll min-h-0 flex-1 overflow-y-auto px-3 py-5 sm:px-6">
         {thread.isPending ? (
@@ -828,9 +916,7 @@ function Thread({
             ))}
           </div>
         ) : msgs.length === 0 ? (
-          <p className="py-10 text-center text-[13.5px] text-[#8C8C8C]">
-            Nenhuma mensagem ainda. Escreva a primeira abaixo.
-          </p>
+          <Starters lead={lead} name={name} onPick={(t) => compose(t)} />
         ) : (
           msgs.map((m, i) => {
             const prev = msgs[i - 1];
@@ -841,6 +927,7 @@ function Thread({
               !prev ||
               prev.from_me !== m.from_me ||
               +new Date(m.ts) - +new Date(prev.ts) > 10 * 60_000;
+            const hits = m.from_me ? [] : quoteFor(m.body);
             return (
               <div key={m.id}>
                 {newDay ? (
@@ -852,47 +939,38 @@ function Thread({
                 ) : null}
                 <div
                   className={cn(
-                    "flex gap-2.5",
-                    m.from_me ? "flex-row-reverse" : "flex-row",
-                    head ? "mt-4" : "mt-1",
+                    "flex",
+                    m.from_me ? "justify-end" : "justify-start",
+                    head ? "mt-3" : "mt-1",
                   )}
                 >
-                  <span className="w-8 shrink-0">
-                    {head ? (
-                      <Avatar name={m.from_me ? "Orium" : name} size={32} gold={m.from_me} />
-                    ) : null}
-                  </span>
                   <div
                     className={cn(
-                      "flex max-w-[78%] min-w-0 flex-col",
+                      "flex max-w-[80%] min-w-0 flex-col",
                       m.from_me ? "items-end" : "items-start",
                     )}
                   >
-                    {head ? (
-                      <p className="mb-1 flex items-baseline gap-2 text-[12.5px]">
-                        <span className="font-bold text-[#D4D4D4]">
-                          {m.from_me ? "Orium" : name.split(" ")[0]}
-                        </span>
-                        <span className="text-[#6F6F6F] tabular-nums">
-                          {new Date(m.ts).toLocaleTimeString("pt-BR", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </span>
-                      </p>
-                    ) : null}
                     <div
                       className={cn(
-                        "rounded-[20px] px-4 py-2.5 text-[14.5px] leading-snug whitespace-pre-wrap [overflow-wrap:anywhere]",
-                        m.from_me ? "bg-[#FFD599] text-[#15130F]" : "bg-[#1F1F1F] text-white",
-                        head && (m.from_me ? "rounded-tr-[6px]" : "rounded-tl-[6px]"),
+                        "rounded-[22px] px-4 py-2.5 text-[15px] leading-snug whitespace-pre-wrap [overflow-wrap:anywhere]",
+                        m.from_me ? "bg-[#FFD599] text-[#15130F]" : "bg-[#222] text-white",
+                        head && (m.from_me ? "rounded-tr-[8px]" : "rounded-tl-[8px]"),
                         m.pending === "failed" && "ring-2 ring-[#FF9A8A]",
                       )}
                     >
                       {m.body || <span className="italic opacity-70">[{kindLabel(m.kind)}]</span>}
-                      {m.from_me ? (
-                        <span className="ml-2 inline-flex translate-y-[2px] items-center text-[#15130F]/50">
-                          {m.pending === "failed" ? (
+                      <span
+                        className={cn(
+                          "mt-1 flex items-center justify-end gap-1 text-[10.5px] tabular-nums",
+                          m.from_me ? "text-[#15130F]/50" : "text-[#7A7A7A]",
+                        )}
+                      >
+                        {new Date(m.ts).toLocaleTimeString("pt-BR", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                        {m.from_me ? (
+                          m.pending === "failed" ? (
                             <AlertTriangle
                               className="size-3.5 text-[#B3261E]"
                               aria-label={m.error ?? "Falhou"}
@@ -901,10 +979,46 @@ function Thread({
                             <Clock3 className="size-3.5" aria-label="Na fila" />
                           ) : (
                             <CheckCheck className="size-3.5" aria-label="Enviada" />
-                          )}
-                        </span>
-                      ) : null}
+                          )
+                        ) : null}
+                      </span>
                     </div>
+                    {/* ajuda embutida: preço do perfume citado */}
+                    {hits.map((qt) => (
+                      <button
+                        key={qt.product_id}
+                        type="button"
+                        onClick={() => compose(pricePitch(qt))}
+                        className="press group mt-1.5 flex max-w-full items-center gap-2.5 rounded-[18px] border border-[#FFD599]/20 bg-[#FFD599]/[0.06] py-1.5 pr-3 pl-1.5 text-left hover:border-[#FFD599]/45"
+                      >
+                        <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-[12px] bg-white">
+                          {qt.image_url ? (
+                            <img
+                              src={qt.image_url}
+                              alt=""
+                              className="size-full object-contain"
+                              loading="lazy"
+                            />
+                          ) : null}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-[12.5px] font-bold">{qt.name}</span>
+                          <span className="block truncate text-[12px] text-[#D4D4D4]">
+                            {qt.frasco ? `${brl(qt.frasco.pix)} no Pix` : "Sem preço"}
+                            {qt.frasco?.profit != null ? (
+                              <span className="text-[#7FCF9F]">
+                                {" "}
+                                · lucro {brl(qt.frasco.profit)}
+                              </span>
+                            ) : null}
+                            {qt.ready ? <span className="text-[#8C8C8C]"> · na loja</span> : null}
+                          </span>
+                        </span>
+                        <span className="ml-1 shrink-0 rounded-full bg-[#FFD599] px-2.5 py-1 text-[11.5px] font-bold text-[#15130F]">
+                          Responder
+                        </span>
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -914,54 +1028,158 @@ function Thread({
         <div ref={endRef} />
       </div>
 
-      <div className="px-3 pt-2 pb-3 sm:px-5 sm:pb-5">
+      {/* ajuda + escrever */}
+      <div className="border-t border-white/[0.06] px-3 pt-3 pb-3 sm:px-5 sm:pb-5">
+        {suggest.isPending ? (
+          <div className="mb-3 flex items-center gap-3 rounded-[22px] border border-[#FFD599]/25 bg-[#FFD599]/[0.06] p-4">
+            <Sparkles className="size-5 shrink-0 animate-pulse text-[#FFD599]" />
+            <p className="text-[14px] font-semibold text-[#FFD599]">
+              Pensando na melhor resposta para fechar a venda…
+            </p>
+          </div>
+        ) : ai ? (
+          <div className="mb-3 rounded-[24px] border border-[#FFD599]/30 bg-gradient-to-br from-[#2A2416] to-[#1C1A15] p-4">
+            <div className="flex items-center gap-2">
+              <Sparkles className="size-4 text-[#FFD599]" />
+              <p className="flex-1 text-[13px] font-bold text-[#FFD599]">Resposta ideal</p>
+              <button
+                type="button"
+                onClick={() => setAi(null)}
+                aria-label="Fechar sugestão"
+                className="press grid size-8 place-items-center rounded-full text-[#A9A9A9] hover:bg-white/[0.06] hover:text-white"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            <p className="mt-2 text-[15px] leading-relaxed whitespace-pre-wrap text-white">
+              {aiText}
+            </p>
+            {ai.why ? (
+              <p className="mt-2 flex gap-1.5 text-[12.5px] text-[#A9A9A9]">
+                <Lightbulb className="mt-0.5 size-3.5 shrink-0 text-[#FFD599]" />
+                {ai.why}
+              </p>
+            ) : null}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => submit(aiText)}
+                disabled={!aiText}
+                className="press inline-flex h-10 items-center gap-1.5 rounded-full bg-[#FFD599] px-4 text-[13.5px] font-bold text-[#15130F]"
+              >
+                <SendHorizontal className="size-4" /> Enviar agora
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setText(aiText);
+                  setAi(null);
+                  taRef.current?.focus();
+                }}
+                className="press inline-flex h-10 items-center gap-1.5 rounded-full bg-white/[0.08] px-4 text-[13.5px] font-bold hover:bg-white/[0.12]"
+              >
+                <PencilLine className="size-4" /> Editar
+              </button>
+              {ai.short ? (
+                <button
+                  type="button"
+                  onClick={() => setAiShort((v) => !v)}
+                  className="press inline-flex h-10 items-center rounded-full bg-white/[0.08] px-4 text-[13.5px] font-bold hover:bg-white/[0.12]"
+                >
+                  {aiShort ? "Versão completa" : "Mais curta"}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => suggest.mutate()}
+                className="press inline-flex h-10 items-center gap-1.5 rounded-full bg-white/[0.08] px-4 text-[13.5px] font-bold hover:bg-white/[0.12]"
+              >
+                <RefreshCw className="size-4" /> Outra
+              </button>
+            </div>
+            {ai.next_step ? (
+              <p className="mt-3 border-t border-white/[0.06] pt-2.5 text-[12.5px] text-[#8C8C8C]">
+                Depois: {ai.next_step}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="adm-scroll -mx-1 mb-2.5 flex items-center gap-1.5 overflow-x-auto px-1">
+          <button
+            type="button"
+            onClick={() => suggest.mutate()}
+            disabled={suggest.isPending}
+            className={cn(
+              "press inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-bold",
+              waitingReply
+                ? "bg-[#FFD599] text-[#15130F]"
+                : "border border-[#FFD599]/40 text-[#FFD599] hover:bg-[#FFD599]/10",
+            )}
+          >
+            <Sparkles className="size-4" /> Resposta ideal
+          </button>
+          {quoteList.slice(0, 3).map((qt) => (
+            <button
+              key={qt.product_id}
+              type="button"
+              onClick={() => compose(pricePitch(qt))}
+              title="Responder com o preço"
+              className="press inline-flex h-9 max-w-[220px] shrink-0 items-center gap-1.5 rounded-full bg-[#1F1F1F] px-3 text-[12.5px] font-semibold text-[#D4D4D4] hover:text-white"
+            >
+              <span className="truncate">{qt.name}</span>
+              <span className="font-bold text-[#FFD599]">
+                {qt.frasco ? brl(qt.frasco.pix) : "—"}
+              </span>
+            </button>
+          ))}
+          <button
+            type="button"
+            aria-pressed={quick}
+            onClick={() => setQuick((v) => !v)}
+            className={cn(
+              "press inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-semibold",
+              quick ? "bg-white text-[#15130F]" : "bg-[#1F1F1F] text-[#D4D4D4] hover:text-white",
+            )}
+          >
+            <Zap className="size-3.5" /> Rápidas
+          </button>
+        </div>
         {quick ? (
-          <div className="adm-scroll -mx-1 mb-2 flex gap-1.5 overflow-x-auto px-1">
+          <div className="adm-scroll -mx-1 mb-2.5 flex gap-1.5 overflow-x-auto px-1">
             {QUICK.map((qr) => (
               <button
                 key={qr.label}
                 type="button"
                 onClick={() => {
-                  setText((t) => (t.trim() ? `${t.trim()} ${qr.text}` : qr.text));
+                  compose(qr.text);
                   setQuick(false);
-                  taRef.current?.focus();
                 }}
-                className="press h-8 shrink-0 rounded-full bg-[#1F1F1F] px-3 text-[12.5px] font-semibold text-[#D4D4D4] hover:text-white"
+                className="press h-9 shrink-0 rounded-full border border-white/[0.1] px-3.5 text-[12.5px] font-semibold text-[#D4D4D4] hover:text-white"
               >
                 {qr.label}
               </button>
             ))}
           </div>
         ) : null}
+
         <div className="flex items-end gap-2">
-          <button
-            type="button"
-            aria-label="Respostas rápidas"
-            aria-pressed={quick}
-            onClick={() => setQuick((v) => !v)}
-            className={cn(
-              "press grid size-12 shrink-0 place-items-center rounded-full border border-white/[0.1]",
-              quick ? "bg-white text-[#15130F]" : "text-[#D4D4D4] hover:text-white",
-            )}
-          >
-            <Plus className={cn("size-5 transition-transform", quick && "rotate-45")} />
-          </button>
           <div className="flex min-w-0 flex-1 items-end rounded-[24px] border border-white/[0.08] bg-[#1A1A1A] focus-within:border-[#FFD599]/40">
             <textarea
               ref={taRef}
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={onKey}
-              rows={Math.min(5, Math.max(1, text.split("\n").length))}
+              rows={Math.min(6, Math.max(1, text.split("\n").length))}
               placeholder={
                 offline ? "WhatsApp desconectado: a mensagem fica na fila" : "Escreva sua mensagem…"
               }
-              className="min-h-12 flex-1 resize-none bg-transparent px-4 py-3 text-[14.5px] leading-snug outline-none placeholder:text-[#6F6F6F]"
+              className="min-h-12 flex-1 resize-none bg-transparent px-4 py-3 text-[15px] leading-snug outline-none placeholder:text-[#6F6F6F]"
             />
           </div>
           <button
             type="button"
-            onClick={submit}
+            onClick={() => submit()}
             disabled={!text.trim()}
             aria-label="Enviar"
             className="press grid size-12 shrink-0 place-items-center rounded-full bg-[#FFD599] text-[#15130F] disabled:opacity-40"
@@ -974,13 +1192,58 @@ function Thread({
   );
 }
 
+/** Conversa vazia: aberturas prontas para escolher. */
+function Starters({
+  lead,
+  name,
+  onPick,
+}: {
+  lead: Lead | null;
+  name: string;
+  onPick: (t: string) => void;
+}) {
+  const first = name.split(" ")[0];
+  const opts = lead
+    ? messageOptions(lead)
+    : [
+        {
+          label: "Simples",
+          text: `Oi${first ? `, ${first}` : ""}! Aqui é da Orium Perfumes 😊 Posso te ajudar com algum perfume?`,
+        },
+        {
+          label: "Catálogo",
+          text: `Oi${first ? `, ${first}` : ""}! Aqui é da Orium Perfumes ✨ Separei nosso catálogo pra você: https://oriumperfumes.com. Tem algum perfume que você está procurando?`,
+        },
+      ];
+  return (
+    <div className="mx-auto flex h-full max-w-[460px] flex-col justify-center py-6 text-center">
+      <p className="text-[18px] font-bold tracking-[-0.02em]">Comece a conversa</p>
+      <p className="mt-1 text-[13.5px] text-[#8C8C8C]">
+        Toque em uma abertura para colocar na caixa de texto.
+      </p>
+      <div className="mt-4 space-y-2 text-left">
+        {opts.map((o) => (
+          <button
+            key={o.label}
+            type="button"
+            onClick={() => onPick(o.text)}
+            className="press block w-full rounded-[20px] bg-[#1C1C1C] p-4 transition-colors hover:bg-[#232323]"
+          >
+            <span className="text-[12px] font-bold text-[#FFD599]">{o.label}</span>
+            <span className="mt-1 block text-[14px] leading-snug text-[#E5E5E5]">{o.text}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function dayLabel(iso: string) {
   const d = new Date(iso);
   const today = new Date();
   const y = new Date(today);
   y.setDate(today.getDate() - 1);
-  if (d.toDateString() === today.toDateString())
-    return `Hoje, ${d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}`;
+  if (d.toDateString() === today.toDateString()) return "Hoje";
   if (d.toDateString() === y.toDateString()) return "Ontem";
   return d.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short" });
 }
@@ -1017,8 +1280,9 @@ function IconBtn({
   );
 }
 
-/** Perfil do cliente (coluna da direita), no espírito dos CRMs de referência. */
-function Profile({
+/* ───────────────────────── assistente ───────────────────────── */
+
+function Assistant({
   contact,
   lead,
   onClose,
@@ -1029,26 +1293,8 @@ function Profile({
 }) {
   const [ficha, setFicha] = useState<string | null>(null);
   const [manual, setManual] = useState("");
-  const thread = useQuery({
-    queryKey: ["wa-thread", contact.jid],
-    queryFn: () => waThread({ data: { jid: contact.jid } }),
-    staleTime: 3_000,
-  });
-  const inboundText = useMemo(
-    () =>
-      (thread.data ?? [])
-        .filter((m) => !m.from_me && m.body)
-        .slice(-8)
-        .map((m) => m.body)
-        .join("\n"),
-    [thread.data],
-  );
-  const quotes = useQuery({
-    queryKey: ["crm-quote", contact.jid, inboundText],
-    queryFn: () => crmPerfumeQuote({ data: { text: inboundText } }),
-    enabled: !!inboundText,
-    staleTime: 60_000,
-  });
+  const thread = useThread(contact.jid);
+  const quotes = useQuotes(contact.jid, thread.data);
   const manualQ = useQuery({
     queryKey: ["crm-quote-manual", manual],
     queryFn: () => crmPerfumeQuote({ data: { text: manual } }),
@@ -1058,190 +1304,310 @@ function Profile({
   const name = contactName(contact);
   const wa = whatsLink(contact.phone_normalized);
   const quoteList = quotes.data ?? [];
+  const task = lead ? taskOf(lead) : null;
+  const facts = lead ? factsOf(lead).slice(0, 6) : [];
+  const interests = lead ? interestsOf(lead).slice(0, 4) : [];
+  const t = lead ? TEMP[lead.temp] : null;
 
   return (
-    <div className="space-y-3">
-      <section className="relative rounded-[28px] bg-[#1A1A1A] px-4 pt-6 pb-5 text-center">
+    <div className="space-y-4">
+      {/* quem é, em uma linha */}
+      <section className="flex items-center gap-3">
+        <Avatar
+          name={name}
+          score={lead?.score}
+          temp={lead?.temp}
+          size={52}
+          gold={(lead?.orders_count ?? 0) > 0}
+        />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[17px] font-bold tracking-[-0.02em]">{name}</p>
+          <p className="flex items-center gap-2 text-[12.5px] text-[#A9A9A9]">
+            {t ? (
+              <span
+                className="inline-flex items-center gap-1.5 font-bold"
+                style={{ color: t.ring === "#5A5A5A" ? "#A9A9A9" : t.ring }}
+              >
+                <span className="size-2 rounded-full" style={{ background: t.ring }} />
+                {t.label}
+              </span>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => {
+                void navigator.clipboard?.writeText(contact.phone_normalized ?? "");
+                toast.success("Número copiado");
+              }}
+              className="inline-flex items-center gap-1 truncate hover:text-white"
+            >
+              {fmtPhone(contact.phone_normalized)} <Copy className="size-3" />
+            </button>
+          </p>
+        </div>
         {onClose ? (
           <button
             type="button"
             onClick={onClose}
-            aria-label="Fechar perfil"
-            className="press absolute top-3 right-3 grid size-9 place-items-center rounded-full text-[#8C8C8C] hover:bg-white/[0.06] hover:text-white"
+            aria-label="Fechar assistente"
+            className="press grid size-9 shrink-0 place-items-center rounded-full text-[#8C8C8C] hover:bg-white/[0.06] hover:text-white"
           >
             <PanelRightClose className="size-[17px]" />
           </button>
         ) : null}
-        <span className="relative mx-auto block w-fit">
-          <Avatar
-            name={name}
-            score={lead?.score}
-            temp={lead?.temp}
-            size={86}
-            gold={(lead?.orders_count ?? 0) > 0}
-          />
-          {lead?.live?.active ? (
-            <span className="absolute right-1 bottom-1 size-4 rounded-full bg-[#7FCF9F] ring-[3px] ring-[#1A1A1A]" />
-          ) : null}
-        </span>
-        <p className="mt-3 truncate text-[18px] font-bold tracking-[-0.02em]">{name}</p>
-        <button
-          type="button"
-          onClick={() => {
-            void navigator.clipboard?.writeText(contact.phone_normalized ?? "");
-            toast.success("Número copiado");
-          }}
-          className="mx-auto mt-1 inline-flex items-center gap-1.5 text-[13px] text-[#8C8C8C] hover:text-white"
-        >
-          {fmtPhone(contact.phone_normalized)} <Copy className="size-3.5" />
-        </button>
-        {lead ? (
-          <div className="mt-3 flex justify-center">
-            <TempPill temp={lead.temp} score={lead.score} />
-          </div>
-        ) : null}
-        <div className="mt-4 flex justify-center gap-2.5">
-          {wa ? (
-            <RoundAction label="Abrir no WhatsApp" href={wa}>
-              <WhatsMark />
-            </RoundAction>
-          ) : null}
-          {lead ? (
-            <RoundAction label="Ficha completa" onClick={() => setFicha(lead.id)}>
-              <UserRound />
-            </RoundAction>
-          ) : null}
-        </div>
-        {lead ? (
-          <div className="mt-4 grid grid-cols-3 gap-1.5">
-            <Stat
-              label="Gasto"
-              value={lead.spent ? `R$ ${Math.round(lead.spent).toLocaleString("pt-BR")}` : "—"}
-            />
-            <Stat label="Pedidos" value={String(lead.orders_count)} />
-            <Stat label="Última" value={lead.last_order_at ? ago(lead.last_order_at) : "—"} />
-          </div>
-        ) : null}
       </section>
+      <div className="grid grid-cols-2 gap-2">
+        {wa ? (
+          <a
+            href={wa}
+            target="_blank"
+            rel="noreferrer"
+            className="press inline-flex h-10 items-center justify-center gap-1.5 rounded-full bg-[#1C1C1C] text-[13px] font-bold text-[#D4D4D4] hover:text-white"
+          >
+            <WhatsMark className="size-4" /> WhatsApp
+          </a>
+        ) : null}
+        {lead ? (
+          <button
+            type="button"
+            onClick={() => setFicha(lead.id)}
+            className="press inline-flex h-10 items-center justify-center gap-1.5 rounded-full bg-[#1C1C1C] text-[13px] font-bold text-[#D4D4D4] hover:text-white"
+          >
+            <UserRound className="size-4" /> Ficha
+          </button>
+        ) : null}
+      </div>
 
       {!contact.customer_id ? <LinkCustomer contact={contact} /> : null}
 
-      {quoteList.length ? (
-        <Section title="Perfumes citados" badge={String(quoteList.length)}>
+      {/* dica */}
+      {lead ? (
+        <Block title="Dica" icon={<Lightbulb />}>
+          <div className="rounded-[20px] border border-[#FFD599]/25 bg-[#FFD599]/[0.06] p-3.5">
+            <p className="text-[15.5px] font-bold text-[#FFD599]">
+              {task ? TASKS[task].title : lead.action.title}
+            </p>
+            <p className="mt-0.5 text-[13px] text-[#D4D4D4]">
+              {lead.reasons[0] ?? lead.action.why}
+            </p>
+            {lead.action.message ? (
+              <button
+                type="button"
+                onClick={() => compose(lead.action.message!)}
+                className="press mt-3 inline-flex h-9 items-center gap-1.5 rounded-full bg-[#FFD599] px-3.5 text-[12.5px] font-bold text-[#15130F]"
+              >
+                Usar mensagem sugerida
+              </button>
+            ) : null}
+          </div>
+        </Block>
+      ) : null}
+
+      {/* perfumes citados */}
+      <Block
+        title="Perfumes citados"
+        icon={<Sparkles />}
+        badge={quoteList.length ? String(quoteList.length) : undefined}
+      >
+        {quoteList.length ? (
           <div className="space-y-2">
             {quoteList.map((qt) => (
-              <PerfumeQuoteCard key={qt.product_id} q={qt} onInsert={compose} />
+              <QuoteRow key={qt.product_id} q={qt} />
             ))}
           </div>
-        </Section>
-      ) : null}
-
-      {lead ? (
-        <Section title="Leitura do cliente" badge={TEMP[lead.temp].label}>
-          <LeadReading lead={lead} compact onUseMessage={compose} />
-        </Section>
-      ) : null}
-
-      <Section title="Cotar perfume" defaultOpen={!quoteList.length}>
-        <label className="relative block">
+        ) : (
+          <p className="text-[13px] text-[#8C8C8C]">
+            Quando o cliente falar de um perfume, o preço aparece aqui e embaixo da mensagem.
+          </p>
+        )}
+        <label className="relative mt-3 block">
           <Search className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-[#6F6F6F]" />
           <input
             value={manual}
             onChange={(e) => setManual(e.target.value)}
-            placeholder="Nome do perfume"
+            placeholder="Cotar outro perfume"
             className={cn(pxInputClass, "pl-11")}
           />
         </label>
-        <div className="mt-2 space-y-2">
-          {(manualQ.data ?? []).map((qt) => (
-            <PerfumeQuoteCard key={`m-${qt.product_id}`} q={qt} onInsert={compose} />
-          ))}
-          {manual.trim().length >= 3 && !manualQ.isFetching && !(manualQ.data ?? []).length ? (
-            <p className="px-1 text-[13px] text-[#8C8C8C]">Não achei esse perfume no catálogo.</p>
-          ) : null}
-          {!manual && !quoteList.length ? (
-            <p className="px-1 text-[13px] text-[#8C8C8C]">
-              Quando o cliente falar o nome de um perfume, o preço aparece sozinho aqui.
-            </p>
-          ) : null}
-        </div>
-      </Section>
+        {(manualQ.data ?? []).length ? (
+          <div className="mt-2 space-y-2">
+            {manualQ.data!.map((qt) => (
+              <QuoteRow key={`m-${qt.product_id}`} q={qt} />
+            ))}
+          </div>
+        ) : manual.trim().length >= 3 && !manualQ.isFetching ? (
+          <p className="mt-2 text-[13px] text-[#8C8C8C]">Não achei esse perfume no catálogo.</p>
+        ) : null}
+      </Block>
+
+      {/* do que gosta */}
+      {interests.length ? (
+        <Block title="Do que ele gosta">
+          <div className="grid grid-cols-2 gap-2">
+            {interests.map((it) => (
+              <div
+                key={it.key}
+                className="flex min-w-0 items-center gap-2 rounded-[16px] bg-[#1C1C1C] p-1.5"
+              >
+                <span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-[12px] bg-white">
+                  {it.image_url ? (
+                    <img
+                      src={it.image_url}
+                      alt=""
+                      loading="lazy"
+                      className="size-full object-contain"
+                    />
+                  ) : null}
+                </span>
+                <span className="min-w-0">
+                  <span className="line-clamp-1 text-[12px] font-bold">{it.name}</span>
+                  <span
+                    className={cn(
+                      "text-[11px] font-bold",
+                      it.tone === "gold"
+                        ? "text-[#FFD599]"
+                        : it.tone === "green"
+                          ? "text-[#7FCF9F]"
+                          : "text-[#8C8C8C]",
+                    )}
+                  >
+                    {it.tag}
+                  </span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </Block>
+      ) : null}
+
+      {/* quem é */}
+      {facts.length ? (
+        <Block title="Quem é">
+          <dl className="grid grid-cols-2 gap-2">
+            {facts.map((f) => (
+              <div key={f.label} className="min-w-0 rounded-[16px] bg-[#1C1C1C] px-3 py-2.5">
+                <dt className="truncate text-[11.5px] font-semibold text-[#8C8C8C]">{f.label}</dt>
+                <dd
+                  className={cn(
+                    "mt-0.5 truncate font-bold",
+                    f.strong ? "text-[16px] text-[#FFD599]" : "text-[14px]",
+                  )}
+                >
+                  {f.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </Block>
+      ) : null}
 
       <CustomerSheet id={ficha} onClose={() => setFicha(null)} />
     </div>
   );
 }
 
-function Section({
+function Block({
   title,
+  icon,
   badge,
-  defaultOpen = true,
   children,
 }: {
   title: string;
+  icon?: ReactNode;
   badge?: string;
-  defaultOpen?: boolean;
   children: ReactNode;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
   return (
-    <section className="rounded-[24px] border border-white/[0.06] p-3">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 px-1 py-1 text-left"
-      >
-        <span className="min-w-0 flex-1 truncate text-[15px] font-bold">{title}</span>
+    <section>
+      <div className="mb-2 flex items-center gap-2">
+        {icon ? <span className="text-[#FFD599] [&_svg]:size-4">{icon}</span> : null}
+        <h3 className="flex-1 text-[14px] font-bold">{title}</h3>
         {badge ? (
           <span className="rounded-full bg-white/[0.07] px-2 py-0.5 text-[11.5px] font-bold text-[#D4D4D4]">
             {badge}
           </span>
         ) : null}
-        <ChevronDown
-          className={cn("size-4 text-[#8C8C8C] transition-transform", !open && "-rotate-90")}
-        />
-      </button>
-      {open ? <div className="mt-2.5">{children}</div> : null}
+      </div>
+      {children}
     </section>
   );
 }
 
-function RoundAction({
-  label,
-  onClick,
-  href,
-  children,
-}: {
-  label: string;
-  onClick?: () => void;
-  href?: string;
-  children: ReactNode;
-}) {
-  const cls =
-    "press grid size-12 place-items-center rounded-full border border-white/[0.1] text-[#D4D4D4] hover:bg-white/[0.06] hover:text-white [&_svg]:size-[19px]";
-  return href ? (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      aria-label={label}
-      title={label}
-      className={cls}
-    >
-      {children}
-    </a>
-  ) : (
-    <button type="button" onClick={onClick} aria-label={label} title={label} className={cls}>
-      {children}
-    </button>
+/** Perfume cotado: cliente paga · você paga · lucro, e o botão que responde com o preço. */
+function QuoteRow({ q }: { q: PerfumeQuote }) {
+  const f = q.frasco;
+  return (
+    <article className="rounded-[20px] bg-[#1C1C1C] p-3">
+      <div className="flex items-center gap-2.5">
+        <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-[13px] bg-white">
+          {q.image_url ? (
+            <img src={q.image_url} alt="" className="size-full object-contain" loading="lazy" />
+          ) : null}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13.5px] font-bold">{q.name}</p>
+          <p className="truncate text-[11.5px] text-[#8C8C8C]">
+            {[q.brand, q.volume_ml ? `${q.volume_ml}ml` : null].filter(Boolean).join(" · ")}
+            {q.ready ? (
+              <span className="text-[#7FCF9F]">
+                {" "}
+                · {q.stock > 0 ? `${q.stock} na loja` : "pronta"}
+              </span>
+            ) : null}
+          </p>
+        </div>
+      </div>
+      {f ? (
+        <div className="mt-2.5 grid grid-cols-3 gap-1.5 text-center">
+          <Mini label="Cliente paga" value={brl(f.pix)} gold />
+          <Mini label="Você paga" value={f.cost != null ? brl(f.cost) : "—"} />
+          <Mini label="Lucro" value={f.profit != null ? brl(f.profit) : "—"} green />
+        </div>
+      ) : null}
+      {q.decants.length ? (
+        <p className="mt-2 truncate text-[11.5px] text-[#A9A9A9]">
+          Decant: {q.decants.map((d) => `${d.ml}ml ${brl(d.pix)}`).join(" · ")}
+        </p>
+      ) : null}
+      <button
+        type="button"
+        onClick={() => compose(pricePitch(q))}
+        className="press mt-2.5 inline-flex h-9 w-full items-center justify-center rounded-full bg-white/[0.08] text-[12.5px] font-bold hover:bg-[#FFD599] hover:text-[#15130F]"
+      >
+        Responder com o preço
+      </button>
+    </article>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Mini({
+  label,
+  value,
+  gold,
+  green,
+}: {
+  label: string;
+  value: string;
+  gold?: boolean;
+  green?: boolean;
+}) {
   return (
-    <div className="min-w-0 rounded-[16px] bg-[#232323] px-2 py-2">
-      <p className="truncate text-[10.5px] font-semibold text-[#8C8C8C]">{label}</p>
-      <p className="truncate text-[14px] font-bold tabular-nums">{value}</p>
+    <div
+      className={cn(
+        "min-w-0 rounded-[12px] px-1 py-1.5",
+        gold ? "bg-[#FFD599] text-[#15130F]" : "bg-[#262626]",
+      )}
+    >
+      <p
+        className={cn(
+          "truncate text-[10px] font-semibold",
+          gold ? "text-[#15130F]/65" : "text-[#8C8C8C]",
+        )}
+      >
+        {label}
+      </p>
+      <p className={cn("truncate text-[13px] font-bold tabular-nums", green && "text-[#7FCF9F]")}>
+        {value}
+      </p>
     </div>
   );
 }
@@ -1266,8 +1632,8 @@ function LinkCustomer({ contact }: { contact: WaContact }) {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Não foi possível ligar"),
   });
   return (
-    <Section title="Número sem ficha">
-      <p className="px-1 text-[13px] text-[#8C8C8C]">
+    <Block title="Número sem ficha" icon={<UserPlus />}>
+      <p className="text-[13px] text-[#8C8C8C]">
         Crie a ficha para o CRM juntar o que essa pessoa olha e compra no app.
       </p>
       <div className="mt-3 flex gap-2">
@@ -1283,10 +1649,10 @@ function LinkCustomer({ contact }: { contact: WaContact }) {
           onClick={() => link.mutate({ createName: name })}
           className="press inline-flex h-12 shrink-0 items-center gap-1.5 rounded-full bg-[#FFD599] px-4 text-[13.5px] font-bold text-[#15130F] disabled:opacity-40"
         >
-          <UserPlus className="size-4" /> Criar
+          Criar
         </button>
       </div>
-      <label className="relative mt-3 block">
+      <label className="relative mt-2 block">
         <Link2 className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-[#6F6F6F]" />
         <input
           value={q}
@@ -1318,6 +1684,6 @@ function LinkCustomer({ contact }: { contact: WaContact }) {
           ))}
         </div>
       ) : null}
-    </Section>
+    </Block>
   );
 }

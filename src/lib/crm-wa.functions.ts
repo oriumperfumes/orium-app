@@ -335,6 +335,81 @@ async function mentionIndex(db: any) {
 }
 
 /** Perfumes citados no texto (ou ids escolhidos) com preço final, custo, lucro e estoque. */
+
+type StaffCtx = Awaited<ReturnType<typeof staffCtx>>;
+
+/** Preço final, custo, lucro e estoque dos perfumes citados no texto (ou ids escolhidos). */
+async function quotesFor(
+  ctx: StaffCtx,
+  data: { text: string; productIds: string[] },
+): Promise<PerfumeQuote[]> {
+  const hits: Array<{
+    productId: string;
+    term: string | null;
+    confidence: PerfumeQuote["confidence"];
+  }> = data.productIds.map((id) => ({ productId: id, term: null, confidence: "manual" }));
+  if (data.text) {
+    const { findMentions } = await import("@/lib/perfume-mentions");
+    for (const m of findMentions(data.text, await mentionIndex(ctx.adminDb), 3))
+      hits.push({ productId: m.productId, term: m.term, confidence: m.confidence });
+  }
+  if (!hits.length) return [] as PerfumeQuote[];
+  const { getProductPrices, getProductCosts } = await import("@/lib/copilot/pricing-tools.server");
+  const { data: prows } = await ctx.adminDb
+    .from("products")
+    .select("id, image_url, slug, local_stock, ready_to_deliver, volume_ml")
+    .in(
+      "id",
+      hits.map((h) => h.productId),
+    );
+  const extra = new Map(((prows ?? []) as any[]).map((p) => [p.id, p]));
+  const canCost = ctx.roles.length > 0;
+  const out: PerfumeQuote[] = [];
+  for (const h of hits) {
+    try {
+      const prices: any = await getProductPrices(ctx as any, h.productId);
+      const costs: any = canCost
+        ? await getProductCosts(ctx as any, h.productId).catch(() => null)
+        : null;
+      const p = extra.get(h.productId) ?? {};
+      const f = prices.frasco;
+      out.push({
+        product_id: h.productId,
+        name: prices.product?.name,
+        brand: prices.product?.brand ?? null,
+        image_url: p.image_url ?? prices.product?.image_url ?? null,
+        volume_ml: p.volume_ml ?? null,
+        term: h.term,
+        confidence: h.confidence,
+        frasco: f
+          ? {
+              pix: f.pix,
+              card: f.card ?? null,
+              base: f.base_price,
+              promo: f.promotion?.percent ?? null,
+              cost: costs?.frasco?.cost ?? costs?.bottle_cost ?? null,
+              profit: costs?.frasco?.profit ?? null,
+              margin: costs?.frasco?.margin_percent ?? null,
+            }
+          : null,
+        decants: [5, 10]
+          .map((ml) => {
+            const d = prices[`decant_${ml}ml`];
+            const c = costs?.[`decant_${ml}ml`];
+            return d ? { ml, pix: d.pix, cost: c?.cost ?? null, profit: c?.profit ?? null } : null;
+          })
+          .filter(Boolean) as PerfumeQuote["decants"],
+        stock: Number(p.local_stock ?? 0),
+        ready: !!p.ready_to_deliver || Number(p.local_stock ?? 0) > 0,
+        slug: p.slug ?? null,
+      });
+    } catch (e) {
+      console.error("crmPerfumeQuote", h.productId, e instanceof Error ? e.message : e);
+    }
+  }
+  return out;
+}
+
 export const crmPerfumeQuote = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { text?: string; productIds?: string[] }) => ({
@@ -343,72 +418,142 @@ export const crmPerfumeQuote = createServerFn({ method: "POST" })
   }))
   .handler(async ({ data, context }) => {
     const ctx = await staffCtx(context as any);
-    const hits: Array<{
-      productId: string;
-      term: string | null;
-      confidence: PerfumeQuote["confidence"];
-    }> = data.productIds.map((id) => ({ productId: id, term: null, confidence: "manual" }));
-    if (data.text) {
-      const { findMentions } = await import("@/lib/perfume-mentions");
-      for (const m of findMentions(data.text, await mentionIndex(ctx.adminDb), 3))
-        hits.push({ productId: m.productId, term: m.term, confidence: m.confidence });
+    return quotesFor(ctx, data);
+  });
+
+// ---------- resposta ideal (IA) ----------
+
+export type ReplySuggestion = { reply: string; short: string; why: string; next_step: string };
+
+const REPLY_SYSTEM = `Você é o melhor vendedor da Orium Perfumes, loja de perfumes árabes no Rio de Janeiro, respondendo clientes pelo WhatsApp.
+Objetivo: fazer o cliente comprar agora, com a menor chance de erro.
+Regras:
+- Português do Brasil, tom humano e próximo de WhatsApp. Curto: no máximo 3 frases curtas. 0 a 2 emojis.
+- NUNCA invente preço, estoque, prazo, desconto, cupom ou brinde. Use só os dados fornecidos. Sem preço nos dados: diga que vai confirmar o valor.
+- Nunca fale de custo, margem ou lucro. Nunca diga que viu os dados de navegação do cliente de forma invasiva ("vi que você curtiu" é ok; números de visitas não).
+- Se perguntou preço: dê o preço no Pix (e cartão, se houver) dos dados e, se houver desconto Pix, destaque. Se tiver frasco pronta na loja, diga que pode retirar hoje.
+- Se o preço parecer alto para o perfil, ofereça o decant como alternativa (se houver nos dados).
+- Retirada na loja é grátis. Entrega: o valor é combinado pelo WhatsApp. Não fale "sob encomenda" nem prazos longos.
+- Sobre o perfume: descreva o estilo de forma geral e desejável, sem inventar notas específicas se não tiver certeza.
+- Termine sempre com uma pergunta fechada que avance a venda (ex.: "Separo um pra você?", "Te mando a chave Pix?").
+- Responda à ÚLTIMA mensagem do cliente. Se não houver mensagem do cliente, escreva uma abertura certeira para o perfil.`;
+
+export const crmSuggestReply = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { jid: string; tone?: string | null }) => ({
+    jid: String(d.jid),
+    tone: d.tone ? String(d.tone).slice(0, 80) : null,
+  }))
+  .handler(async ({ data, context }) => {
+    const ctx = await staffCtx(context as any);
+    const db = ctx.adminDb;
+    const [{ data: contact }, { data: msgs }, { data: ps }] = await Promise.all([
+      db
+        .from("wa_contacts")
+        .select("jid, push_name, customer_id, stage, phone_normalized")
+        .eq("jid", data.jid)
+        .maybeSingle(),
+      db
+        .from("wa_messages")
+        .select("from_me, body, kind, ts")
+        .eq("jid", data.jid)
+        .order("ts", { ascending: false })
+        .limit(24),
+      db
+        .from("pricing_settings")
+        .select("pix_discount_active, pix_discount_percent")
+        .eq("id", true)
+        .maybeSingle(),
+    ]);
+    if (!contact) throw new Error("Conversa não encontrada.");
+    const history = (
+      (msgs ?? []) as Array<{ from_me: boolean; body: string | null; kind: string; ts: string }>
+    ).reverse();
+    const inbound = history
+      .filter((m) => !m.from_me && m.body)
+      .slice(-8)
+      .map((m) => m.body)
+      .join("\n");
+
+    let lead: import("@/lib/crm-intel").Lead | null = null;
+    if (contact.customer_id) {
+      const { data: rows } = await (context.supabase as any).rpc("crm_leads");
+      const raw = ((rows ?? []) as LeadRaw[]).find((r) => r.id === contact.customer_id);
+      if (raw) lead = (await import("@/lib/crm-intel")).enrich([raw])[0] ?? null;
     }
-    if (!hits.length) return [] as PerfumeQuote[];
-    const { getProductPrices, getProductCosts } =
-      await import("@/lib/copilot/pricing-tools.server");
-    const { data: prows } = await ctx.adminDb
-      .from("products")
-      .select("id, image_url, slug, local_stock, ready_to_deliver, volume_ml")
-      .in(
-        "id",
-        hits.map((h) => h.productId),
-      );
-    const extra = new Map(((prows ?? []) as any[]).map((p) => [p.id, p]));
-    const canCost = ctx.roles.length > 0;
-    const out: PerfumeQuote[] = [];
-    for (const h of hits) {
-      try {
-        const prices: any = await getProductPrices(ctx as any, h.productId);
-        const costs: any = canCost
-          ? await getProductCosts(ctx as any, h.productId).catch(() => null)
-          : null;
-        const p = extra.get(h.productId) ?? {};
-        const f = prices.frasco;
-        out.push({
-          product_id: h.productId,
-          name: prices.product?.name,
-          brand: prices.product?.brand ?? null,
-          image_url: p.image_url ?? prices.product?.image_url ?? null,
-          volume_ml: p.volume_ml ?? null,
-          term: h.term,
-          confidence: h.confidence,
-          frasco: f
-            ? {
-                pix: f.pix,
-                card: f.card ?? null,
-                base: f.base_price,
-                promo: f.promotion?.percent ?? null,
-                cost: costs?.frasco?.cost ?? costs?.bottle_cost ?? null,
-                profit: costs?.frasco?.profit ?? null,
-                margin: costs?.frasco?.margin_percent ?? null,
-              }
-            : null,
-          decants: [5, 10]
-            .map((ml) => {
-              const d = prices[`decant_${ml}ml`];
-              const c = costs?.[`decant_${ml}ml`];
-              return d
-                ? { ml, pix: d.pix, cost: c?.cost ?? null, profit: c?.profit ?? null }
-                : null;
-            })
-            .filter(Boolean) as PerfumeQuote["decants"],
-          stock: Number(p.local_stock ?? 0),
-          ready: !!p.ready_to_deliver || Number(p.local_stock ?? 0) > 0,
-          slug: p.slug ?? null,
-        });
-      } catch (e) {
-        console.error("crmPerfumeQuote", h.productId, e instanceof Error ? e.message : e);
-      }
-    }
-    return out;
+    const quotes = inbound ? await quotesFor(ctx, { text: inbound, productIds: [] }) : [];
+    const pix = ps?.pix_discount_active ? Number(ps.pix_discount_percent ?? 0) : 0;
+
+    const facts = {
+      cliente: {
+        nome: lead?.name ?? contact.push_name ?? null,
+        etapa: contact.stage,
+        ja_comprou: lead ? lead.orders_count > 0 : null,
+        compras: lead?.orders_count ?? 0,
+        ticket_medio: lead && lead.orders_count ? Math.round(lead.spent / lead.orders_count) : null,
+        perfil: lead?.profile ?? [],
+        sinais: lead?.reasons ?? [],
+        proxima_acao_sugerida: lead?.action.title ?? null,
+        carrinho: lead?.cart?.names ?? [],
+        favoritos: (lead?.favorites ?? []).slice(0, 4).map((f) => f.name),
+        mais_vistos: (lead?.views?.top ?? [])
+          .filter((t) => !t.bought)
+          .slice(0, 3)
+          .map((t) => t.name),
+      },
+      perfumes_citados: quotes.map((q) => ({
+        nome: q.name,
+        marca: q.brand,
+        ml: q.volume_ml,
+        frasco_pix: q.frasco?.pix ?? null,
+        frasco_cartao: q.frasco?.card ?? null,
+        promocao_percent: q.frasco?.promo ?? null,
+        decants: q.decants.map((d) => ({ ml: d.ml, pix: d.pix })),
+        pronta_na_loja: q.ready,
+      })),
+      loja: {
+        desconto_pix_percent: pix,
+        retirada: "grátis na loja",
+        entrega: "valor combinado pelo WhatsApp",
+        site: "https://oriumperfumes.com",
+      },
+      conversa: history
+        .slice(-16)
+        .map((m) => `${m.from_me ? "Orium" : "Cliente"}: ${m.body || `[${m.kind}]`}`),
+      pedido_do_vendedor: data.tone,
+    };
+
+    const { aiJson } = await import("@/lib/ai/engine.server");
+    const out = await aiJson<ReplySuggestion>({
+      feature: "crm_reply",
+      profile: "advanced",
+      system: REPLY_SYSTEM,
+      prompt: `Dados (JSON):\n${JSON.stringify(facts)}\n\nEscreva a melhor resposta agora.`,
+      schema: {
+        name: "crm_reply",
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["reply", "short", "why", "next_step"],
+          properties: {
+            reply: { type: "string", description: "Resposta pronta para enviar" },
+            short: { type: "string", description: "Versão ainda mais curta, 1 frase" },
+            why: {
+              type: "string",
+              description: "Por que essa resposta converte, 1 frase para o vendedor",
+            },
+            next_step: {
+              type: "string",
+              description: "O que o vendedor faz depois que o cliente responder, 1 frase",
+            },
+          },
+        },
+      },
+    });
+    return {
+      reply: String(out.reply ?? "").trim(),
+      short: String(out.short ?? "").trim(),
+      why: String(out.why ?? "").trim(),
+      next_step: String(out.next_step ?? "").trim(),
+    };
   });
