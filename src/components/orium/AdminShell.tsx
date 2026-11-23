@@ -100,7 +100,7 @@ export const NAV_HUBS: NavHub[] = [
     label: "CRM",
     icon: Users,
     sections: [
-      { to: "/admin/leads", label: "Painel" },
+      { to: "/admin/leads", label: "Hoje" },
       { to: "/admin/conversas", label: "Conversas" },
       { to: "/admin/funil", label: "Funil" },
       { to: "/admin/clientes", label: "Clientes" },

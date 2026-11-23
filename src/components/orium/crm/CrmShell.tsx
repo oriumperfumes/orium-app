@@ -18,7 +18,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
 export const CRM_ITEMS = [
-  { to: "/admin/leads", label: "Painel", icon: LayoutGrid },
+  { to: "/admin/leads", label: "Hoje", icon: LayoutGrid },
   { to: "/admin/conversas", label: "Conversas", icon: MessagesSquare, badge: true },
   { to: "/admin/funil", label: "Funil", icon: RouteIcon },
   { to: "/admin/clientes", label: "Clientes", icon: Users },

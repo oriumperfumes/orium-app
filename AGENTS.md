@@ -63,6 +63,7 @@
 - `products`: `anon` e `authenticated` leem só as 39 colunas públicas (as 38 de antes + `price_on_request`) (grant por coluna) e `authenticated` não escreve na tabela; colunas internas (`manual_cost`, `local_stock`, `ready_to_deliver`, chaves de identidade...) só por server functions que confirmam `is_staff` e usam o cliente de serviço (`src/lib/product-internal.functions.ts`, `getAdminProductRow`); pronta entrega pública vem de `public_ready_to_deliver_ids()` — nunca `select("*")` nem filtro por coluna interna no navegador.
 
 ## CRM (Clientes → Leads / Conversas)
-- `crm_leads()` (SQL, staff) devolve o retrato de cada cliente; `src/lib/crm-intel.ts` (puro, testado) calcula calor, listas, perfil e próxima ação.
+- `crm_leads()` (SQL, staff) devolve o retrato de cada cliente (com fotos); `src/lib/crm-intel.ts` (puro, testado) calcula calor, tarefas do dia (TASKS), mensagens, fatos e interesses.
+- CRM: `CrmShell` (menu lateral) envolve as rotas de cliente via AdminShell; Hoje = `/admin/leads`, painel do cliente = `crm/LeadPanel.tsx`; Funil tem arrasto livre (pointer events).
 - WhatsApp: tabelas `wa_*`; a ponte `bridge/` (Baileys, conexão não oficial) só fala com o banco por `wa_bridge_*` + token (hash em `wa_bridge_state`). Enviar = inserir em `wa_outbox`; nunca envio em massa ou automático.
 - Perfume citado no chat: `src/lib/perfume-mentions.ts` + `crmPerfumeQuote` (preço/custo via ferramentas do Copilot).

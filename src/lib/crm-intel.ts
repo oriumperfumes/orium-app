@@ -27,7 +27,13 @@ export type LeadRaw = {
   total_items: number;
   last_decant_at: string | null;
   top_brands: string[];
-  recent_items: Array<{ product_id: string | null; name: string; decant: boolean; at: string }>;
+  recent_items: Array<{
+    product_id: string | null;
+    name: string;
+    decant: boolean;
+    at: string;
+    image_url?: string | null;
+  }>;
   views: {
     d7: number;
     d30: number;
@@ -41,6 +47,7 @@ export type LeadRaw = {
       price: number | null;
       in_stock: boolean;
       bought: boolean;
+      image_url?: string | null;
     }>;
   } | null;
   cart: {
@@ -51,14 +58,28 @@ export type LeadRaw = {
     last_at: string;
     abandoned_at: string | null;
     names: string[];
+    products?: Array<{
+      product_id: string | null;
+      name: string | null;
+      image_url: string | null;
+      decant_ml: number | null;
+      price: number | null;
+    }>;
   } | null;
   favorites: Array<{
     product_id: string;
     name: string;
     in_stock: boolean;
     price: number | null;
+    image_url?: string | null;
   }> | null;
-  waiting: Array<{ product_id: string; name: string; in_stock: boolean; since: string }> | null;
+  waiting: Array<{
+    product_id: string;
+    name: string;
+    in_stock: boolean;
+    since: string;
+    image_url?: string | null;
+  }> | null;
   live: {
     active: boolean;
     product: string | null;
@@ -392,4 +413,187 @@ export function enrich(rows: LeadRaw[], now = Date.now()): Lead[] {
       action: nextAction(r, now),
     }))
     .sort((a, b) => b.score - a.score);
+}
+
+// ---------- "Hoje": tarefas, mensagens e fatos para o painel do cliente ----------
+
+export type TaskKey =
+  | "reply"
+  | "checkout"
+  | "cart"
+  | "arrived"
+  | "stuck"
+  | "upgrade"
+  | "repurchase"
+  | "winback"
+  | "first";
+
+/** Tarefas do dia, na ordem em que valem mais dinheiro. */
+export const TASKS: Record<TaskKey, { title: string; hint: string }> = {
+  reply: { title: "Responder", hint: "Escreveram e estão esperando você" },
+  checkout: { title: "Ajudar a fechar", hint: "Estão finalizando o pedido agora" },
+  cart: { title: "Recuperar carrinho", hint: "Separaram perfumes e não fecharam" },
+  arrived: { title: "Avisar que chegou", hint: "Pediram aviso e o perfume chegou" },
+  stuck: { title: "Destravar interesse", hint: "Voltaram várias vezes no mesmo perfume" },
+  upgrade: { title: "Oferecer o frasco", hint: "Provaram no decant há pouco tempo" },
+  repurchase: { title: "Puxar recompra", hint: "Chegou a época em que costumam voltar" },
+  winback: { title: "Reconquistar", hint: "Compraram antes e sumiram" },
+  first: { title: "Primeira venda", hint: "Deram sinais e ainda não compraram" },
+};
+export const TASK_ORDER: TaskKey[] = [
+  "reply",
+  "checkout",
+  "cart",
+  "arrived",
+  "stuck",
+  "upgrade",
+  "repurchase",
+  "winback",
+  "first",
+];
+
+/** Tarefa de hoje para o cliente, ou null se não há nada que valha a pena agora. */
+export function taskOf(l: Lead): TaskKey | null {
+  const k = l.action.key as TaskKey | "nurture";
+  if (k === "nurture") return null;
+  // primeira venda só entra quando há algum sinal real de interesse
+  if (k === "first" && l.score < 15) return null;
+  return k;
+}
+
+/** Duas ou três versões de mensagem para o dono escolher (todas editáveis). */
+export function messageOptions(l: Lead): Array<{ label: string; text: string }> {
+  const fn = firstName(l.name);
+  const hi = fn ? `Oi, ${fn}!` : "Oi!";
+  const out: Array<{ label: string; text: string }> = [];
+  if (l.action.message) out.push({ label: "Sugerida", text: l.action.message });
+  const top = (l.views?.top ?? []).find((t) => !t.bought) ?? (l.favorites ?? [])[0];
+  if (top && !out.some((o) => o.text.includes(top.name)))
+    out.push({
+      label: `Falar do ${top.name.split(" ").slice(0, 2).join(" ")}`,
+      text: `${hi} Vi que você curtiu o ${top.name} ✨ Ele está disponível aqui na Orium. Quer que eu te mande os detalhes e o valor?`,
+    });
+  out.push({
+    label: "Oferecer desconto",
+    text: `${hi} Separei uma condição especial pra você hoje aqui na Orium 😊 Quer aproveitar? Me fala qual perfume você está de olho.`,
+  });
+  if (!out.some((o) => o.label === "Sugerida"))
+    out.unshift({
+      label: "Simples",
+      text: `${hi} Aqui é da Orium Perfumes 😊 Posso te ajudar com algum perfume?`,
+    });
+  return out.slice(0, 3);
+}
+
+export type Fact = { label: string; value: string; strong?: boolean };
+
+const money0 = (v: number) =>
+  v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+
+/** Fatos curtos e claros sobre o cliente (só os que existem). */
+export function factsOf(l: Lead, now = Date.now()): Fact[] {
+  const f: Fact[] = [];
+  if (l.orders_count > 0) {
+    f.push({ label: "Já gastou", value: money0(l.spent), strong: true });
+    f.push({ label: "Compras", value: String(l.orders_count) });
+    f.push({ label: "Ticket médio", value: money0(l.spent / l.orders_count) });
+    f.push({ label: "Última compra", value: relDays(l.last_order_at, now) });
+    const units = l.decant_units + l.bottle_units;
+    if (units)
+      f.push({
+        label: "Prefere",
+        value:
+          l.decant_units / units >= 0.6
+            ? "Decant"
+            : l.decant_units / units <= 0.4
+              ? "Frasco"
+              : "Os dois",
+      });
+    if (l.avg_bottle_price)
+      f.push({
+        label: "Paga no frasco",
+        value: `até ${money0(Math.max(l.max_item_price ?? 0, l.avg_bottle_price))}`,
+      });
+    if (l.avg_interval_days && l.avg_interval_days > 3)
+      f.push({ label: "Volta a cada", value: `${l.avg_interval_days} dias` });
+    if (l.total_items >= 2)
+      f.push({
+        label: "Promoção",
+        value:
+          l.promo_items / l.total_items >= 0.5
+            ? "Adora"
+            : l.promo_items === 0
+              ? "Não precisa"
+              : "Às vezes",
+      });
+  } else {
+    f.push({ label: "Compras", value: "Nenhuma ainda", strong: true });
+    f.push({ label: "Cliente desde", value: relDays(l.created_at, now) });
+  }
+  if (l.views?.d7) f.push({ label: "Visitas na semana", value: `${l.views.d7} perfumes` });
+  if (l.top_brands?.length) f.push({ label: "Marcas", value: l.top_brands.slice(0, 2).join(", ") });
+  return f;
+}
+
+function relDays(iso: string | null, now: number) {
+  if (!iso) return "—";
+  const d = Math.floor((now - new Date(iso).getTime()) / DAY);
+  return d <= 0
+    ? "hoje"
+    : d === 1
+      ? "ontem"
+      : d < 31
+        ? `há ${d} dias`
+        : d < 365
+          ? `há ${Math.round(d / 30)} meses`
+          : `há ${Math.round(d / 365)} ano(s)`;
+}
+
+export type Interest = {
+  key: string;
+  name: string;
+  image_url: string | null;
+  tag: string;
+  tone: "gold" | "plain" | "green";
+};
+
+/** Perfumes que importam para a conversa, com o motivo em uma palavra. */
+export function interestsOf(l: Lead): Interest[] {
+  const out: Interest[] = [];
+  const seen = new Set<string>();
+  const add = (
+    id: string | null,
+    name: string | null,
+    image: string | null | undefined,
+    tag: string,
+    tone: Interest["tone"],
+  ) => {
+    const key = id ?? name ?? "";
+    if (!name || seen.has(key)) return;
+    seen.add(key);
+    out.push({ key, name, image_url: image ?? null, tag, tone });
+  };
+  for (const p of l.cart?.products ?? [])
+    add(
+      p.product_id,
+      p.name,
+      p.image_url,
+      p.decant_ml ? `Carrinho · ${p.decant_ml}ml` : "No carrinho",
+      "gold",
+    );
+  for (const w of l.waiting ?? [])
+    add(
+      w.product_id,
+      w.name,
+      w.image_url,
+      w.in_stock ? "Chegou!" : "Pediu aviso",
+      w.in_stock ? "green" : "plain",
+    );
+  for (const t of l.views?.top ?? [])
+    if (!t.bought)
+      add(t.product_id, t.name, t.image_url, `Viu ${t.views}x`, t.views >= 3 ? "gold" : "plain");
+  for (const f of l.favorites ?? []) add(f.product_id, f.name, f.image_url, "Favorito", "plain");
+  for (const r of l.recent_items)
+    add(r.product_id, r.name, r.image_url, r.decant ? "Comprou decant" : "Comprou", "plain");
+  return out.slice(0, 8);
 }
