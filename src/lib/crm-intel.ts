@@ -7,6 +7,8 @@
 export type LeadRaw = {
   id: string;
   name: string | null;
+  /** foto de perfil do WhatsApp */
+  avatar?: string | null;
   phone: string | null;
   user_id: string | null;
   created_at: string;

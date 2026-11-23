@@ -58,8 +58,11 @@ export function Avatar({
   temp,
   size = 44,
   gold,
+  src,
 }: {
   name?: string | null;
+  /** foto de perfil do WhatsApp (data URL) */
+  src?: string | null;
   score?: number;
   temp?: Temp;
   size?: number;
@@ -80,7 +83,7 @@ export function Avatar({
     >
       <span
         className={cn(
-          "grid place-items-center rounded-full font-bold tracking-[-0.02em]",
+          "grid place-items-center overflow-hidden rounded-full font-bold tracking-[-0.02em]",
           gold ? "bg-[#FFD599] text-[#15130F]" : "bg-[#232323] text-[#D4D4D4]",
         )}
         style={{
@@ -89,7 +92,17 @@ export function Avatar({
           fontSize: Math.round(size * 0.33),
         }}
       >
-        {initialsOf((name ?? "").replace(/[^\p{L}\p{N}\s]/gu, "")) || "?"}
+        {src ? (
+          <img
+            src={src}
+            alt=""
+            className="size-full object-cover"
+            loading="lazy"
+            draggable={false}
+          />
+        ) : (
+          initialsOf((name ?? "").replace(/[^\p{L}\p{N}\s]/gu, "")) || "?"
+        )}
       </span>
     </span>
   );

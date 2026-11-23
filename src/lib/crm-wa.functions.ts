@@ -11,6 +11,10 @@ export type WaContact = {
   jid: string;
   phone_normalized: string | null;
   push_name: string | null;
+  /** nome salvo na agenda do celular da loja */
+  saved_name?: string | null;
+  /** foto de perfil do WhatsApp (miniatura) */
+  avatar?: string | null;
   customer_id: string | null;
   stage: "novo" | "interessado" | "negociando" | "comprou" | "perdido";
   unread: number;
@@ -100,7 +104,7 @@ export const waInbox = createServerFn({ method: "GET" })
       db
         .from("wa_contacts")
         .select(
-          "jid, phone_normalized, push_name, customer_id, stage, unread, pinned, archived, last_message_at, last_message_preview, last_from_me, last_inbound_at, customer:crm_customers(name)",
+          "jid, phone_normalized, push_name, saved_name, avatar, customer_id, stage, unread, pinned, archived, last_message_at, last_message_preview, last_from_me, last_inbound_at, customer:crm_customers(name)",
         )
         .order("last_message_at", { ascending: false, nullsFirst: false })
         .limit(300),

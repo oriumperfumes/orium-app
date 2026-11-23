@@ -47,6 +47,7 @@ const COLS: Array<{ v: Stage; label: string; hint: string; dot: string }> = [
 
 type Item = {
   key: string;
+  avatar?: string | null;
   name: string;
   sub: string;
   stage: Stage;
@@ -105,6 +106,7 @@ function FunilPage() {
             : "novo";
       return {
         key: l.id,
+        avatar: c?.avatar ?? l.avatar ?? null,
         name: l.name ?? "Sem nome",
         sub: l.action.title,
         stage: c?.stage ?? derived,
@@ -118,6 +120,7 @@ function FunilPage() {
       if (!c.customer_id && !c.archived)
         out.push({
           key: c.jid,
+          avatar: c.avatar ?? null,
           name: c.push_name || c.phone_normalized || "Contato",
           sub: c.last_message_preview ?? "Sem ficha",
           stage: c.stage,
@@ -313,6 +316,7 @@ function FunilPage() {
                     className="press flex w-[68px] shrink-0 flex-col items-center gap-1"
                   >
                     <Avatar
+                      src={it.avatar}
                       name={it.name}
                       score={it.lead?.score}
                       temp={it.lead?.temp}
@@ -390,6 +394,7 @@ function FunilPage() {
                               )}
                             >
                               <Avatar
+                                src={it.avatar}
                                 name={it.name}
                                 score={it.lead?.score}
                                 temp={it.lead?.temp}
@@ -472,7 +477,7 @@ function FunilPage() {
                   className="press grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-[14px] px-2 py-2.5 text-left hover:bg-white/[0.03] md:grid-cols-[minmax(0,1.3fr)_minmax(0,1.4fr)_96px_80px]"
                 >
                   <span className="flex min-w-0 items-center gap-2.5">
-                    <Avatar name={l.name} size={32} gold={l.orders_count > 0} />
+                    <Avatar src={l.avatar} name={l.name} size={32} gold={l.orders_count > 0} />
                     <span className="truncate text-[13.5px] font-semibold">
                       {l.name ?? "Sem nome"}
                     </span>
@@ -522,7 +527,7 @@ function FunilPage() {
               style={{ left: drag.x - drag.dx, top: drag.y - drag.dy, width: drag.w }}
             >
               <div className="flex rotate-[2deg] items-center gap-2.5 rounded-[18px] bg-[#FFD599] p-2.5 text-[#15130F] shadow-[0_18px_50px_rgba(0,0,0,0.55)]">
-                <Avatar name={drag.item.name} size={38} />
+                <Avatar src={drag.item.avatar} name={drag.item.name} size={38} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13.5px] font-bold">{drag.item.name}</span>
                   <span className="block truncate text-[12px] text-[#15130F]/65">

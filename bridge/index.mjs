@@ -36,6 +36,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let sock = null;
 let state = { status: "connecting", qr: null, phone: null };
 let sending = false;
+let fetchingAvatars = false;
+const pendingContacts = new Map();
 
 async function heartbeat() {
   const { error } = await db.rpc("wa_bridge_heartbeat", { p_token: BRIDGE_TOKEN, p_status: state.status, p_qr: state.qr, p_phone: state.phone });
@@ -141,6 +143,71 @@ async function drainOutbox() {
   }
 }
 
+/** Nome da agenda e do perfil: junta e manda em lote a cada poucos segundos. */
+function queueContacts(list) {
+  for (const c of list ?? []) {
+    const cands = [c.id, c.phoneNumber, c.jid].filter(Boolean).map(String);
+    const jid = cands.find((j) => j.endsWith("@s.whatsapp.net"));
+    if (!jid) continue;
+    const key = jid.replace(/:\d+@/, "@");
+    const prev = pendingContacts.get(key) ?? {};
+    pendingContacts.set(key, {
+      jid: key,
+      saved_name: c.name ?? prev.saved_name ?? null,
+      push_name: c.notify ?? c.verifiedName ?? prev.push_name ?? null,
+    });
+  }
+}
+async function flushContacts() {
+  if (!pendingContacts.size) return;
+  const batch = [...pendingContacts.values()].slice(0, 300);
+  for (const c of batch) pendingContacts.delete(c.jid);
+  const { error } = await db.rpc("wa_bridge_contacts", { p_token: BRIDGE_TOKEN, p_contacts: batch });
+  if (error) console.error("contatos:", error.message);
+}
+
+/**
+ * Fotos de perfil: devagar (uma a cada ~2 s) para não parecer robô.
+ * Miniatura ("preview") guardada no banco; renovada a cada 7 dias.
+ */
+async function fetchAvatars() {
+  if (fetchingAvatars || state.status !== "online" || !sock) return;
+  fetchingAvatars = true;
+  try {
+    const { data, error } = await db.rpc("wa_bridge_avatar_targets", { p_token: BRIDGE_TOKEN, p_limit: 10 });
+    if (error) throw new Error(error.message);
+    for (const t of data ?? []) {
+      if (state.status !== "online") break;
+      let jid = t.jid;
+      let exists = true;
+      if (t.kind === "customer") {
+        const [r] = await sock.onWhatsApp(jid.split("@")[0]).catch(() => []);
+        exists = !!r?.exists;
+        if (r?.jid) jid = r.jid;
+      }
+      let avatar = null;
+      if (exists) {
+        const url = await sock.profilePictureUrl(jid, "preview").catch(() => null);
+        if (url) {
+          try {
+            const res = await fetch(url);
+            if (res.ok) {
+              const buf = Buffer.from(await res.arrayBuffer());
+              if (buf.length < 140_000) avatar = `data:${res.headers.get("content-type") || "image/jpeg"};base64,${buf.toString("base64")}`;
+            }
+          } catch {}
+        }
+      }
+      await db.rpc("wa_bridge_set_avatar", { p_token: BRIDGE_TOKEN, p_kind: t.kind, p_id: t.id, p_avatar: avatar, p_exists: exists });
+      await sleep(1600 + Math.random() * 900);
+    }
+  } catch (e) {
+    console.error("fotos:", e.message);
+  } finally {
+    fetchingAvatars = false;
+  }
+}
+
 async function start() {
   const { state: auth, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: undefined }));
@@ -177,7 +244,10 @@ async function start() {
     }
   });
 
-  sock.ev.on("messaging-history.set", async ({ messages }) => {
+  sock.ev.on("contacts.upsert", (list) => queueContacts(list));
+  sock.ev.on("contacts.update", (list) => queueContacts(list));
+  sock.ev.on("messaging-history.set", async ({ messages, contacts }) => {
+    queueContacts(contacts);
     // só os últimos 30 dias do histórico entram no CRM
     const since = Date.now() / 1000 - 30 * 86400;
     const rows = (await toRows(messages ?? [], true)).filter((r) => r.ts >= since);
@@ -194,6 +264,8 @@ async function start() {
 
 setInterval(() => void heartbeat(), 20_000);
 setInterval(() => void drainOutbox(), 2_000);
+setInterval(() => void flushContacts(), 5_000);
+setInterval(() => void fetchAvatars(), 15_000);
 process.on("unhandledRejection", (e) => console.error("erro:", e?.message ?? e));
 start().catch((e) => {
   console.error(e);

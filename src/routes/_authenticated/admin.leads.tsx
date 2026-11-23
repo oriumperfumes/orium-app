@@ -165,6 +165,7 @@ function HojePage() {
           ) : spot ? (
             <div className="mt-4 flex flex-col gap-5 sm:flex-row sm:items-center">
               <Avatar
+                src={spot.avatar}
                 name={spot.name}
                 score={spot.score}
                 temp={spot.temp}
@@ -351,6 +352,7 @@ function HojePage() {
                         className="press flex min-w-0 flex-1 items-center gap-3 text-left sm:gap-4"
                       >
                         <Avatar
+                          src={l.avatar}
                           name={l.name}
                           score={l.score}
                           temp={l.temp}

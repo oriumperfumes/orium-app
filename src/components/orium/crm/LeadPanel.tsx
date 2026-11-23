@@ -101,6 +101,7 @@ export function LeadPanel({
             <header className="shrink-0 px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-4 lg:px-6 lg:pt-6">
               <div className="flex items-start gap-3.5">
                 <Avatar
+                  src={l.avatar}
                   name={l.name}
                   score={l.score}
                   temp={l.temp}

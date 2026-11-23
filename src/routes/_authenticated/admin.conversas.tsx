@@ -137,7 +137,11 @@ const QUICK = [
 ];
 
 const contactName = (c: WaContact) =>
-  c.customer?.name || c.push_name || fmtPhone(c.phone_normalized) || c.jid.split("@")[0];
+  c.customer?.name ||
+  c.saved_name ||
+  c.push_name ||
+  fmtPhone(c.phone_normalized) ||
+  c.jid.split("@")[0];
 const compose = (t: string) =>
   window.dispatchEvent(new CustomEvent("orium-crm-compose", { detail: t }));
 
@@ -668,6 +672,7 @@ function ContactRow({
     >
       <span className="relative shrink-0">
         <Avatar
+          src={c.avatar ?? lead?.avatar}
           name={contactName(c)}
           score={lead?.score}
           temp={lead?.temp}
@@ -896,6 +901,7 @@ function Thread({
         </button>
         <span className="relative shrink-0">
           <Avatar
+            src={contact.avatar ?? lead?.avatar}
             name={name}
             score={lead?.score}
             temp={lead?.temp}
@@ -1381,6 +1387,7 @@ function Assistant({
       {/* quem é, em uma linha */}
       <section className="flex items-center gap-3">
         <Avatar
+          src={contact.avatar ?? lead?.avatar}
           name={name}
           score={lead?.score}
           temp={lead?.temp}
@@ -1858,7 +1865,7 @@ function ContactMenu({
         style={place}
       >
         <div className="flex items-center gap-2.5 px-2.5 pt-2 pb-2.5">
-          <Avatar name={name} size={32} />
+          <Avatar src={c.avatar} name={name} size={32} />
           <div className="min-w-0">
             <p className="truncate text-[13.5px] font-bold">{name}</p>
             <p className="truncate text-[11.5px] text-[#8C8C8C]">{fmtPhone(c.phone_normalized)}</p>
