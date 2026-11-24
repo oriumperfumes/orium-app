@@ -142,7 +142,7 @@ async function storeMedia(row, msg) {
 }
 
 async function drainMedia() {
-  if (downloadingMedia || state.status !== "online" || !sock || !mediaQueue.length) return;
+  if (syncing || downloadingMedia || state.status !== "online" || !sock || !mediaQueue.length) return;
   downloadingMedia = true;
   try {
     while (mediaQueue.length && state.status === "online") {
@@ -160,12 +160,34 @@ async function drainMedia() {
   }
 }
 
-async function ingest(rows) {
-  for (let i = 0; i < rows.length; i += 200) {
-    const chunk = rows.slice(i, i + 200);
-    const { error } = await db.rpc("wa_bridge_ingest", { p_token: BRIDGE_TOKEN, p_messages: chunk });
-    if (error) console.error("ingest:", error.message);
-  }
+/**
+ * Fila única de gravação: um lote por vez (lotes em paralelo travavam o banco e o site junto).
+ * Histórico vai em lotes pequenos com pausa; lote que falha tenta de novo, sem perder mensagem.
+ */
+let ingestChain = Promise.resolve();
+let syncing = 0; // lotes de histórico ainda na fila (fotos/mídia esperam)
+function ingest(rows, { history = false } = {}) {
+  const size = history ? 80 : 200;
+  const chunks = [];
+  for (let i = 0; i < rows.length; i += size) chunks.push(rows.slice(i, i + size));
+  if (history) syncing += chunks.length;
+  const job = ingestChain.then(async () => {
+    for (const chunk of chunks) {
+      for (let attempt = 1; ; attempt++) {
+        const { error } = await db.rpc("wa_bridge_ingest", { p_token: BRIDGE_TOKEN, p_messages: chunk });
+        if (!error) break;
+        console.error(`ingest (tentativa ${attempt}):`, error.message);
+        if (attempt >= 5) break;
+        await sleep(2000 * attempt);
+      }
+      if (history) {
+        syncing--;
+        await sleep(600); // respiro para o site
+      }
+    }
+  });
+  ingestChain = job.catch((e) => console.error("ingest:", e?.message ?? e));
+  return ingestChain;
 }
 
 /** Fila de saída: uma mensagem por vez, com pausa humana entre elas. */
@@ -211,9 +233,18 @@ function queueContacts(list) {
     });
   }
 }
+let flushingContacts = false;
 async function flushContacts() {
-  if (!pendingContacts.size) return;
-  const batch = [...pendingContacts.values()].slice(0, 300);
+  if (flushingContacts || !pendingContacts.size) return;
+  flushingContacts = true;
+  try {
+    await flushContactsOnce();
+  } finally {
+    flushingContacts = false;
+  }
+}
+async function flushContactsOnce() {
+  const batch = [...pendingContacts.values()].slice(0, syncing ? 100 : 300);
   for (const c of batch) pendingContacts.delete(c.jid);
   const { error } = await db.rpc("wa_bridge_contacts", { p_token: BRIDGE_TOKEN, p_contacts: batch });
   if (error) console.error("contatos:", error.message);
@@ -224,7 +255,7 @@ async function flushContacts() {
  * Miniatura ("preview") guardada no banco; renovada a cada 7 dias.
  */
 async function fetchAvatars() {
-  if (fetchingAvatars || state.status !== "online" || !sock) return;
+  if (syncing || fetchingAvatars || state.status !== "online" || !sock) return;
   fetchingAvatars = true;
   try {
     const { data, error } = await db.rpc("wa_bridge_avatar_targets", { p_token: BRIDGE_TOKEN, p_limit: 10 });
@@ -305,8 +336,8 @@ async function start() {
     const since = Date.now() / 1000 - 30 * 86400;
     const rows = (await toRows(messages ?? [], true)).filter((r) => r.ts >= since);
     if (rows.length) {
-      console.log("histórico:", rows.length, "mensagens");
-      await ingest(rows);
+      console.log("histórico:", rows.length, "mensagens (gravando aos poucos)");
+      void ingest(rows, { history: true }).then(() => !syncing && console.log("histórico gravado."));
     }
   });
   sock.ev.on("messages.upsert", async ({ messages, type }) => {

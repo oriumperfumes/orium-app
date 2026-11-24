@@ -3,6 +3,7 @@
  * de referência) na identidade Orium. Todas as telas de cliente moram aqui dentro:
  * Painel, Conversas, Funil, Clientes, Ao vivo e Conversão.
  */
+import { throttleByKey } from "@/lib/realtime-throttle";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -57,20 +58,18 @@ function usePulse() {
     staleTime: 10_000,
   });
   useEffect(() => {
+    const bump = throttleByKey(() => void qc.invalidateQueries({ queryKey: ["crm-pulse"] }), 3000);
     const ch = supabase
       .channel("orium-crm-pulse")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "wa_contacts" },
-        () => void qc.invalidateQueries({ queryKey: ["crm-pulse"] }),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "wa_bridge_state" },
-        () => void qc.invalidateQueries({ queryKey: ["crm-pulse"] }),
+      .on("postgres_changes", { event: "*", schema: "public", table: "wa_contacts" }, () => bump())
+      .on("postgres_changes", { event: "*", schema: "public", table: "wa_bridge_state" }, () =>
+        bump(),
       )
       .subscribe();
-    return () => void supabase.removeChannel(ch);
+    return () => {
+      bump.cancel();
+      void supabase.removeChannel(ch);
+    };
   }, [qc]);
   return q.data;
 }

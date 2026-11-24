@@ -4,6 +4,7 @@
  * recuperar carrinho, oferecer o frasco…). Comece pelo destaque, atenda pelo painel
  * lateral e marque como feito. Simples como uma lista de tarefas.
  */
+import { throttleByKey } from "@/lib/realtime-throttle";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -75,18 +76,14 @@ function HojePage() {
     staleTime: 15_000,
   });
   useEffect(() => {
-    let t: number | undefined;
-    const bump = () => {
-      window.clearTimeout(t);
-      t = window.setTimeout(() => void qc.invalidateQueries({ queryKey: ["crm-leads"] }), 2500);
-    };
+    const bump = throttleByKey(() => void qc.invalidateQueries({ queryKey: ["crm-leads"] }), 4000);
     const ch = supabase
       .channel("orium-crm-hoje")
-      .on("postgres_changes", { event: "*", schema: "public", table: "wa_contacts" }, bump)
-      .on("postgres_changes", { event: "*", schema: "public", table: "live_sessions" }, bump)
+      .on("postgres_changes", { event: "*", schema: "public", table: "wa_contacts" }, () => bump())
+      .on("postgres_changes", { event: "*", schema: "public", table: "live_sessions" }, () => bump())
       .subscribe();
     return () => {
-      window.clearTimeout(t);
+      bump.cancel();
       void supabase.removeChannel(ch);
     };
   }, [qc]);

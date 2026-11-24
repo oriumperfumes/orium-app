@@ -6,6 +6,7 @@
  * botão "Resposta ideal" (IA focada em fechar a venda) e respostas rápidas.
  * O assistente ao lado diz quem é o cliente e o que fazer. Nada sai sem clique.
  */
+import { throttleByKey } from "@/lib/realtime-throttle";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { createPortal } from "react-dom";
 import {
@@ -287,30 +288,45 @@ function ConversasPage() {
   );
 
   useEffect(() => {
+    // eventos chegam em rajada (ex.: histórico ao conectar): recarrega no máximo 1x a cada 2 s
+    const inboxBump = throttleByKey(
+      () => void qc.invalidateQueries({ queryKey: ["wa-inbox"] }),
+      2000,
+    );
+    const threadBump = throttleByKey(
+      (jid) => void qc.invalidateQueries({ queryKey: ["wa-thread", jid] }),
+      1200,
+    );
+    const insightBump = throttleByKey((jid) => {
+      void qc.invalidateQueries({ queryKey: ["wa-insight", jid] });
+      void qc.invalidateQueries({ queryKey: ["crm-leads"] });
+    }, 3000);
+    const jidOf = (p: { new: unknown }) => (p.new as { jid?: string })?.jid ?? "";
     const ch = supabase
       .channel("orium-wa-admin")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "wa_contacts" },
-        () => void qc.invalidateQueries({ queryKey: ["wa-inbox"] }),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "wa_bridge_state" },
-        () => void qc.invalidateQueries({ queryKey: ["wa-inbox"] }),
-      )
-      .on("postgres_changes", { event: "*", schema: "public", table: "wa_insights" }, (p) => {
-        void qc.invalidateQueries({ queryKey: ["wa-insight", (p.new as { jid?: string })?.jid] });
-        void qc.invalidateQueries({ queryKey: ["crm-leads"] });
+      .on("postgres_changes", { event: "*", schema: "public", table: "wa_contacts" }, (p) => {
+        inboxBump();
+        // mensagem nova muda a conversa: atualiza o chat aberto dela
+        const jid = jidOf(p);
+        if (jid && qc.getQueryState(["wa-thread", jid])) threadBump(jid);
       })
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "wa_messages" }, (p) => {
-        void qc.invalidateQueries({ queryKey: ["wa-thread", (p.new as { jid?: string })?.jid] });
-      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "wa_bridge_state" }, () =>
+        inboxBump(),
+      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "wa_insights" }, (p) =>
+        insightBump(jidOf(p)),
+      )
       .on("postgres_changes", { event: "*", schema: "public", table: "wa_outbox" }, (p) => {
-        void qc.invalidateQueries({ queryKey: ["wa-thread", (p.new as { jid?: string })?.jid] });
+        const jid = jidOf(p);
+        if (jid) threadBump(jid);
       })
       .subscribe();
-    return () => void supabase.removeChannel(ch);
+    return () => {
+      inboxBump.cancel();
+      threadBump.cancel();
+      insightBump.cancel();
+      void supabase.removeChannel(ch);
+    };
   }, [qc]);
 
   const contacts = useMemo(() => inbox.data?.contacts ?? [], [inbox.data]);
