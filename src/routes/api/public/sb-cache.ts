@@ -61,11 +61,32 @@ async function handle(request: Request) {
     return r;
   }
 
-  const upstream = await fetch(`${base}/rest/v1/${restPath}`, {
-    method: request.method,
-    headers,
-    body: request.method === "POST" ? body : undefined,
-  });
+  // cópia de reserva (24 h): se o banco cair, a loja continua mostrando o catálogo
+  const backupKey = new Request(`${url.origin}/__sb-backup/${fingerprint}`);
+  const fallback = async () => {
+    const old = edge ? await edge.match(backupKey).catch(() => undefined) : undefined;
+    if (!old) return null;
+    const r = new Response(old.body, old);
+    r.headers.set("x-orium-cache", "backup");
+    r.headers.set("cache-control", "no-store");
+    return r;
+  };
+
+  let upstream: Response;
+  try {
+    upstream = await fetch(`${base}/rest/v1/${restPath}`, {
+      method: request.method,
+      headers,
+      body: request.method === "POST" ? body : undefined,
+      signal: AbortSignal.timeout(9000),
+    });
+  } catch {
+    return (await fallback()) ?? new Response("Banco indisponível", { status: 503 });
+  }
+  if (upstream.status >= 500) {
+    const b = await fallback();
+    if (b) return b;
+  }
   const data = await upstream.arrayBuffer();
   const out = new Headers();
   for (const h of ["content-type", "content-range", "preference-applied"]) {
@@ -75,9 +96,12 @@ async function handle(request: Request) {
   if (edge && (upstream.status === 200 || upstream.status === 206)) {
     const stored = new Headers(out);
     stored.set("cache-control", `public, max-age=${EDGE_TTL_SECONDS}`);
-    await edge
-      .put(cacheKey, new Response(data, { status: upstream.status, headers: stored }))
-      .catch(() => {});
+    const backup = new Headers(out);
+    backup.set("cache-control", "public, max-age=86400");
+    await Promise.all([
+      edge.put(cacheKey, new Response(data, { status: upstream.status, headers: stored })),
+      edge.put(backupKey, new Response(data, { status: upstream.status, headers: backup })),
+    ]).catch(() => {});
   }
   out.set("x-orium-cache", "miss");
   out.set("cache-control", "no-store");
