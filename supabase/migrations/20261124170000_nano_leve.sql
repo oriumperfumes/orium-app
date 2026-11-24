@@ -205,7 +205,7 @@ declare r jsonb := '{}'::jsonb; n bigint;
 begin
   delete from cron.job_run_details where end_time < now() - interval '2 days' or (end_time is null and start_time < now() - interval '2 days');
   get diagnostics n = row_count; r := r || jsonb_build_object('cron_log', n);
-  delete from public.supplier_sync_events where created_at < now() - interval '14 days';
+  delete from public.supplier_sync_events where occurred_at < now() - interval '14 days';
   get diagnostics n = row_count; r := r || jsonb_build_object('supplier_sync_events', n);
   delete from public.fragrantica_search_log where created_at < now() - interval '30 days';
   get diagnostics n = row_count; r := r || jsonb_build_object('fragrantica_search_log', n);

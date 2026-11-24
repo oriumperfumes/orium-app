@@ -119,7 +119,7 @@ export const trackEvents = createServerFn({ method: "POST" })
       // visitante: primeira origem NUNCA é sobrescrita
       const { data: existing } = await db
         .from("analytics_visitors")
-        .select("visitor_id, customer_id")
+        .select("visitor_id, customer_id, sessions_count")
         .eq("visitor_id", visitorId)
         .maybeSingle();
 
@@ -143,11 +143,7 @@ export const trackEvents = createServerFn({ method: "POST" })
         } as never);
       } else if (s) {
         // Visita nova do mesmo aparelho: contamos a recorrência sem apagar a origem.
-        const { data: prev } = await db
-          .from("analytics_visitors")
-          .select("sessions_count")
-          .eq("visitor_id", visitorId)
-          .maybeSingle();
+        const prev = existing as { sessions_count?: number } | null;
         await db
           .from("analytics_visitors")
           .update({

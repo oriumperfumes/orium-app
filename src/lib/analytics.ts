@@ -189,8 +189,9 @@ export function track(event: AnalyticsEventName, payload: TrackPayload = {}) {
     }
   });
   queue.push({ event, path: window.location.pathname, ...payload });
-  if (queue.length >= 12) return flush();
-  if (!timer) timer = setTimeout(flush, 1500);
+  if (queue.length >= 25) return flush();
+  // junta os cliques por 8 s (e manda na hora ao sair da aba): bem menos gravações no banco
+  if (!timer) timer = setTimeout(flush, 8000);
 }
 
 
