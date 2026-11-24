@@ -124,14 +124,21 @@ export function stripConcentrationPhrases(name: string): string {
 }
 
 /** Termos de versão presentes no nome, em ordem alfabética. */
+const flankerTermsCache = new Map<string, string[]>();
 export function flankerTerms(name: string): string[] {
+  const key = name ?? "";
+  const hit = flankerTermsCache.get(key);
+  if (hit) return hit; // lista só de leitura (cache: a sincronização repete o mesmo nome centenas de vezes)
   const found = new Set<string>();
-  const clean = stripConcentrationPhrases(name ?? "");
+  const clean = stripConcentrationPhrases(key);
   for (const w of stripAccents(clean).toLowerCase().split(/[^a-z0-9]+/)) {
     const k = flankerWord(w);
     if (k && FLANKER_TERMS.has(k)) found.add(k);
   }
-  return Array.from(found).sort();
+  const terms = Array.from(found).sort();
+  if (flankerTermsCache.size >= 20000) flankerTermsCache.clear();
+  flankerTermsCache.set(key, terms);
+  return terms;
 }
 
 

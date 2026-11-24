@@ -12,10 +12,15 @@ import { extractFromHtml, qualityGuard, type Extraction } from "./fragrantica-v2
 import { readSnapshot, writeSnapshot, markStatus, type AuditSnapshot } from "./fragrantica-audit.server";
 import { buildDescription, qualityCheck } from "./description.server";
 import {
+  beginBatch,
+  currentBatchStop,
+  endBatch,
   fetchPage,
   findFragranticaPage,
   logSearch,
   MAX_CONCURRENCY,
+  remainingMs,
+  type BatchStop,
   SEARCH_VERSION,
   type SearchProduct,
   type SearchStatus,
@@ -55,6 +60,10 @@ export type RunResult = {
   requests: number;
   cacheHits: number;
   remaining: number;
+  /** Itens da fila deste lote que não chegaram a começar (prazo, bloqueio ou falhas seguidas). */
+  notStarted: number;
+  /** Por que o lote parou antes do fim, se parou (modo com prazo). */
+  stopped: BatchStop | null;
   durationMs: number;
   perItemMs: number;
   itemsPerMinute: number;
@@ -329,9 +338,12 @@ export async function enrichProductV3(
 
 export async function runEnrichmentV3(
   db: Db,
-  opts: { mode?: Mode; limit?: number; force?: boolean; concurrency?: number } = {},
+  opts: { mode?: Mode; limit?: number; force?: boolean; concurrency?: number; deadlineMs?: number } = {},
 ): Promise<RunResult> {
   const started = Date.now();
+  // Com `deadlineMs` o lote inteiro tem prazo (ver fragrantica-search.server.ts); sem ele, comportamento de sempre.
+  const strict = typeof opts.deadlineMs === "number";
+  if (strict) beginBatch(started + (opts.deadlineMs as number));
   const mode = opts.mode ?? "all";
   const limit = Math.max(1, Math.min(120, opts.limit ?? 40));
   const workers = Math.max(1, Math.min(MAX_CONCURRENCY, opts.concurrency ?? MAX_CONCURRENCY));
@@ -344,9 +356,11 @@ export async function runEnrichmentV3(
 
   const items: ItemResult[] = [];
   let cursor = 0;
+  /** Perfume novo só começa se ainda couber uma leitura e o lote não foi encerrado. */
+  const canStart = () => !strict || (!currentBatchStop() && remainingMs() >= 12_000);
   await Promise.all(
     Array.from({ length: workers }, async () => {
-      while (cursor < batch.length) {
+      while (cursor < batch.length && canStart()) {
         const row = batch[cursor++]!;
         try {
           items.push(
@@ -377,6 +391,13 @@ export async function runEnrichmentV3(
     }),
   );
 
+  let stopped: BatchStop | null = null;
+  if (strict) {
+    stopped = endBatch();
+    if (!stopped && cursor < batch.length) {
+      stopped = { reason: "deadline", httpStatus: null, detail: "tempo do lote esgotado; o restante fica para a próxima execução" };
+    }
+  }
   const durationMs = Date.now() - started;
   const count = (s: SearchStatus) => items.filter((i) => i.searchStatus === s).length;
   return {
@@ -392,6 +413,8 @@ export async function runEnrichmentV3(
     requests: items.reduce((s, i) => s + i.requests, 0),
     cacheHits: items.filter((i) => i.requests === 0).length,
     remaining: Math.max(0, queue.length - batch.length),
+    notStarted: Math.max(0, batch.length - cursor),
+    stopped,
     durationMs,
     perItemMs: items.length ? Math.round(durationMs / items.length) : 0,
     itemsPerMinute: durationMs ? Math.round((items.length / durationMs) * 60_000) : 0,

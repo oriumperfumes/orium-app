@@ -57,6 +57,8 @@ export type AdapterHealth = {
 export type AdapterBatch = {
   items: RawOffer[];
   nextCursor: number | null;
+  /** "index": o cursor é a posição do item (retomada exata); ausente = página (repete o lote). */
+  cursorKind?: "index";
   pages: number;
   total: number | null;
   /** A loja pediu para esperar (limite de requisições). Tentar de novo em instantes. */
@@ -68,10 +70,13 @@ export type AdapterBatch = {
   diagnostics?: Record<string, unknown>;
 };
 
+/** Dados já conhecidos do fornecedor, para o leitor usar como reserva quando uma leitura ao vivo falha. */
+export type FetchContext = { knownPaymentDiscount?: number | null };
+
 export type SupplierAdapter = {
   key: string;
   label: string;
-  fetchBatch: (cursor: number, budgetMs: number) => Promise<AdapterBatch>;
+  fetchBatch: (cursor: number, budgetMs: number, ctx?: FetchContext) => Promise<AdapterBatch>;
   healthCheck?: () => Promise<AdapterHealth>;
 };
 
@@ -154,7 +159,8 @@ const uniq = (list: (string | null | undefined)[]) =>
 
 const MRX_BASE = "https://mrxperfumaria.com.br";
 const MRX_MAX_PAGES = 60;
-const MRX_PAGES_PER_BATCH = 4;
+// 2 páginas por rodada: cada página é uma chamada externa (e pode repetir) dentro do limite do plano Free.
+const MRX_PAGES_PER_BATCH = 2;
 const MRX_PAGE_DELAY_MS = 2500;
 
 type LdProduct = {
@@ -224,11 +230,12 @@ async function mrxPaymentDiscount(listHtml: string): Promise<number> {
         if (list && pix && pix < list) percent = Number((((list - pix) / list) * 100).toFixed(2));
       }
     } catch {
-      /* sem leitura: mantemos o preço de lista como custo */
+      /* sem leitura: tratado abaixo (a leitura do lote é interrompida) */
     }
   }
   if (!(percent > 0 && percent < 40)) percent = 0;
-  mrxDiscountCache = { at: Date.now(), percent };
+  // Falha não é guardada em cache: a próxima rodada tenta de novo em vez de repetir o erro por 30 min.
+  if (percent > 0) mrxDiscountCache = { at: Date.now(), percent };
   return percent;
 }
 
@@ -283,7 +290,7 @@ async function mrxSealedVariant(url: string): Promise<{ list: number; cost: numb
 const mrxAdapter: SupplierAdapter = {
   key: "mrx",
   label: "MRX Perfumaria",
-  async fetchBatch(cursor, budgetMs) {
+  async fetchBatch(cursor, budgetMs, ctx) {
     const started = Date.now();
     const items: RawOffer[] = [];
     let page = Math.max(1, cursor || 1);
@@ -306,6 +313,14 @@ const mrxAdapter: SupplierAdapter = {
       await wait(MRX_PAGE_DELAY_MS);
       if (!discountRead) {
         discount = await mrxPaymentDiscount(html);
+        // Leitura ao vivo falhou: usa o último desconto lido (gravado no fornecedor) em vez de cair no preço de lista.
+        const known = Number(ctx?.knownPaymentDiscount ?? 0);
+        if (!(discount > 0) && known > 0 && known < 40) discount = known;
+        // Sem nenhum desconto o "custo" viraria o preço de lista (cerca de 7% acima do pago):
+        // interrompe em vez de gravar custos errados.
+        if (!(discount > 0)) {
+          throw new Error("DESCONTO_PIX_NAO_LIDO: o desconto à vista/Pix da MRX não pôde ser lido; a leitura foi interrompida para não gravar preço de lista como custo.");
+        }
         discountRead = true;
       }
       const found = parseLdProducts(html);
@@ -655,6 +670,7 @@ export function makeKyteAdapter(opts: { key: string; label: string; base: string
       return {
         items,
         nextCursor: next >= all.length ? null : next,
+        cursorKind: "index",
         pages: 1,
         total: all.length,
         throttled: false,
@@ -770,7 +786,7 @@ const smartManiaAdapter: SupplierAdapter = {
 /* referência interna (pode ser atacado) e nunca vira preço do site.   */
 /* ------------------------------------------------------------------ */
 
-const LI_PAGES_PER_BATCH = 4;
+const LI_PAGES_PER_BATCH = 2;
 const LI_MAX_PAGES = 80;
 // robots.txt da Loja Integrada pede 10 s entre páginas.
 const LI_PAGE_DELAY_MS = 10_000;

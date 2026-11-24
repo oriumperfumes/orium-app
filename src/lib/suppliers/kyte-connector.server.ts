@@ -312,6 +312,7 @@ export function makeKyteConnector(opts: { key: string; label: string; base: stri
       return {
         items,
         nextCursor: start + CHUNK >= cat.products.length ? null : start + CHUNK,
+        cursorKind: "index",
         pages: cat.pages,
         total: cat.products.length,
         throttled: false,
