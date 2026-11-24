@@ -294,7 +294,8 @@ function AudioPlayer({ m, mine }: { m: WaMessage; mine: boolean }) {
   const [time, setTime] = useState(0);
   const [dur, setDur] = useState(m.media_seconds ?? 0);
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(1);
-  const [showText, setShowText] = useState(!!m.transcript);
+  // o servidor já transcreve sozinho; o texto fica fechado até a pessoa pedir (a conversa não muda de cara)
+  const [showText, setShowText] = useState(false);
   const transcribe = useMutation({
     mutationFn: () => waTranscribe({ data: { id: m.id } }),
     onSuccess: () => {

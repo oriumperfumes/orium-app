@@ -188,9 +188,16 @@ export function LeadPanel({
                             {e}
                           </span>
                         ))}
-                        {l.insight.data?.orcamento ? (
-                          <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[12px] font-semibold text-[#E5E5E5]">💰 {l.insight.data.orcamento}</span>
-                        ) : null}
+                        {(() => {
+                          const ps = (l.insight.data as { propostas?: Array<{ item: string; valor: number; de: string }> } | null)?.propostas ?? [];
+                          const p = ps.find((x) => x.de === "cliente") ?? ps[0];
+                          const label = p
+                            ? `${p.de === "loja" ? "Ofereceu" : "Propôs"} R$ ${Math.round(p.valor)} por ${p.item}${ps.length > 1 ? ` +${ps.length - 1}` : ""}`
+                            : l.insight.data?.orcamento;
+                          return label ? (
+                            <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[12px] font-semibold text-[#E5E5E5]">💰 {label}</span>
+                          ) : null;
+                        })()}
                       </div>
                     ) : null}
                   </section>

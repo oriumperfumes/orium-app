@@ -13,6 +13,7 @@ import { createClient } from "@supabase/supabase-js";
 import makeWASocket, { Browsers, DisconnectReason, downloadMediaMessage, fetchLatestBaileysVersion, useMultiFileAuthState } from "@whiskeysockets/baileys";
 import pino from "pino";
 import QRCode from "qrcode";
+import { criarFilaMidia, midiaLocalAtiva } from "./midia-local.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // .env simples (KEY=valor), sem dependência extra
@@ -138,8 +139,33 @@ async function storeMedia(row, msg) {
   const { token } = await res.json();
   const up = await db.storage.from("wa-media").uploadToSignedUrl(path, token, buf, { contentType: mime, upsert: true });
   if (up.error) throw new Error(up.error.message);
-  return { media_path: path, media_size: buf.length };
+  return { media_path: path, media_size: buf.length, buf };
 }
+
+/** Leitura grátis de áudio/vídeo/foto no servidor (ver midia-local.mjs). */
+const filaMidia = criarFilaMidia({
+  gravar: async (id, texto) => {
+    const { error } = await db.rpc("wa_bridge_set_transcript", { p_token: BRIDGE_TOKEN, p_id: id, p_text: texto });
+    if (error) throw new Error(error.message);
+  },
+  baixar: async (path) => {
+    const res = await fetch(`${SITE_URL}/api/public/hooks/wa-media-upload`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: BRIDGE_TOKEN, path, mode: "download" }),
+    });
+    if (!res.ok) return null;
+    const { url } = await res.json();
+    const file = await fetch(url);
+    return file.ok ? Buffer.from(await file.arrayBuffer()) : null;
+  },
+  pendentes: async (n) => {
+    const { data, error } = await db.rpc("wa_bridge_media_todo", { p_token: BRIDGE_TOKEN, p_limit: n });
+    if (error) throw new Error(error.message);
+    return data ?? [];
+  },
+});
+if (midiaLocalAtiva()) console.log("leitura de mídia local: ligada");
 
 async function drainMedia() {
   if (syncing || downloadingMedia || state.status !== "online" || !sock || !mediaQueue.length) return;
@@ -149,7 +175,11 @@ async function drainMedia() {
       const { row, msg } = mediaQueue.shift();
       try {
         const got = await storeMedia(row, msg);
-        if (got) await ingest([{ ...row, ...got }]);
+        if (got) {
+          const { buf, ...saved } = got;
+          await ingest([{ ...row, ...saved }]);
+          filaMidia.adicionar({ id: row.id, kind: row.kind, from_me: row.from_me, media_seconds: row.media_seconds, buf });
+        }
       } catch (e) {
         console.error("mídia:", e?.message ?? e);
       }
@@ -369,6 +399,8 @@ setInterval(() => void drainOutbox(), 30_000);
 setInterval(() => void flushContacts(), 5_000);
 setInterval(() => void fetchAvatars(), 30_000);
 setInterval(() => void drainMedia(), 3_000);
+// mídias antigas (últimos 30 dias) já guardadas: lê aos poucos, quando não há nada novo
+setInterval(() => void filaMidia.buscarAntigas(), 60_000);
 process.on("unhandledRejection", (e) => console.error("erro:", e?.message ?? e));
 start().catch((e) => {
   console.error(e);

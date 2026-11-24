@@ -33,6 +33,8 @@ export type InsightData = {
     nome: string;
     interesse: "perguntou" | "quer" | "comprou" | "recusou" | "comparou";
   }>;
+  /** valores propostos por um item (contraproposta do cliente ou oferta da loja) */
+  propostas?: Array<{ item: string; valor: number; de: "cliente" | "loja" }>;
   estilo: string[];
   ocasiao: string;
   orcamento: string;
@@ -64,9 +66,11 @@ Extraia SÓ o que está na conversa — não invente. Se algo não aparece, use 
 - status: comprou (fechou/pagou/combinou retirada), negociando (falando de preço/forma de pagamento), interessado (quer perfume mas não avançou), perdido (desistiu ou comprou em outro lugar), so_duvida (só tirou dúvida), pos_venda (já comprou e voltou para elogio/dúvida/troca), sem_interesse (conversa que não é de venda: pessoal, fornecedor, spam).
 - chance_compra (0-100): chance realista de comprar nas próximas 2 semanas, considerando sinais como pedir preço, perguntar disponibilidade, forma de pagamento, retirada (sinais fortes) e "vou ver", silêncio, achar caro (sinais fracos).
 - motivo_nao_comprou: só se não comprou. "sumiu" = parou de responder depois da resposta da loja. "vou_pensar" = disse que ia ver/pensar. Explique em motivo_detalhe em 1 frase com o fato da conversa.
-- perfumes: cada perfume citado e o nível de interesse.
+- perfumes: cada perfume citado e o nível de interesse. Use o "Catálogo citado" quando vier: nome de MARCA sozinho (ex.: Bidaya, Lattafa) não é perfume — use o perfume daquela marca que aparece na conversa ou na Negociação.
+- propostas: cada valor proposto por um item ("fecha em 300 os dois", "o Bidaya por 90"), com o item certo, o valor em reais e quem propôs (cliente/loja). Frasco da Negociação é usado/aberto: preço baixo é normal.
 - estilo: preferências olfativas ditas ou claramente implícitas (ex.: doce, amadeirado, fresco, cítrico, oriental, gourmand, baunilha, couro, oud, marcante, discreto, que fixa muito).
-- ocasiao (dia a dia, trabalho, festa, encontro, presente…), orcamento (ex.: "até R$ 300" se ele disse), prefere (frasco/decant), para_quem, genero_perfume.
+- ocasiao (dia a dia, trabalho, festa, encontro, presente…), orcamento (SÓ quando o cliente diz quanto pode gastar, ex.: "até R$ 300"; contraproposta por item vai em propostas, não aqui), prefere (frasco/decant), para_quem, genero_perfume.
+- [áudio], [fala no vídeo] e [texto na foto] são transcrições automáticas: podem ter pequenos erros de grafia nos nomes.
 - objecoes: frases curtas com as objeções reais (ex.: "achou caro o Khamrah").
 - proximo_passo: a ação mais certeira do vendedor agora, 1 frase.
 - mensagem_sugerida: mensagem pronta de WhatsApp (máx. 3 frases curtas, tom humano igual ao da equipe na conversa, SEM emoji, sem dizer "sem estoque"/"em falta") para retomar ou fechar, sem inventar preço, desconto, prazo ou estoque, terminando com uma pergunta fácil de responder.
@@ -84,6 +88,7 @@ const SCHEMA = {
       "motivo_nao_comprou",
       "motivo_detalhe",
       "perfumes",
+      "propostas",
       "estilo",
       "ocasiao",
       "orcamento",
@@ -139,6 +144,19 @@ const SCHEMA = {
               type: "string",
               enum: ["perguntou", "quer", "comprou", "recusou", "comparou"],
             },
+          },
+        },
+      },
+      propostas: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["item", "valor", "de"],
+          properties: {
+            item: { type: "string" },
+            valor: { type: "number" },
+            de: { type: "string", enum: ["cliente", "loja"] },
           },
         },
       },
@@ -202,7 +220,7 @@ export async function analyzeConversation(db: any, jid: string): Promise<Insight
 
   // memória: análise anterior + compras registradas (app e loja)
   const [{ data: prev }, purchases] = await Promise.all([
-    db.from("wa_insights").select("resumo, status, data").eq("jid", jid).maybeSingle(),
+    db.from("wa_insights").select("resumo, status, data, last_msg_ts").eq("jid", jid).maybeSingle(),
     contact.customer_id ? purchasesOf(db, contact.customer_id) : Promise.resolve([] as string[]),
   ]);
   const memory = [
@@ -214,12 +232,17 @@ export async function analyzeConversation(db: any, jid: string): Promise<Insight
     .filter(Boolean)
     .join("\n");
 
-  const transcript = history
-    .map(
-      (m) =>
-        `[${fmtTs(m.ts)}] ${m.from_me ? "Orium" : "Cliente"}: ${m.body || (m.transcript ? `[áudio] ${m.transcript}` : `[${m.kind}]`)}`,
-    )
+  // Menos tokens: com análise anterior, manda só o que é novo (+ 10 mensagens de contexto).
+  let recent = history;
+  if (prev?.resumo && prev?.last_msg_ts) {
+    const firstNew = history.findIndex((m) => m.ts > prev.last_msg_ts);
+    if (firstNew > 10) recent = history.slice(firstNew - 10);
+  }
+  const { waTextForAi } = await import("@/lib/wa-text");
+  const transcript = recent
+    .map((m) => `[${fmtTs(m.ts)}] ${m.from_me ? "Orium" : "Cliente"}: ${waTextForAi(m)}`)
     .join("\n");
+  const catalogo = await catalogContext(db, transcript).catch(() => "");
   const { aiJson } = await import("@/lib/ai/engine.server");
   let out: InsightData;
   try {
@@ -227,7 +250,7 @@ export async function analyzeConversation(db: any, jid: string): Promise<Insight
       feature: "crm_insight",
       profile: "advanced",
       system: SYSTEM,
-      prompt: `Cliente: ${name ?? "sem nome"}\nAgora: ${fmtTs(new Date().toISOString())}\n${memory}\n\nConversa (as mais recentes no fim):\n${transcript.slice(-14000)}`,
+      prompt: `Cliente: ${name ?? "sem nome"}\nAgora: ${fmtTs(new Date().toISOString())}\n${memory}${catalogo ? `\nCatálogo citado:\n${catalogo}` : ""}\n\nConversa (as mais recentes no fim${recent.length < history.length ? "; o começo está na análise anterior" : ""}):\n${transcript.slice(-12000)}`,
       schema: SCHEMA,
     });
   } catch (e) {
@@ -242,6 +265,7 @@ export async function analyzeConversation(db: any, jid: string): Promise<Insight
     throw e;
   }
   out.chance_compra = Math.max(0, Math.min(100, Math.round(Number(out.chance_compra) || 0)));
+  out.propostas = (out.propostas ?? []).filter((p) => p && p.item && Number(p.valor) > 0).slice(0, 6);
   out.catalogo = await linkCatalog(db, out.perfumes ?? []).catch(() => []);
 
   // interesse real e sem ficha: cria a ficha do cliente (o gatilho liga a conversa)
@@ -442,4 +466,74 @@ async function linkCatalog(
       };
     })
     .filter((x): x is NonNullable<typeof x> => !!x);
+}
+
+/**
+ * Marcas e frascos da Negociação citados na conversa, para a IA não confundir
+ * marca com perfume (ex.: "Bidaya" é marca; "Aisha Princess (Bidaya)" é o frasco).
+ * Curto de propósito (poucos tokens); catálogo guardado por 30 min.
+ */
+let brandCache: {
+  at: number;
+  brands: Map<string, { brand: string; names: string[] }>;
+  byName: Map<string, string[]>;
+} | null = null;
+async function catalogContext(db: any, text: string): Promise<string> {
+  const { flat } = await import("@/lib/perfume-mentions");
+  if (!brandCache || Date.now() - brandCache.at > 30 * 60_000) {
+    const { data } = await db
+      .from("products")
+      .select("canonical_name, brand")
+      .eq("active", true)
+      .eq("product_type", "PERFUME")
+      .limit(6000);
+    const brands = new Map<string, { brand: string; names: string[] }>();
+    const byName = new Map<string, string[]>();
+    for (const p of (data ?? []) as Array<{ canonical_name: string | null; brand: string | null }>) {
+      if (p.brand) {
+        const k = flat(p.brand);
+        if (k.length >= 3) {
+          const e = brands.get(k) ?? { brand: p.brand, names: [] };
+          if (p.canonical_name && !e.names.includes(p.canonical_name)) e.names.push(p.canonical_name);
+          brands.set(k, e);
+        }
+      }
+      if (p.canonical_name) {
+        const k = flat(p.canonical_name);
+        byName.set(k, [...(byName.get(k) ?? []), p.brand ?? ""]);
+      }
+    }
+    brandCache = { at: Date.now(), brands, byName };
+  }
+  const hay = ` ${flat(text)} `;
+  const lines: string[] = [];
+  for (const [k, e] of brandCache.brands) {
+    if (!hay.includes(` ${k} `)) continue;
+    const alsoPerfume = (brandCache.byName.get(k) ?? []).filter((b) => b && flat(b) !== k);
+    lines.push(
+      `- ${e.brand} é MARCA (perfumes: ${e.names.slice(0, 8).join(", ")})` +
+        (alsoPerfume.length ? `; também existe o perfume ${e.brand} da ${alsoPerfume[0]}` : ""),
+    );
+    if (lines.length >= 6) break;
+  }
+  const { data: neg } = await db
+    .from("negotiation_items")
+    .select("name, brand, volume_ml, remaining_ml")
+    .in("status", ["AVAILABLE", "NEGOTIATING"])
+    .limit(200);
+  for (const n of (neg ?? []) as Array<{
+    name: string;
+    brand: string | null;
+    volume_ml: number | null;
+    remaining_ml: number | null;
+  }>) {
+    const hit = [n.name, n.brand].some((x) => x && flat(x).length >= 3 && hay.includes(` ${flat(x)} `));
+    if (!hit) continue;
+    lines.push(
+      `- Negociação (frasco usado/aberto da loja): ${n.name}${n.brand ? ` (${n.brand})` : ""}` +
+        `${n.volume_ml ? ` ${n.volume_ml}ml` : ""}${n.remaining_ml ? `, restam ${n.remaining_ml}ml` : ""}`,
+    );
+    if (lines.length >= 10) break;
+  }
+  return lines.join("\n").slice(0, 900);
 }

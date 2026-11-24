@@ -4,6 +4,7 @@
  * Enviar = colocar na fila wa_outbox; a ponte entrega. Nada sai sem clique.
  */
 import { createServerFn } from "@tanstack/react-start";
+import { waTextForAi } from "@/lib/wa-text";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { LeadRaw } from "@/lib/crm-intel";
 
@@ -710,7 +711,7 @@ export async function suggestReplyCore(
       .slice(-20)
       .map(
         (m) =>
-          `${m.from_me ? "Orium" : "Cliente"}: ${m.body || ((m as { transcript?: string | null }).transcript ? `[áudio] ${(m as { transcript?: string | null }).transcript}` : `[${m.kind}]`)}`,
+          `${m.from_me ? "Orium" : "Cliente"}: ${waTextForAi(m)}`,
       ),
     objetivo:
       GOAL_TEXT[data.goal] ?? "Objetivo: a melhor próxima mensagem para vender, decidida por você.",
