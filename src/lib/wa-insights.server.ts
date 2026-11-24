@@ -402,6 +402,19 @@ async function linkCatalog(
       hits.map((h) => h.m!.productId),
     );
   const byId = new Map(((rows ?? []) as any[]).map((r) => [r.id, r]));
+  // preço final de verdade (com promoção e Pix), o mesmo cálculo do site
+  const { getProductPrices } = await import("@/lib/copilot/pricing-tools.server");
+  const finalPrice = new Map<string, number>();
+  await Promise.all(
+    [...byId.keys()].map(async (id) => {
+      try {
+        const pr: any = await getProductPrices({ adminDb: db } as any, id);
+        if (pr?.frasco?.pix != null) finalPrice.set(id, Number(pr.frasco.pix));
+      } catch {
+        /* sem preço: fica o de tabela */
+      }
+    }),
+  );
   return hits
     .map((h) => {
       const r = byId.get(h.m!.productId);
@@ -414,7 +427,7 @@ async function linkCatalog(
         marca: r.brand ?? null,
         em_estoque: estoque > 0 || !!r.in_stock,
         estoque,
-        preco: r.retail_price != null ? Number(r.retail_price) : null,
+        preco: finalPrice.get(r.id) ?? (r.retail_price != null ? Number(r.retail_price) : null),
         imagem: r.image_url ?? null,
         slug: r.slug ?? null,
       };
