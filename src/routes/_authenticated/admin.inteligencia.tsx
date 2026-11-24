@@ -23,7 +23,7 @@ import { AdminShell } from "@/components/orium/AdminShell";
 import { Bars } from "@/components/orium/CustomerSheet";
 import { PxKpi } from "@/components/orium/admin/PricingUI";
 import { Avatar, ago } from "@/components/orium/crm/shared";
-import { supabase } from "@/integrations/supabase/client";
+import { onAdminSignal } from "@/lib/admin-signal";
 import {
   crmInsightsOverview,
   crmSalesRules,
@@ -63,19 +63,16 @@ function InteligenciaPage() {
   });
   useEffect(() => {
     let t: number | undefined;
-    const ch = supabase
-      .channel("orium-crm-inteligencia")
-      .on("postgres_changes", { event: "*", schema: "public", table: "wa_insights" }, () => {
-        window.clearTimeout(t);
-        t = window.setTimeout(
-          () => void qc.invalidateQueries({ queryKey: ["crm-insights-overview"] }),
-          3000,
-        );
-      })
-      .subscribe();
+    const off = onAdminSignal(["wa_insights"], () => {
+      window.clearTimeout(t);
+      t = window.setTimeout(
+        () => void qc.invalidateQueries({ queryKey: ["crm-insights-overview"] }),
+        3000,
+      );
+    });
     return () => {
       window.clearTimeout(t);
-      void supabase.removeChannel(ch);
+      off();
     };
   }, [qc]);
 

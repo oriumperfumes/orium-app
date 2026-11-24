@@ -37,6 +37,7 @@ import {
 import { PxKpi, PxNote } from "@/components/orium/admin/PricingUI";
 import { Bars } from "@/components/orium/CustomerSheet";
 import { supabase } from "@/integrations/supabase/client";
+import { onAdminSignal } from "@/lib/admin-signal";
 import { brl } from "@/lib/format";
 import {
   liveOverview,
@@ -106,15 +107,19 @@ function LivePage() {
 
   // Tempo real: mudou uma sessão, o painel se atualiza sozinho.
   useEffect(() => {
-    const channel = supabase
-      .channel("orium-live-admin")
-      .on("postgres_changes", { event: "*", schema: "public", table: "live_sessions" }, () => {
+    // sinal leve: chega em rajada com muitos visitantes, então junta em 1 busca a cada 2 s
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const off = onAdminSignal(["live_sessions", "live_interactions"], () => {
+      if (t) return;
+      t = setTimeout(() => {
+        t = undefined;
         void qc.invalidateQueries({ queryKey: ["live-overview"] });
-        void qc.invalidateQueries({ queryKey: ["live-session"] });
-      })
-      .subscribe();
+        void qc.invalidateQueries({ queryKey: ["live-session"], refetchType: "active" });
+      }, 2000);
+    });
     return () => {
-      void supabase.removeChannel(channel);
+      if (t) clearTimeout(t);
+      off();
     };
   }, [qc]);
   // "há X min" anda sozinho
