@@ -237,7 +237,7 @@ export function PerfumeQuoteCard({
     .filter(Boolean)
     .join(" ");
   const pitch = f
-    ? `O ${line} ✨${f.promo ? ` Já com ${Math.round(f.promo)}% de desconto aplicado.` : ""}${q.ready ? " Tenho aqui pra retirar hoje." : ""}`
+    ? `O ${line}${f.promo ? ` Já com ${Math.round(f.promo)}% de desconto aplicado.` : ""}${q.ready ? " Tenho aqui pra retirar hoje." : ""}`
     : `O ${q.name} eu consigo pra você! Quer que eu veja o valor?`;
   return (
     <article className="rounded-[22px] bg-[#1A1A1A] p-3.5">

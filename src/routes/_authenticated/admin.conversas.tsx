@@ -132,17 +132,17 @@ const STAGES: Array<{ v: WaContact["stage"]; label: string; dot: string }> = [
   { v: "perdido", label: "Perdido", dot: "#FF9A8A" },
 ];
 const QUICK = [
-  { label: "Saudação", text: "Oi! Aqui é da Orium Perfumes 😊 Como posso te ajudar?" },
+  { label: "Saudação", text: "Oi! Aqui é da Orium Perfumes Como posso te ajudar?" },
   {
     label: "Retirada grátis",
-    text: "A retirada na loja é grátis! Te aviso assim que estiver separado ✨",
+    text: "A retirada na loja é grátis! Te aviso assim que estiver separado",
   },
   { label: "Chave Pix", text: "No Pix tem desconto! Quer que eu te mande a chave?" },
   {
     label: "Catálogo",
-    text: "Dá uma olhada no nosso catálogo completo: https://oriumperfumes.com 🛍️",
+    text: "Dá uma olhada no nosso catálogo completo: https://oriumperfumes.com",
   },
-  { label: "Separar", text: "Separo um pra você? Assim garante o seu ✨" },
+  { label: "Separar", text: "Separo um pra você? Assim garante o seu" },
 ];
 
 const HEAT: Record<string, { label: string; cls: string }> = {
@@ -211,9 +211,9 @@ const compose = (t: string) =>
 /** Texto pronto com o preço de um perfume (só dados reais). */
 function pricePitch(q: PerfumeQuote) {
   const f = q.frasco;
-  if (!f) return `O ${q.name} eu consigo pra você! Vou confirmar o valor e já te passo 😊`;
+  if (!f) return `O ${q.name} eu consigo pra você! Vou confirmar o valor e já te passo`;
   const card = f.card && f.card !== f.pix ? ` ou ${brl(f.card)} no cartão` : "";
-  return `O ${q.name}${q.volume_ml ? ` ${q.volume_ml}ml` : ""} sai por ${brl(f.pix)} no Pix${card} ✨${f.promo ? ` Já com ${Math.round(f.promo)}% de desconto.` : ""}${q.ready ? " Tenho aqui pra retirar hoje." : ""} Separo um pra você?`;
+  return `O ${q.name}${q.volume_ml ? ` ${q.volume_ml}ml` : ""} sai por ${brl(f.pix)} no Pix${card}${f.promo ? ` Já com ${Math.round(f.promo)}% de desconto.` : ""}${q.ready ? " Tenho aqui pra retirar hoje." : ""} Separo um pra você?`;
 }
 
 /** Conversa + perfumes citados pelo cliente (mesma consulta usada no chat e no assistente). */
@@ -1469,11 +1469,11 @@ function Starters({
     : [
         {
           label: "Simples",
-          text: `Oi${first ? `, ${first}` : ""}! Aqui é da Orium Perfumes 😊 Posso te ajudar com algum perfume?`,
+          text: `Oi${first ? `, ${first}` : ""}! Aqui é da Orium Perfumes Posso te ajudar com algum perfume?`,
         },
         {
           label: "Catálogo",
-          text: `Oi${first ? `, ${first}` : ""}! Aqui é da Orium Perfumes ✨ Separei nosso catálogo pra você: https://oriumperfumes.com. Tem algum perfume que você está procurando?`,
+          text: `Oi${first ? `, ${first}` : ""}! Aqui é da Orium Perfumes Separei nosso catálogo pra você: https://oriumperfumes.com. Tem algum perfume que você está procurando?`,
         },
       ];
   return (

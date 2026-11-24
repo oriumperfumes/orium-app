@@ -537,158 +537,199 @@ export const crmSuggestReply = createServerFn({ method: "POST" })
   }))
   .handler(async ({ data, context }) => {
     const ctx = await staffCtx(context as any);
-    const db = ctx.adminDb;
-    const [{ data: contact }, { data: msgs }, { data: ps }] = await Promise.all([
-      db
-        .from("wa_contacts")
-        .select(
-          "jid, push_name, saved_name, customer_id, stage, phone_normalized, last_inbound_at, last_from_me",
-        )
-        .eq("jid", data.jid)
-        .maybeSingle(),
-      db
-        .from("wa_messages")
-        .select("from_me, body, kind, ts, transcript")
-        .eq("jid", data.jid)
-        .order("ts", { ascending: false })
-        .limit(30),
-      db
-        .from("pricing_settings")
-        .select("pix_discount_active, pix_discount_percent")
-        .eq("id", true)
-        .maybeSingle(),
-    ]);
-    if (!contact) throw new Error("Conversa não encontrada.");
-    const history = (
-      (msgs ?? []) as Array<{ from_me: boolean; body: string | null; kind: string; ts: string }>
-    ).reverse();
-    const { data: insightRow } = await db
-      .from("wa_insights")
-      .select("data")
-      .eq("jid", data.jid)
-      .maybeSingle();
-    const inbound = history
-      .filter((m) => !m.from_me && m.body)
-      .slice(-8)
-      .map((m) => m.body)
-      .join("\n");
-
-    let lead: import("@/lib/crm-intel").Lead | null = null;
-    if (contact.customer_id) {
+    return suggestReplyCore(ctx, data, async () => {
       const { data: rows } = await (context.supabase as any).rpc("crm_leads");
-      const raw = ((rows ?? []) as LeadRaw[]).find((r) => r.id === contact.customer_id);
-      if (raw) lead = (await import("@/lib/crm-intel")).enrich([raw])[0] ?? null;
-    }
-    // perfumes citados + os que o cliente olhou/tem no carrinho (para recomendar com preço real)
-    const extraIds = [
-      ...(lead?.cart?.products ?? []).map((p) => p.product_id),
-      ...(lead?.views?.top ?? []).filter((t) => !t.bought).map((t) => t.product_id),
-    ].filter((x): x is string => !!x);
-    const quotes = await quotesFor(ctx, {
-      text: inbound,
-      productIds: [...new Set(extraIds)].slice(0, inbound ? 2 : 3),
+      return (rows ?? []) as LeadRaw[];
     });
-    const ids = quotes.map((q) => q.product_id);
-    const [proof, promos] = ids.length
-      ? await Promise.all([
-          salesProof(db, ids).catch(() => ({})),
-          promoEnds(db, ids).catch(() => ({})),
-        ])
-      : [{}, {}];
-    const pix = ps?.pix_discount_active ? Number(ps.pix_discount_percent ?? 0) : 0;
-    const waitingMin =
-      contact.last_from_me === false && contact.last_inbound_at
-        ? Math.round((Date.now() - new Date(contact.last_inbound_at).getTime()) / 60000)
-        : null;
-
-    const facts = {
-      cliente: {
-        nome: lead?.name ?? contact.saved_name ?? contact.push_name ?? null,
-        etapa_no_funil: contact.stage,
-        esperando_resposta_ha_minutos: waitingMin,
-        ja_comprou: lead ? lead.orders_count > 0 : null,
-        compras: lead?.orders_count ?? 0,
-        ticket_medio: lead && lead.orders_count ? Math.round(lead.spent / lead.orders_count) : null,
-        prefere:
-          lead && lead.decant_units + lead.bottle_units > 0
-            ? lead.decant_units > lead.bottle_units
-              ? "decant"
-              : "frasco"
-            : null,
-        faixa_que_paga_no_frasco: lead?.avg_bottle_price
-          ? { media: lead.avg_bottle_price, maximo: lead.max_item_price }
-          : null,
-        sensivel_a_promocao:
-          lead && lead.total_items >= 2 ? lead.promo_items / lead.total_items >= 0.5 : null,
-        marcas_favoritas: lead?.top_brands ?? [],
-        ultimas_compras: (lead?.recent_items ?? [])
-          .slice(0, 4)
-          .map((r) => `${r.name}${r.decant ? " (decant)" : ""}`),
-        carrinho_aberto: lead?.cart?.names ?? [],
-        favoritos: (lead?.favorites ?? []).slice(0, 4).map((f) => f.name),
-        sinais: lead?.reasons ?? [],
-      },
-      perfumes: quotes.map((q) => ({
-        nome: q.name,
-        marca: q.brand,
-        ml: q.volume_ml,
-        citado_pelo_cliente: q.confidence !== "manual",
-        frasco_pix: q.frasco?.pix ?? null,
-        frasco_cartao: q.frasco?.card ?? null,
-        preco_cheio_antes_da_promocao: q.frasco?.promo ? q.frasco.base : null,
-        decants: q.decants.map((d) => ({ ml: d.ml, pix: d.pix })),
-        estoque_na_loja: q.stock,
-        pronta_entrega: q.ready,
-        ...((proof as Record<string, object>)[q.product_id] ?? {}),
-        ...((promos as Record<string, object>)[q.product_id] ?? {}),
-      })),
-      loja: {
-        desconto_pix_percent: pix,
-        retirada: "grátis na loja física (Rio de Janeiro)",
-        entrega: "valor combinado pelo WhatsApp",
-        produtos: "originais e lacrados",
-        site: "https://oriumperfumes.com",
-      },
-      analise_da_conversa: insightRow?.data ?? null,
-      conversa: history
-        .slice(-20)
-        .map(
-          (m) =>
-            `${m.from_me ? "Orium" : "Cliente"}: ${m.body || ((m as { transcript?: string | null }).transcript ? `[áudio] ${(m as { transcript?: string | null }).transcript}` : `[${m.kind}]`)}`,
-        ),
-      objetivo:
-        GOAL_TEXT[data.goal] ??
-        "Objetivo: a melhor próxima mensagem para vender, decidida por você.",
-      pedido_extra_do_vendedor: data.tone,
-    };
-
-    const { aiJson } = await import("@/lib/ai/engine.server");
-    const { SALES_SYSTEM, SALES_SCHEMA } = await import("@/lib/sales-playbook");
-    const out = await aiJson<import("@/lib/sales-playbook").ReplySuggestion>({
-      feature: "crm_reply",
-      profile: "advanced",
-      system: SALES_SYSTEM,
-      prompt: `Dados reais (JSON):\n${JSON.stringify(facts)}\n\nEscreva a melhor próxima mensagem agora.`,
-      schema: SALES_SCHEMA as unknown as { name: string; schema: Record<string, unknown> },
-    });
-    const s = (v: unknown) => String(v ?? "").trim();
-    return {
-      situacao: s(out.situacao),
-      objecao: out.objecao ?? "nenhuma",
-      temperatura: out.temperatura ?? "morno",
-      tecnica: s(out.tecnica),
-      por_que: s(out.por_que),
-      reply: s(out.reply),
-      short: s(out.short),
-      alternativas: (out.alternativas ?? [])
-        .slice(0, 2)
-        .map((a) => ({ rotulo: s(a.rotulo), texto: s(a.texto) }))
-        .filter((a) => a.texto),
-      next_step: s(out.next_step),
-      se_nao_responder: s(out.se_nao_responder),
-      evitar: s(out.evitar),
-    } satisfies import("@/lib/sales-playbook").ReplySuggestion;
   });
+
+/** Núcleo da Resposta ideal (também usado no teste protegido pelo segredo do servidor). */
+export async function suggestReplyCore(
+  ctx: StaffCtx,
+  data: { jid: string; goal: string; tone: string | null },
+  leadsOf: (() => Promise<LeadRaw[]>) | null,
+) {
+  const db = ctx.adminDb;
+  const [{ data: contact }, { data: msgs }, { data: ps }] = await Promise.all([
+    db
+      .from("wa_contacts")
+      .select(
+        "jid, push_name, saved_name, customer_id, stage, phone_normalized, last_inbound_at, last_from_me",
+      )
+      .eq("jid", data.jid)
+      .maybeSingle(),
+    db
+      .from("wa_messages")
+      .select("from_me, body, kind, ts, transcript")
+      .eq("jid", data.jid)
+      .order("ts", { ascending: false })
+      .limit(30),
+    db
+      .from("pricing_settings")
+      .select("pix_discount_active, pix_discount_percent")
+      .eq("id", true)
+      .maybeSingle(),
+  ]);
+  if (!contact) throw new Error("Conversa não encontrada.");
+  const history = (
+    (msgs ?? []) as Array<{ from_me: boolean; body: string | null; kind: string; ts: string }>
+  ).reverse();
+  const { data: insightRow } = await db
+    .from("wa_insights")
+    .select("data")
+    .eq("jid", data.jid)
+    .maybeSingle();
+  const inbound = history
+    .filter((m) => !m.from_me && m.body)
+    .slice(-8)
+    .map((m) => m.body)
+    .join("\n");
+
+  let lead: import("@/lib/crm-intel").Lead | null = null;
+  if (contact.customer_id) {
+    const rows = leadsOf ? await leadsOf() : [];
+    const raw = ((rows ?? []) as LeadRaw[]).find((r) => r.id === contact.customer_id);
+    if (raw) lead = (await import("@/lib/crm-intel")).enrich([raw])[0] ?? null;
+  }
+  // perfumes citados + os que o cliente olhou/tem no carrinho (para recomendar com preço real)
+  const extraIds = [
+    ...(lead?.cart?.products ?? []).map((p) => p.product_id),
+    ...(lead?.views?.top ?? []).filter((t) => !t.bought).map((t) => t.product_id),
+  ].filter((x): x is string => !!x);
+  const quotes = await quotesFor(ctx, {
+    text: inbound,
+    productIds: [...new Set(extraIds)].slice(0, inbound ? 2 : 3),
+  });
+  const ids = quotes.map((q) => q.product_id);
+  const [proof, promos] = ids.length
+    ? await Promise.all([
+        salesProof(db, ids).catch(() => ({})),
+        promoEnds(db, ids).catch(() => ({})),
+      ])
+    : [{}, {}];
+  const pix = ps?.pix_discount_active ? Number(ps.pix_discount_percent ?? 0) : 0;
+  const [rules, style] = await Promise.all([salesRules(db), storeStyle(db)]);
+  const money = (v: number) => Math.round(v * 100) / 100;
+  const waitingMin =
+    contact.last_from_me === false && contact.last_inbound_at
+      ? Math.round((Date.now() - new Date(contact.last_inbound_at).getTime()) / 60000)
+      : null;
+
+  const facts = {
+    cliente: {
+      nome: lead?.name ?? contact.saved_name ?? contact.push_name ?? null,
+      etapa_no_funil: contact.stage,
+      esperando_resposta_ha_minutos: waitingMin,
+      ja_comprou: lead ? lead.orders_count > 0 : null,
+      compras: lead?.orders_count ?? 0,
+      ticket_medio: lead && lead.orders_count ? Math.round(lead.spent / lead.orders_count) : null,
+      prefere:
+        lead && lead.decant_units + lead.bottle_units > 0
+          ? lead.decant_units > lead.bottle_units
+            ? "decant"
+            : "frasco"
+          : null,
+      faixa_que_paga_no_frasco: lead?.avg_bottle_price
+        ? { media: lead.avg_bottle_price, maximo: lead.max_item_price }
+        : null,
+      sensivel_a_promocao:
+        lead && lead.total_items >= 2 ? lead.promo_items / lead.total_items >= 0.5 : null,
+      marcas_favoritas: lead?.top_brands ?? [],
+      ultimas_compras: (lead?.recent_items ?? [])
+        .slice(0, 4)
+        .map((r) => `${r.name}${r.decant ? " (decant)" : ""}`),
+      carrinho_aberto: lead?.cart?.names ?? [],
+      favoritos: (lead?.favorites ?? []).slice(0, 4).map((f) => f.name),
+      sinais: lead?.reasons ?? [],
+    },
+    perfumes: quotes.map((q) => ({
+      nome: q.name,
+      marca: q.brand,
+      ml: q.volume_ml,
+      citado_pelo_cliente: q.confidence !== "manual",
+      frasco_pix: q.frasco?.pix ?? null,
+      frasco_cartao: q.frasco?.card ?? null,
+      preco_cheio_antes_da_promocao: q.frasco?.promo ? q.frasco.base : null,
+      decants: q.decants.map((d) => ({ ml: d.ml, pix: d.pix })),
+      // preços já calculados para as condições permitidas (a IA não faz conta)
+      com_desconto_sugerido: q.frasco?.pix
+        ? money(q.frasco.pix * (1 - rules.discount_suggested / 100))
+        : null,
+      com_desconto_maximo: q.frasco?.pix
+        ? money(q.frasco.pix * (1 - rules.discount_max / 100))
+        : null,
+      parcelado: q.frasco?.card
+        ? `${rules.installments_max}x de R$ ${money(q.frasco.card / rules.installments_max)
+            .toFixed(2)
+            .replace(".", ",")}${rules.installments_no_interest ? " sem juros" : ""}`
+        : null,
+      estoque_na_loja: q.stock,
+      pronta_entrega: q.ready,
+      ...((proof as Record<string, object>)[q.product_id] ?? {}),
+      ...((promos as Record<string, object>)[q.product_id] ?? {}),
+    })),
+    loja: {
+      desconto_pix_percent: pix,
+      retirada: "grátis na loja física (Rio de Janeiro)",
+      entrega: "valor combinado pelo WhatsApp",
+      produtos: "originais e lacrados",
+      site: "https://oriumperfumes.com",
+    },
+    regras_de_venda: {
+      desconto_sugerido_percent: rules.discount_suggested,
+      desconto_maximo_percent: rules.discount_max,
+      desconto_kit_2_ou_mais_percent: rules.multi_buy_discount,
+      parcelamento: `até ${rules.installments_max}x no cartão${rules.installments_no_interest ? " sem juros" : ""}`,
+      observacoes_do_dono: rules.notes || null,
+    },
+    jeito_da_loja: style,
+    analise_da_conversa: insightRow?.data ?? null,
+    conversa: history
+      .slice(-20)
+      .map(
+        (m) =>
+          `${m.from_me ? "Orium" : "Cliente"}: ${m.body || ((m as { transcript?: string | null }).transcript ? `[áudio] ${(m as { transcript?: string | null }).transcript}` : `[${m.kind}]`)}`,
+      ),
+    objetivo:
+      GOAL_TEXT[data.goal] ?? "Objetivo: a melhor próxima mensagem para vender, decidida por você.",
+    pedido_extra_do_vendedor: data.tone,
+  };
+
+  const { aiJson } = await import("@/lib/ai/engine.server");
+  const { SALES_SYSTEM, SALES_SCHEMA } = await import("@/lib/sales-playbook");
+  const out = await aiJson<import("@/lib/sales-playbook").ReplySuggestion>({
+    feature: "crm_reply",
+    profile: "advanced",
+    system: SALES_SYSTEM,
+    prompt: `Dados reais (JSON):\n${JSON.stringify(facts)}\n\nEscreva a melhor próxima mensagem agora.`,
+    schema: SALES_SCHEMA as unknown as { name: string; schema: Record<string, unknown> },
+  });
+  // sem emoji, sempre (o jeito da loja)
+  const s = (v: unknown) =>
+    String(v ?? "")
+      .replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu, "")
+      .replace(/[ \t]{2,}/g, " ")
+      .replace(/ +([,.!?])/g, "$1")
+      .trim();
+  const pct = Math.max(0, Math.min(rules.discount_max, Number(out.desconto_pct) || 0));
+  return {
+    desconto_pct: pct,
+    situacao: s(out.situacao),
+    objecao: out.objecao ?? "nenhuma",
+    temperatura: out.temperatura ?? "morno",
+    tecnica: s(out.tecnica),
+    por_que: s(out.por_que),
+    reply: s(out.reply),
+    short: s(out.short),
+    alternativas: (out.alternativas ?? [])
+      .slice(0, 2)
+      .map((a) => ({ rotulo: s(a.rotulo), texto: s(a.texto) }))
+      .filter((a) => a.texto),
+    next_step: s(out.next_step),
+    se_nao_responder: s(out.se_nao_responder),
+    evitar: s(out.evitar),
+  } satisfies import("@/lib/sales-playbook").ReplySuggestion;
+}
 
 /** Apaga a conversa (contato + mensagens + fila) do CRM. Se o cliente escrever de novo, ela volta. */
 export const waDeleteContact = createServerFn({ method: "POST" })
@@ -970,4 +1011,95 @@ export const waTranscribe = createServerFn({ method: "POST" })
       .update({ transcript: text || "(sem fala)" })
       .eq("id", data.id);
     return { transcript: text || "(sem fala)" };
+  });
+
+/** Limites de desconto, kit e parcelamento (Admin → CRM → Inteligência → Regras de venda). */
+export type SalesRules = {
+  discount_suggested: number;
+  discount_max: number;
+  multi_buy_discount: number;
+  installments_max: number;
+  installments_no_interest: boolean;
+  notes: string | null;
+};
+const RULES_DEFAULT: SalesRules = {
+  discount_suggested: 5,
+  discount_max: 10,
+  multi_buy_discount: 5,
+  installments_max: 3,
+  installments_no_interest: true,
+  notes: null,
+};
+
+async function salesRules(db: any): Promise<SalesRules> {
+  const { data } = await db.from("crm_sales_settings").select("*").eq("id", true).maybeSingle();
+  if (!data) return RULES_DEFAULT;
+  const max = Math.min(30, Number(data.discount_max ?? 10));
+  return {
+    discount_suggested: Math.min(max, Number(data.discount_suggested ?? 5)),
+    discount_max: max,
+    multi_buy_discount: Math.min(max, Number(data.multi_buy_discount ?? 5)),
+    installments_max: Number(data.installments_max ?? 3),
+    installments_no_interest: data.installments_no_interest !== false,
+    notes: data.notes ?? null,
+  };
+}
+
+let styleCache: { at: number; lines: string[] } | null = null;
+/** Exemplos reais de como a equipe escreve no WhatsApp (sem mensagens em massa). */
+async function storeStyle(db: any): Promise<string[]> {
+  if (styleCache && Date.now() - styleCache.at < 60 * 60_000) return styleCache.lines;
+  const { data } = await db
+    .from("wa_messages")
+    .select("body")
+    .eq("from_me", true)
+    .eq("kind", "text")
+    .is("sent_by", null)
+    .order("ts", { ascending: false })
+    .limit(800);
+  const bodies = ((data ?? []) as Array<{ body: string | null }>)
+    .map((r) => (r.body ?? "").trim())
+    .filter((b) => b.length >= 18 && b.length <= 260);
+  const freq = new Map<string, number>();
+  for (const b of bodies) freq.set(b.toLowerCase(), (freq.get(b.toLowerCase()) ?? 0) + 1);
+  const seen = new Set<string>();
+  const lines: string[] = [];
+  for (const b of bodies) {
+    const k = b.toLowerCase();
+    if (seen.has(k) || (freq.get(k) ?? 0) > 1) continue; // repetidas = disparo em massa
+    if (/https?:\/\/|passando só pra|^pedidos/i.test(b)) continue;
+    seen.add(k);
+    lines.push(b.replace(/[\p{Extended_Pictographic}\u{FE0F}]/gu, "").trim());
+    if (lines.length >= 30) break;
+  }
+  styleCache = { at: Date.now(), lines };
+  return lines;
+}
+
+export const crmSalesRules = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => salesRules(context.supabase as any));
+
+export const crmSaveSalesRules = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: Partial<SalesRules>) => {
+    const n = (v: unknown, lo: number, hi: number) =>
+      Math.max(lo, Math.min(hi, Math.round(Number(v) * 10) / 10));
+    const max = n(d.discount_max ?? 10, 0, 30);
+    return {
+      discount_max: max,
+      discount_suggested: Math.min(max, n(d.discount_suggested ?? 5, 0, 30)),
+      multi_buy_discount: Math.min(max, n(d.multi_buy_discount ?? 5, 0, 30)),
+      installments_max: Math.round(n(d.installments_max ?? 3, 1, 12)),
+      installments_no_interest: d.installments_no_interest !== false,
+      notes: d.notes ? String(d.notes).slice(0, 600) : null,
+    };
+  })
+  .handler(async ({ data, context }) => {
+    const { error } = await (context.supabase as any)
+      .from("crm_sales_settings")
+      .update({ ...data, updated_at: new Date().toISOString(), updated_by: context.userId })
+      .eq("id", true);
+    if (error) throw new Error(error.message);
+    return data;
   });

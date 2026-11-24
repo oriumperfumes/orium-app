@@ -383,7 +383,7 @@ export function nextAction(r: LeadRaw, now = Date.now()): NextAction {
       key: "checkout",
       title: "Ajudar a fechar",
       why: "Está finalizando o pedido agora",
-      message: `${hi} Vi que você está finalizando aqui na Orium 😊 Posso te ajudar com alguma dúvida pra fechar?`,
+      message: `${hi} Vi que você está finalizando aqui na Orium Posso te ajudar com alguma dúvida pra fechar?`,
     };
   const ready = inStockWaiting(r)[0];
   if (ready)
@@ -391,7 +391,7 @@ export function nextAction(r: LeadRaw, now = Date.now()): NextAction {
       key: "arrived",
       title: `Avisar: ${ready.name} chegou`,
       why: "Pediu aviso e o perfume está disponível",
-      message: `${hi} O ${ready.name} que você queria acabou de chegar aqui na Orium ✨ Quer que eu separe um pra você?`,
+      message: `${hi} O ${ready.name} que você queria acabou de chegar aqui na Orium Quer que eu separe um pra você?`,
     };
   const ins = liveInsight(r, now);
   if (
@@ -423,7 +423,7 @@ export function nextAction(r: LeadRaw, now = Date.now()): NextAction {
       key: "cart",
       title: "Recuperar carrinho",
       why: `${r.cart.items} ${r.cart.items === 1 ? "item separado" : "itens separados"}${r.cart.total ? ` · ${brl(r.cart.total)}` : ""}`,
-      message: `${hi} Vi que você separou ${item ? `o ${item}` : "uns perfumes"} aqui na Orium 😊 Quer que eu reserve pra você? Te passo tudo por aqui.`,
+      message: `${hi} Vi que você separou ${item ? `o ${item}` : "uns perfumes"} aqui na Orium Quer que eu reserve pra você? Te passo tudo por aqui.`,
     };
   }
   const up = upgradeCandidate(r, now);
@@ -440,7 +440,7 @@ export function nextAction(r: LeadRaw, now = Date.now()): NextAction {
       key: "stuck",
       title: `Destravar ${stuck.name}`,
       why: `Viu ${stuck.views}x e não comprou`,
-      message: `${hi} Vi que você curtiu o ${stuck.name} 👀 Consigo uma condição especial pra você hoje. Quer saber?`,
+      message: `${hi} Vi que você curtiu o ${stuck.name} Consigo uma condição especial pra você hoje. Quer saber?`,
     };
   if (repurchaseDue(r, now)) {
     const brand = r.top_brands?.[0];
@@ -448,7 +448,7 @@ export function nextAction(r: LeadRaw, now = Date.now()): NextAction {
       key: "repurchase",
       title: "Puxar a recompra",
       why: "Chegou a época em que costuma voltar",
-      message: `${hi} Chegaram novidades${brand ? ` da ${brand}` : ""} aqui na Orium que têm a sua cara ✨ Quer que eu te mande as opções?`,
+      message: `${hi} Chegaram novidades${brand ? ` da ${brand}` : ""} aqui na Orium que têm a sua cara Quer que eu te mande as opções?`,
     };
   }
   if (r.orders_count >= 1 && daysSince(r.last_order_at, now) > 90)
@@ -456,14 +456,14 @@ export function nextAction(r: LeadRaw, now = Date.now()): NextAction {
       key: "winback",
       title: "Reconquistar",
       why: "Faz tempo que não compra",
-      message: `${hi} Saudade de você por aqui! Separei uma condição especial pra você voltar a se perfumar com a gente ✨`,
+      message: `${hi} Saudade de você por aqui! Separei uma condição especial pra você voltar a se perfumar com a gente`,
     };
   if (r.orders_count === 0)
     return {
       key: "first",
       title: "Primeira venda",
       why: "Ainda não comprou",
-      message: `${hi} Aqui é da Orium Perfumes 😊 Posso te ajudar a escolher o perfume ideal? Me conta que tipo de cheiro você curte.`,
+      message: `${hi} Aqui é da Orium Perfumes Posso te ajudar a escolher o perfume ideal? Me conta que tipo de cheiro você curte.`,
     };
   return { key: "nurture", title: "Manter contato", why: "Sem sinal forte agora", message: null };
 }
@@ -557,16 +557,16 @@ export function messageOptions(l: Lead): Array<{ label: string; text: string }> 
   if (top && !out.some((o) => o.text.includes(top.name)))
     out.push({
       label: `Falar do ${top.name.split(" ").slice(0, 2).join(" ")}`,
-      text: `${hi} Vi que você curtiu o ${top.name} ✨ Ele está disponível aqui na Orium. Quer que eu te mande os detalhes e o valor?`,
+      text: `${hi} Vi que você curtiu o ${top.name} Ele está disponível aqui na Orium. Quer que eu te mande os detalhes e o valor?`,
     });
   out.push({
     label: "Oferecer desconto",
-    text: `${hi} Separei uma condição especial pra você hoje aqui na Orium 😊 Quer aproveitar? Me fala qual perfume você está de olho.`,
+    text: `${hi} Separei uma condição especial pra você hoje aqui na Orium Quer aproveitar? Me fala qual perfume você está de olho.`,
   });
   if (!out.some((o) => o.label === "Sugerida"))
     out.unshift({
       label: "Simples",
-      text: `${hi} Aqui é da Orium Perfumes 😊 Posso te ajudar com algum perfume?`,
+      text: `${hi} Aqui é da Orium Perfumes Posso te ajudar com algum perfume?`,
     });
   return out.slice(0, 3);
 }

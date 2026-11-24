@@ -5,8 +5,8 @@
  * (e os que não temos em estoque), estilos, objeções e alertas.
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState, type ReactNode } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   BrainCircuit,
@@ -24,7 +24,12 @@ import { Bars } from "@/components/orium/CustomerSheet";
 import { PxKpi } from "@/components/orium/admin/PricingUI";
 import { Avatar, ago } from "@/components/orium/crm/shared";
 import { supabase } from "@/integrations/supabase/client";
-import { crmInsightsOverview } from "@/lib/crm-wa.functions";
+import {
+  crmInsightsOverview,
+  crmSalesRules,
+  crmSaveSalesRules,
+  type SalesRules,
+} from "@/lib/crm-wa.functions";
 import { brl } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -116,6 +121,11 @@ function InteligenciaPage() {
             últimos 30 dias) e este painel se monta sozinho.
           </p>
         </section>
+      ) : null}
+      {empty ? (
+        <div className="mt-4">
+          <SalesRulesCard />
+        </div>
       ) : (
         <div className="space-y-4">
           <section className="grid grid-cols-2 gap-3 lg:gap-4 xl:grid-cols-4">
@@ -327,6 +337,8 @@ function InteligenciaPage() {
             )}
           </Card>
 
+          <SalesRulesCard />
+
           <div className="grid gap-4 xl:grid-cols-3">
             <Card title="Estilos que mais pedem" hint="Do que os clientes falam que gostam">
               {isPending ? <Skel n={3} /> : <Chips items={d?.estilos ?? []} gold />}
@@ -427,3 +439,97 @@ const Skel = ({ n }: { n: number }) => (
 const Empty = ({ text }: { text: string }) => (
   <p className="py-4 text-center text-[13.5px] text-[#8C8C8C]">{text}</p>
 );
+
+/** Limites que a Resposta ideal respeita: desconto sugerido/máximo, kit e parcelamento. */
+function SalesRulesCard() {
+  const qc = useQueryClient();
+  const q = useQuery({
+    queryKey: ["crm-sales-rules"],
+    queryFn: () => crmSalesRules(),
+    staleTime: 60_000,
+  });
+  const [form, setForm] = useState<SalesRules | null>(null);
+  useEffect(() => {
+    if (q.data && !form) setForm(q.data);
+  }, [q.data, form]);
+  const save = useMutation({
+    mutationFn: (v: SalesRules) => crmSaveSalesRules({ data: v }),
+    onSuccess: (v) => {
+      setForm(v as SalesRules);
+      void qc.invalidateQueries({ queryKey: ["crm-sales-rules"] });
+      toast.success("Regras de venda salvas. A IA já usa na próxima resposta.");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Não foi possível salvar"),
+  });
+  const f = form;
+  const num = (k: keyof SalesRules, label: string, suffix: string, hint: string) => (
+    <label className="block min-w-0 rounded-[18px] bg-[#141414] p-3.5">
+      <span className="block text-[12.5px] font-semibold text-[#8C8C8C]">{label}</span>
+      <span className="mt-1.5 flex items-baseline gap-1">
+        <input
+          type="number"
+          inputMode="decimal"
+          value={f ? String(f[k] ?? "") : ""}
+          onChange={(e) => f && setForm({ ...f, [k]: Number(e.target.value) })}
+          className="pk-field w-full min-w-0 bg-transparent text-[24px] font-bold tracking-[-0.03em] tabular-nums outline-none"
+        />
+        <span className="text-[15px] font-bold text-[#8C8C8C]">{suffix}</span>
+      </span>
+      <span className="mt-1 block text-[11.5px] leading-snug text-[#6F6F6F]">{hint}</span>
+    </label>
+  );
+  return (
+    <Card
+      title="Regras de venda da IA"
+      hint="Até onde a Resposta ideal pode ir para fechar. Ela nunca passa desses limites e só dá desconto quando o cliente resiste ou leva mais de um."
+      icon={<Percent />}
+    >
+      {!f ? (
+        <Skel n={2} />
+      ) : (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+            {num(
+              "discount_suggested",
+              "Desconto sugerido",
+              "%",
+              "Usado primeiro quando o cliente acha caro",
+            )}
+            {num(
+              "discount_max",
+              "Desconto máximo",
+              "%",
+              "Só se recusar o sugerido. Nunca passa disso",
+            )}
+            {num("multi_buy_discount", "Levando 2 ou mais", "%", "Desconto de kit no total")}
+            {num("installments_max", "Parcelamento", "x", "Máximo de parcelas no cartão")}
+          </div>
+          <label className="flex items-center gap-2.5 text-[13.5px] font-semibold text-[#D4D4D4]">
+            <input
+              type="checkbox"
+              checked={f.installments_no_interest}
+              onChange={(e) => setForm({ ...f, installments_no_interest: e.target.checked })}
+              className="size-4 accent-[#FFD599]"
+            />
+            Parcelamento sem juros
+          </label>
+          <textarea
+            value={f.notes ?? ""}
+            onChange={(e) => setForm({ ...f, notes: e.target.value })}
+            rows={2}
+            placeholder="Observações para a IA (opcional). Ex.: Retirada só depois das 14h aos sábados."
+            className="w-full resize-none rounded-[16px] p-3 text-[14px]"
+          />
+          <button
+            type="button"
+            onClick={() => save.mutate(f)}
+            disabled={save.isPending}
+            className="press inline-flex h-11 items-center rounded-full bg-[#FFD599] px-5 text-[14px] font-bold text-[#15130F] disabled:opacity-50"
+          >
+            {save.isPending ? "Salvando…" : "Salvar regras"}
+          </button>
+        </div>
+      )}
+    </Card>
+  );
+}

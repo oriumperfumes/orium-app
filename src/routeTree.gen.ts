@@ -55,6 +55,7 @@ import { Route as AuthenticatedAdminCopilotThreadIdRouteImport } from './routes/
 import { Route as AuthenticatedAdminProdutosIdRouteImport } from './routes/_authenticated/admin.produtos.$id'
 import { Route as ApiPublicHooksCatalogHygieneRouteImport } from './routes/api/public/hooks/catalog-hygiene'
 import { Route as ApiPublicHooksConsultEnrichRouteImport } from './routes/api/public/hooks/consult-enrich'
+import { Route as ApiPublicHooksCrmReplyTestRouteImport } from './routes/api/public/hooks/crm-reply-test'
 import { Route as ApiPublicHooksEnrichFragrancesRouteImport } from './routes/api/public/hooks/enrich-fragrances'
 import { Route as ApiPublicHooksSyncSuppliersRouteImport } from './routes/api/public/hooks/sync-suppliers'
 import { Route as ApiPublicHooksWaInsightsRouteImport } from './routes/api/public/hooks/wa-insights'
@@ -316,6 +317,12 @@ const ApiPublicHooksConsultEnrichRoute =
     path: '/api/public/hooks/consult-enrich',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksCrmReplyTestRoute =
+  ApiPublicHooksCrmReplyTestRouteImport.update({
+    id: '/api/public/hooks/crm-reply-test',
+    path: '/api/public/hooks/crm-reply-test',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksEnrichFragrancesRoute =
   ApiPublicHooksEnrichFragrancesRouteImport.update({
     id: '/api/public/hooks/enrich-fragrances',
@@ -392,6 +399,7 @@ export interface FileRoutesByFullPath {
   '/admin/produtos/$id': typeof AuthenticatedAdminProdutosIdRoute
   '/api/public/hooks/catalog-hygiene': typeof ApiPublicHooksCatalogHygieneRoute
   '/api/public/hooks/consult-enrich': typeof ApiPublicHooksConsultEnrichRoute
+  '/api/public/hooks/crm-reply-test': typeof ApiPublicHooksCrmReplyTestRoute
   '/api/public/hooks/enrich-fragrances': typeof ApiPublicHooksEnrichFragrancesRoute
   '/api/public/hooks/sync-suppliers': typeof ApiPublicHooksSyncSuppliersRoute
   '/api/public/hooks/wa-insights': typeof ApiPublicHooksWaInsightsRoute
@@ -443,6 +451,7 @@ export interface FileRoutesByTo {
   '/admin/produtos/$id': typeof AuthenticatedAdminProdutosIdRoute
   '/api/public/hooks/catalog-hygiene': typeof ApiPublicHooksCatalogHygieneRoute
   '/api/public/hooks/consult-enrich': typeof ApiPublicHooksConsultEnrichRoute
+  '/api/public/hooks/crm-reply-test': typeof ApiPublicHooksCrmReplyTestRoute
   '/api/public/hooks/enrich-fragrances': typeof ApiPublicHooksEnrichFragrancesRoute
   '/api/public/hooks/sync-suppliers': typeof ApiPublicHooksSyncSuppliersRoute
   '/api/public/hooks/wa-insights': typeof ApiPublicHooksWaInsightsRoute
@@ -497,6 +506,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/produtos/$id': typeof AuthenticatedAdminProdutosIdRoute
   '/api/public/hooks/catalog-hygiene': typeof ApiPublicHooksCatalogHygieneRoute
   '/api/public/hooks/consult-enrich': typeof ApiPublicHooksConsultEnrichRoute
+  '/api/public/hooks/crm-reply-test': typeof ApiPublicHooksCrmReplyTestRoute
   '/api/public/hooks/enrich-fragrances': typeof ApiPublicHooksEnrichFragrancesRoute
   '/api/public/hooks/sync-suppliers': typeof ApiPublicHooksSyncSuppliersRoute
   '/api/public/hooks/wa-insights': typeof ApiPublicHooksWaInsightsRoute
@@ -551,6 +561,7 @@ export interface FileRouteTypes {
     | '/admin/produtos/$id'
     | '/api/public/hooks/catalog-hygiene'
     | '/api/public/hooks/consult-enrich'
+    | '/api/public/hooks/crm-reply-test'
     | '/api/public/hooks/enrich-fragrances'
     | '/api/public/hooks/sync-suppliers'
     | '/api/public/hooks/wa-insights'
@@ -602,6 +613,7 @@ export interface FileRouteTypes {
     | '/admin/produtos/$id'
     | '/api/public/hooks/catalog-hygiene'
     | '/api/public/hooks/consult-enrich'
+    | '/api/public/hooks/crm-reply-test'
     | '/api/public/hooks/enrich-fragrances'
     | '/api/public/hooks/sync-suppliers'
     | '/api/public/hooks/wa-insights'
@@ -655,6 +667,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/produtos/$id'
     | '/api/public/hooks/catalog-hygiene'
     | '/api/public/hooks/consult-enrich'
+    | '/api/public/hooks/crm-reply-test'
     | '/api/public/hooks/enrich-fragrances'
     | '/api/public/hooks/sync-suppliers'
     | '/api/public/hooks/wa-insights'
@@ -681,6 +694,7 @@ export interface RootRouteChildren {
   ApiPublicWidgetRoute: typeof ApiPublicWidgetRoute
   ApiPublicHooksCatalogHygieneRoute: typeof ApiPublicHooksCatalogHygieneRoute
   ApiPublicHooksConsultEnrichRoute: typeof ApiPublicHooksConsultEnrichRoute
+  ApiPublicHooksCrmReplyTestRoute: typeof ApiPublicHooksCrmReplyTestRoute
   ApiPublicHooksEnrichFragrancesRoute: typeof ApiPublicHooksEnrichFragrancesRoute
   ApiPublicHooksSyncSuppliersRoute: typeof ApiPublicHooksSyncSuppliersRoute
   ApiPublicHooksWaInsightsRoute: typeof ApiPublicHooksWaInsightsRoute
@@ -1012,6 +1026,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksConsultEnrichRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/crm-reply-test': {
+      id: '/api/public/hooks/crm-reply-test'
+      path: '/api/public/hooks/crm-reply-test'
+      fullPath: '/api/public/hooks/crm-reply-test'
+      preLoaderRoute: typeof ApiPublicHooksCrmReplyTestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/enrich-fragrances': {
       id: '/api/public/hooks/enrich-fragrances'
       path: '/api/public/hooks/enrich-fragrances'
@@ -1157,6 +1178,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicWidgetRoute: ApiPublicWidgetRoute,
   ApiPublicHooksCatalogHygieneRoute: ApiPublicHooksCatalogHygieneRoute,
   ApiPublicHooksConsultEnrichRoute: ApiPublicHooksConsultEnrichRoute,
+  ApiPublicHooksCrmReplyTestRoute: ApiPublicHooksCrmReplyTestRoute,
   ApiPublicHooksEnrichFragrancesRoute: ApiPublicHooksEnrichFragrancesRoute,
   ApiPublicHooksSyncSuppliersRoute: ApiPublicHooksSyncSuppliersRoute,
   ApiPublicHooksWaInsightsRoute: ApiPublicHooksWaInsightsRoute,

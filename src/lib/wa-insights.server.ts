@@ -69,7 +69,7 @@ Extraia SÓ o que está na conversa — não invente. Se algo não aparece, use 
 - ocasiao (dia a dia, trabalho, festa, encontro, presente…), orcamento (ex.: "até R$ 300" se ele disse), prefere (frasco/decant), para_quem, genero_perfume.
 - objecoes: frases curtas com as objeções reais (ex.: "achou caro o Khamrah").
 - proximo_passo: a ação mais certeira do vendedor agora, 1 frase.
-- mensagem_sugerida: mensagem pronta de WhatsApp (máx. 3 frases curtas, tom humano, 0-2 emojis) para retomar ou fechar, sem inventar preço, desconto, prazo ou estoque, terminando com uma pergunta fácil de responder.
+- mensagem_sugerida: mensagem pronta de WhatsApp (máx. 3 frases curtas, tom humano igual ao da equipe na conversa, SEM emoji, sem dizer "sem estoque"/"em falta") para retomar ou fechar, sem inventar preço, desconto, prazo ou estoque, terminando com uma pergunta fácil de responder.
 - alerta: problema que o dono precisa ver (reclamação, atraso, cliente irritado, pedido de troca). "" se nada.`;
 
 const SCHEMA = {

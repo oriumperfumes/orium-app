@@ -164,6 +164,12 @@ export function ReplyIdeal({
         </div>
       ) : null}
 
+      {ai && ai.desconto_pct > 0 && !gen.isPending && ver === 0 ? (
+        <p className="mx-4 mt-3 inline-flex items-center gap-1.5 rounded-full border border-[#FFD599]/35 px-3 py-1 text-[12px] font-bold text-[#FFD599] sm:mx-5">
+          Esta resposta oferece {ai.desconto_pct}% de desconto
+        </p>
+      ) : null}
+
       {/* por que funciona */}
       {ai?.por_que && !gen.isPending ? (
         <button
