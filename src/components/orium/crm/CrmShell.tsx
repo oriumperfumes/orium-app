@@ -62,9 +62,11 @@ function usePulse() {
     const ch = supabase
       .channel("orium-crm-pulse")
       .on("postgres_changes", { event: "*", schema: "public", table: "wa_contacts" }, () => bump())
-      .on("postgres_changes", { event: "*", schema: "public", table: "wa_bridge_state" }, () =>
-        bump(),
-      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "wa_bridge_state" }, (p) => {
+        // sinal de vida a cada 20 s: só recarrega quando o status muda
+        const st = (p.new as { status?: string }).status;
+        if (st !== qc.getQueryData<Pulse>(["crm-pulse"])?.status) bump();
+      })
       .subscribe();
     return () => {
       bump.cancel();

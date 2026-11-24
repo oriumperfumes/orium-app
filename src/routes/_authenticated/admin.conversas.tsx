@@ -6,6 +6,7 @@
  * botão "Resposta ideal" (IA focada em fechar a venda) e respostas rápidas.
  * O assistente ao lado diz quem é o cliente e o que fazer. Nada sai sem clique.
  */
+import { useWaAvatars } from "@/lib/use-wa-avatars";
 import { throttleByKey } from "@/lib/realtime-throttle";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { createPortal } from "react-dom";
@@ -310,9 +311,14 @@ function ConversasPage() {
         const jid = jidOf(p);
         if (jid && qc.getQueryState(["wa-thread", jid])) threadBump(jid);
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "wa_bridge_state" }, () =>
-        inboxBump(),
-      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "wa_bridge_state" }, (p) => {
+        // o sinal de vida (a cada 20 s) não muda nada na tela: só recarrega se status/QR mudou
+        const n = p.new as { status?: string; qr?: string | null };
+        const cur = qc.getQueryData<{ bridge?: { status?: string; qr?: string | null } }>([
+          "wa-inbox",
+        ])?.bridge;
+        if (!cur || n.status !== cur.status || (n.qr ?? null) !== (cur.qr ?? null)) inboxBump();
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: "wa_insights" }, (p) =>
         insightBump(jidOf(p)),
       )
@@ -329,7 +335,11 @@ function ConversasPage() {
     };
   }, [qc]);
 
-  const contacts = useMemo(() => inbox.data?.contacts ?? [], [inbox.data]);
+  const avatars = useWaAvatars();
+  const contacts = useMemo(
+    () => (inbox.data?.contacts ?? []).map((c) => ({ ...c, avatar: avatars[c.jid] ?? null })),
+    [inbox.data, avatars],
+  );
   const bridge = inbox.data?.bridge;
   const leadOf = (c: WaContact) => (c.customer_id ? leadById.get(c.customer_id) : undefined);
 

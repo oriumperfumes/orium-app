@@ -5,6 +5,7 @@
  * (mouse, ou segurando o dedo no celular). A etapa fica salva na conversa do
  * WhatsApp; sem conversa, é deduzida pelo comportamento no app.
  */
+import { useWaAvatars } from "@/lib/use-wa-avatars";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { createPortal } from "react-dom";
 import {
@@ -89,10 +90,14 @@ function FunilPage() {
     staleTime: 30_000,
   });
   const inboxQ = useQuery({ queryKey: ["wa-inbox"], queryFn: () => waInbox(), staleTime: 15_000 });
+  const avatars = useWaAvatars();
   const leads = useMemo(() => enrich(leadsQ.data ?? []), [leadsQ.data]);
 
   const items = useMemo<Item[]>(() => {
-    const contacts = inboxQ.data?.contacts ?? [];
+    const contacts = (inboxQ.data?.contacts ?? []).map((c) => ({
+      ...c,
+      avatar: avatars[c.jid] ?? null,
+    }));
     const byCustomer = new Map(
       contacts.filter((c) => c.customer_id).map((c) => [c.customer_id!, c]),
     );
@@ -132,7 +137,7 @@ function FunilPage() {
     return out
       .map((i) => (moved[i.key] ? { ...i, stage: moved[i.key] } : i))
       .sort((a, b) => b.score - a.score);
-  }, [leads, inboxQ.data, moved]);
+  }, [leads, inboxQ.data, avatars, moved]);
 
   const byStage = (s: Stage) => items.filter((i) => i.stage === s);
   const queue = items

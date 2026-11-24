@@ -118,7 +118,7 @@ export const waInbox = createServerFn({ method: "GET" })
       db
         .from("wa_contacts")
         .select(
-          "jid, phone_normalized, push_name, saved_name, avatar, customer_id, stage, unread, pinned, archived, last_message_at, last_message_preview, last_from_me, last_inbound_at, assigned_to, assigned_at, customer:crm_customers(name)",
+          "jid, phone_normalized, push_name, saved_name, customer_id, stage, unread, pinned, archived, last_message_at, last_message_preview, last_from_me, last_inbound_at, assigned_to, assigned_at, customer:crm_customers(name)",
         )
         .order("last_message_at", { ascending: false, nullsFirst: false })
         .limit(300),
@@ -129,6 +129,21 @@ export const waInbox = createServerFn({ method: "GET" })
       contacts: (data ?? []) as WaContact[],
       bridge: (bridge ?? { status: "offline", qr: null, phone: null, last_seen: null }) as WaBridge,
     };
+  });
+
+/** Fotos de perfil (pesadas): carregadas à parte e guardadas por 1 h no navegador. */
+export const waAvatars = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data, error } = await (context.supabase as any)
+      .from("wa_contacts")
+      .select("jid, avatar")
+      .not("avatar", "is", null)
+      .limit(1000);
+    if (error) throw new Error(error.message);
+    const out: Record<string, string> = {};
+    for (const r of (data ?? []) as Array<{ jid: string; avatar: string }>) out[r.jid] = r.avatar;
+    return out;
   });
 
 export const waThread = createServerFn({ method: "GET" })
