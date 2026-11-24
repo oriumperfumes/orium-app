@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { authenticateCronRequest } from "@/integrations/supabase/cron-auth";
+import { cronDenied } from "@/lib/cron-guard.server";
 
 /**
  * Fornecedores de consulta (Rasha…): fotos e ligação ao nosso catálogo, sem custo.
@@ -10,7 +10,7 @@ export const Route = createFileRoute("/api/public/hooks/consult-enrich")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const denied = await authenticateCronRequest(request);
+        const denied = await cronDenied(request);
         if (denied) return denied;
         let body: { step?: string } = {};
         try {
@@ -20,7 +20,10 @@ export const Route = createFileRoute("/api/public/hooks/consult-enrich")({
         }
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
         const mod = await import("@/lib/suppliers/consult-enrich.server");
-        const result = body.step === "brand" ? await mod.learnOneConsultBrand(supabaseAdmin) : await mod.enrichConsultOffers(supabaseAdmin);
+        const result =
+          body.step === "brand"
+            ? await mod.learnOneConsultBrand(supabaseAdmin)
+            : await mod.enrichConsultOffers(supabaseAdmin);
         return new Response(JSON.stringify({ ok: true, step: body.step ?? "match", ...result }), {
           headers: { "Content-Type": "application/json" },
         });
