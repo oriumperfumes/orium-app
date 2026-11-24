@@ -25,6 +25,9 @@ export type WaContact = {
   last_from_me: boolean | null;
   last_inbound_at: string | null;
   customer: { name: string | null } | null;
+  /** atendente responsável (equipe) */
+  assigned_to?: string | null;
+  assigned_at?: string | null;
 };
 export type WaMessage = {
   id: string;
@@ -35,7 +38,18 @@ export type WaMessage = {
   ts: string;
   pending?: "pending" | "sending" | "failed";
   error?: string | null;
+  media_path?: string | null;
+  media_mime?: string | null;
+  media_size?: number | null;
+  media_seconds?: number | null;
+  media_w?: number | null;
+  media_h?: number | null;
+  file_name?: string | null;
+  transcript?: string | null;
+  /** quem da equipe enviou (mensagem saída pelo CRM) */
+  sent_by?: string | null;
 };
+export type StaffMember = { id: string; name: string; role: string };
 export type WaBridge = {
   status: "offline" | "qr" | "connecting" | "online";
   qr: string | null;
@@ -104,7 +118,7 @@ export const waInbox = createServerFn({ method: "GET" })
       db
         .from("wa_contacts")
         .select(
-          "jid, phone_normalized, push_name, saved_name, avatar, customer_id, stage, unread, pinned, archived, last_message_at, last_message_preview, last_from_me, last_inbound_at, customer:crm_customers(name)",
+          "jid, phone_normalized, push_name, saved_name, avatar, customer_id, stage, unread, pinned, archived, last_message_at, last_message_preview, last_from_me, last_inbound_at, assigned_to, assigned_at, customer:crm_customers(name)",
         )
         .order("last_message_at", { ascending: false, nullsFirst: false })
         .limit(300),
@@ -125,13 +139,15 @@ export const waThread = createServerFn({ method: "GET" })
     const [{ data: msgs, error }, { data: out }] = await Promise.all([
       db
         .from("wa_messages")
-        .select("id, jid, from_me, body, kind, ts")
+        .select(
+          "id, jid, from_me, body, kind, ts, media_path, media_mime, media_size, media_seconds, media_w, media_h, file_name, transcript, sent_by",
+        )
         .eq("jid", data.jid)
         .order("ts", { ascending: false })
         .limit(120),
       db
         .from("wa_outbox")
-        .select("id, jid, body, status, error, created_at")
+        .select("id, jid, body, status, error, created_at, created_by")
         .eq("jid", data.jid)
         .in("status", ["pending", "sending", "failed"])
         .order("created_at"),
@@ -148,6 +164,7 @@ export const waThread = createServerFn({ method: "GET" })
         ts: o.created_at,
         pending: o.status,
         error: o.error,
+        sent_by: o.created_by,
       });
     return list;
   });
@@ -166,6 +183,16 @@ export const waSend = createServerFn({ method: "POST" })
     const { error } = await db.from("wa_outbox").insert({ jid: data.jid, body: data.body });
     if (error) throw new Error(error.message);
     await db.from("wa_contacts").update({ unread: 0 }).eq("jid", data.jid);
+    // quem responde primeiro assume o atendimento (se ninguém assumiu)
+    await db
+      .from("wa_contacts")
+      .update({
+        assigned_to: context.userId,
+        assigned_at: new Date().toISOString(),
+        assigned_by: context.userId,
+      })
+      .eq("jid", data.jid)
+      .is("assigned_to", null);
     return { ok: true };
   });
 
@@ -521,7 +548,7 @@ export const crmSuggestReply = createServerFn({ method: "POST" })
         .maybeSingle(),
       db
         .from("wa_messages")
-        .select("from_me, body, kind, ts")
+        .select("from_me, body, kind, ts, transcript")
         .eq("jid", data.jid)
         .order("ts", { ascending: false })
         .limit(30),
@@ -625,7 +652,10 @@ export const crmSuggestReply = createServerFn({ method: "POST" })
       analise_da_conversa: insightRow?.data ?? null,
       conversa: history
         .slice(-20)
-        .map((m) => `${m.from_me ? "Orium" : "Cliente"}: ${m.body || `[${m.kind}]`}`),
+        .map(
+          (m) =>
+            `${m.from_me ? "Orium" : "Cliente"}: ${m.body || ((m as { transcript?: string | null }).transcript ? `[áudio] ${(m as { transcript?: string | null }).transcript}` : `[${m.kind}]`)}`,
+        ),
       objetivo:
         GOAL_TEXT[data.goal] ??
         "Objetivo: a melhor próxima mensagem para vender, decidida por você.",
@@ -865,4 +895,79 @@ export const crmInsightsOverview = createServerFn({ method: "GET" })
       recover: recover.sort((a, b) => b.chance - a.chance).slice(0, 20),
       alerts: alerts.slice(0, 10),
     } satisfies InsightsOverview;
+  });
+
+// ---------- atendimento: quem está cuidando de cada conversa ----------
+
+export const crmStaff = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data, error } = await (context.supabase as any).rpc("crm_staff");
+    if (error) throw new Error(error.message);
+    return { me: context.userId as string, staff: (data ?? []) as StaffMember[] };
+  });
+
+/** Assumir, transferir (userId de outra pessoa) ou encerrar (null) o atendimento. */
+export const waAssign = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { jid: string; userId: string | null }) => ({
+    jid: String(d.jid),
+    userId: d.userId ? String(d.userId) : null,
+  }))
+  .handler(async ({ data, context }) => {
+    const db = context.supabase as any;
+    if (data.userId) {
+      const { data: staff } = await db.rpc("crm_staff");
+      if (!((staff ?? []) as StaffMember[]).some((s) => s.id === data.userId))
+        throw new Error("Essa pessoa não é da equipe.");
+    }
+    const { error } = await db
+      .from("wa_contacts")
+      .update({
+        assigned_to: data.userId,
+        assigned_at: data.userId ? new Date().toISOString() : null,
+        assigned_by: context.userId,
+      })
+      .eq("jid", data.jid);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+// ---------- áudio: transcrição com IA ----------
+
+export const waTranscribe = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { id: string }) => ({ id: String(d.id) }))
+  .handler(async ({ data, context }) => {
+    const ctx = await staffCtx(context as any);
+    const { data: msg } = await ctx.adminDb
+      .from("wa_messages")
+      .select("id, kind, media_path, media_mime, media_seconds, transcript")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (!msg?.media_path || msg.kind !== "audio")
+      throw new Error("Esse áudio ainda não foi baixado.");
+    if (msg.transcript) return { transcript: msg.transcript as string };
+    if ((msg.media_seconds ?? 0) > 600)
+      throw new Error("Áudio longo demais para transcrever (mais de 10 min).");
+    const { data: blob, error } = await ctx.adminDb.storage
+      .from("wa-media")
+      .download(msg.media_path);
+    if (error || !blob) throw new Error("Não consegui abrir o áudio.");
+    const ext = (msg.media_path.split(".").pop() || "ogg").toLowerCase();
+    const file = new File([await blob.arrayBuffer()], `audio.${ext}`, {
+      type: msg.media_mime || "audio/ogg",
+    });
+    const { aiTranscribe } = await import("@/lib/ai/engine.server");
+    const text = (
+      await aiTranscribe(
+        file,
+        "Conversa de WhatsApp de uma loja de perfumes árabes (Lattafa, Afnan, Armaf, Rasasi, decant, frasco).",
+      )
+    ).trim();
+    await ctx.adminDb
+      .from("wa_messages")
+      .update({ transcript: text || "(sem fala)" })
+      .eq("id", data.id);
+    return { transcript: text || "(sem fala)" };
   });

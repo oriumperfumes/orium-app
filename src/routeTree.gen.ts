@@ -58,6 +58,7 @@ import { Route as ApiPublicHooksConsultEnrichRouteImport } from './routes/api/pu
 import { Route as ApiPublicHooksEnrichFragrancesRouteImport } from './routes/api/public/hooks/enrich-fragrances'
 import { Route as ApiPublicHooksSyncSuppliersRouteImport } from './routes/api/public/hooks/sync-suppliers'
 import { Route as ApiPublicHooksWaInsightsRouteImport } from './routes/api/public/hooks/wa-insights'
+import { Route as ApiPublicHooksWaMediaUploadRouteImport } from './routes/api/public/hooks/wa-media-upload'
 import { Route as ApiPublicHooksWhatsappRouteImport } from './routes/api/public/hooks/whatsapp'
 
 const IndexRoute = IndexRouteImport.update({
@@ -333,6 +334,12 @@ const ApiPublicHooksWaInsightsRoute =
     path: '/api/public/hooks/wa-insights',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksWaMediaUploadRoute =
+  ApiPublicHooksWaMediaUploadRouteImport.update({
+    id: '/api/public/hooks/wa-media-upload',
+    path: '/api/public/hooks/wa-media-upload',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksWhatsappRoute = ApiPublicHooksWhatsappRouteImport.update({
   id: '/api/public/hooks/whatsapp',
   path: '/api/public/hooks/whatsapp',
@@ -388,6 +395,7 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/enrich-fragrances': typeof ApiPublicHooksEnrichFragrancesRoute
   '/api/public/hooks/sync-suppliers': typeof ApiPublicHooksSyncSuppliersRoute
   '/api/public/hooks/wa-insights': typeof ApiPublicHooksWaInsightsRoute
+  '/api/public/hooks/wa-media-upload': typeof ApiPublicHooksWaMediaUploadRoute
   '/api/public/hooks/whatsapp': typeof ApiPublicHooksWhatsappRoute
 }
 export interface FileRoutesByTo {
@@ -438,6 +446,7 @@ export interface FileRoutesByTo {
   '/api/public/hooks/enrich-fragrances': typeof ApiPublicHooksEnrichFragrancesRoute
   '/api/public/hooks/sync-suppliers': typeof ApiPublicHooksSyncSuppliersRoute
   '/api/public/hooks/wa-insights': typeof ApiPublicHooksWaInsightsRoute
+  '/api/public/hooks/wa-media-upload': typeof ApiPublicHooksWaMediaUploadRoute
   '/api/public/hooks/whatsapp': typeof ApiPublicHooksWhatsappRoute
 }
 export interface FileRoutesById {
@@ -491,6 +500,7 @@ export interface FileRoutesById {
   '/api/public/hooks/enrich-fragrances': typeof ApiPublicHooksEnrichFragrancesRoute
   '/api/public/hooks/sync-suppliers': typeof ApiPublicHooksSyncSuppliersRoute
   '/api/public/hooks/wa-insights': typeof ApiPublicHooksWaInsightsRoute
+  '/api/public/hooks/wa-media-upload': typeof ApiPublicHooksWaMediaUploadRoute
   '/api/public/hooks/whatsapp': typeof ApiPublicHooksWhatsappRoute
 }
 export interface FileRouteTypes {
@@ -544,6 +554,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/enrich-fragrances'
     | '/api/public/hooks/sync-suppliers'
     | '/api/public/hooks/wa-insights'
+    | '/api/public/hooks/wa-media-upload'
     | '/api/public/hooks/whatsapp'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -594,6 +605,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/enrich-fragrances'
     | '/api/public/hooks/sync-suppliers'
     | '/api/public/hooks/wa-insights'
+    | '/api/public/hooks/wa-media-upload'
     | '/api/public/hooks/whatsapp'
   id:
     | '__root__'
@@ -646,6 +658,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/enrich-fragrances'
     | '/api/public/hooks/sync-suppliers'
     | '/api/public/hooks/wa-insights'
+    | '/api/public/hooks/wa-media-upload'
     | '/api/public/hooks/whatsapp'
   fileRoutesById: FileRoutesById
 }
@@ -671,6 +684,7 @@ export interface RootRouteChildren {
   ApiPublicHooksEnrichFragrancesRoute: typeof ApiPublicHooksEnrichFragrancesRoute
   ApiPublicHooksSyncSuppliersRoute: typeof ApiPublicHooksSyncSuppliersRoute
   ApiPublicHooksWaInsightsRoute: typeof ApiPublicHooksWaInsightsRoute
+  ApiPublicHooksWaMediaUploadRoute: typeof ApiPublicHooksWaMediaUploadRoute
   ApiPublicHooksWhatsappRoute: typeof ApiPublicHooksWhatsappRoute
 }
 
@@ -1019,6 +1033,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksWaInsightsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/wa-media-upload': {
+      id: '/api/public/hooks/wa-media-upload'
+      path: '/api/public/hooks/wa-media-upload'
+      fullPath: '/api/public/hooks/wa-media-upload'
+      preLoaderRoute: typeof ApiPublicHooksWaMediaUploadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/whatsapp': {
       id: '/api/public/hooks/whatsapp'
       path: '/api/public/hooks/whatsapp'
@@ -1139,6 +1160,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicHooksEnrichFragrancesRoute: ApiPublicHooksEnrichFragrancesRoute,
   ApiPublicHooksSyncSuppliersRoute: ApiPublicHooksSyncSuppliersRoute,
   ApiPublicHooksWaInsightsRoute: ApiPublicHooksWaInsightsRoute,
+  ApiPublicHooksWaMediaUploadRoute: ApiPublicHooksWaMediaUploadRoute,
   ApiPublicHooksWhatsappRoute: ApiPublicHooksWhatsappRoute,
 }
 export const routeTree = rootRouteImport

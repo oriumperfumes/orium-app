@@ -10,7 +10,7 @@ import { readFileSync, existsSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
-import makeWASocket, { Browsers, DisconnectReason, fetchLatestBaileysVersion, useMultiFileAuthState } from "@whiskeysockets/baileys";
+import makeWASocket, { Browsers, DisconnectReason, downloadMediaMessage, fetchLatestBaileysVersion, useMultiFileAuthState } from "@whiskeysockets/baileys";
 import pino from "pino";
 import QRCode from "qrcode";
 
@@ -24,6 +24,7 @@ if (existsSync(envFile))
   }
 
 const { SUPABASE_URL, SUPABASE_KEY, BRIDGE_TOKEN } = process.env;
+const SITE_URL = (process.env.SITE_URL || "https://oriumperfumes.com").replace(/\/$/, "");
 if (!SUPABASE_URL || !SUPABASE_KEY || !BRIDGE_TOKEN) {
   console.error("Faltam SUPABASE_URL, SUPABASE_KEY ou BRIDGE_TOKEN no bridge/.env");
   process.exit(1);
@@ -38,6 +39,11 @@ let state = { status: "connecting", qr: null, phone: null };
 let sending = false;
 let fetchingAvatars = false;
 const pendingContacts = new Map();
+/** mídias para baixar em segundo plano (a mensagem entra antes, a mídia chega logo depois) */
+const mediaQueue = [];
+let downloadingMedia = false;
+const MAX_MEDIA = 25 * 1024 * 1024;
+const EXT = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif", "video/mp4": "mp4", "video/3gpp": "3gp", "video/quicktime": "mov", "audio/ogg": "ogg", "audio/mpeg": "mp3", "audio/mp4": "m4a", "audio/aac": "aac", "audio/amr": "amr", "application/pdf": "pdf" };
 
 async function heartbeat() {
   const { error } = await db.rpc("wa_bridge_heartbeat", { p_token: BRIDGE_TOKEN, p_status: state.status, p_qr: state.qr, p_phone: state.phone });
@@ -78,11 +84,13 @@ function contentOf(message) {
   if (!m) return null;
   if (m.conversation) return { kind: "text", body: m.conversation };
   if (m.extendedTextMessage) return { kind: "text", body: m.extendedTextMessage.text ?? "" };
-  if (m.imageMessage) return { kind: "image", body: m.imageMessage.caption ?? "" };
-  if (m.videoMessage) return { kind: "video", body: m.videoMessage.caption ?? "" };
-  if (m.audioMessage) return { kind: "audio", body: "" };
-  if (m.stickerMessage) return { kind: "sticker", body: "" };
-  if (m.documentMessage) return { kind: "document", body: m.documentMessage.fileName ?? "" };
+  const num = (v) => (v == null ? null : Number(v?.low ?? v) || null);
+  const meta = (x) => ({ mime: (x.mimetype || "").split(";")[0] || null, size: num(x.fileLength), seconds: num(x.seconds), w: num(x.width), h: num(x.height) });
+  if (m.imageMessage) return { kind: "image", body: m.imageMessage.caption ?? "", media: meta(m.imageMessage) };
+  if (m.videoMessage) return { kind: m.videoMessage.gifPlayback ? "gif" : "video", body: m.videoMessage.caption ?? "", media: meta(m.videoMessage) };
+  if (m.audioMessage) return { kind: "audio", body: "", media: meta(m.audioMessage) };
+  if (m.stickerMessage) return { kind: "sticker", body: "", media: meta(m.stickerMessage) };
+  if (m.documentMessage) return { kind: "document", body: m.documentMessage.caption ?? "", media: { ...meta(m.documentMessage), fileName: m.documentMessage.fileName ?? null } };
   if (m.locationMessage) return { kind: "location", body: "" };
   if (m.contactMessage) return { kind: "contact", body: m.contactMessage.displayName ?? "" };
   if (m.buttonsResponseMessage) return { kind: "text", body: m.buttonsResponseMessage.selectedDisplayText ?? "" };
@@ -102,9 +110,54 @@ async function toRows(msgs, history) {
     if (!c) continue;
     const jid = await phoneJid(key);
     if (!jid) continue;
-    rows.push({ id: key.id, jid, from_me: !!key.fromMe, body: c.body, kind: c.kind, ts: tsOf(msg.messageTimestamp), push_name: key.fromMe ? null : msg.pushName ?? null, history });
+    const row = { id: key.id, jid, from_me: !!key.fromMe, body: c.body, kind: c.kind, ts: tsOf(msg.messageTimestamp), push_name: key.fromMe ? null : msg.pushName ?? null, history };
+    if (c.media) {
+      Object.assign(row, { media_mime: c.media.mime, media_size: c.media.size, media_seconds: c.media.seconds, media_w: c.media.w, media_h: c.media.h, file_name: c.media.fileName ?? null });
+      // só baixa mídia dos últimos 30 dias e até 25 MB
+      const recent = row.ts > Date.now() / 1000 - 30 * 86400;
+      if (recent && (!c.media.size || c.media.size <= MAX_MEDIA)) mediaQueue.push({ row, msg });
+    }
+    rows.push(row);
   }
   return rows;
+}
+
+/** Baixa uma mídia do WhatsApp e guarda no armazenamento privado do CRM. */
+async function storeMedia(row, msg) {
+  const buf = await downloadMediaMessage(msg, "buffer", {}, { logger: log, reuploadRequest: sock.updateMediaMessage });
+  if (!buf || buf.length > MAX_MEDIA) return null;
+  const mime = row.media_mime || "application/octet-stream";
+  const ext = EXT[mime] || (row.file_name?.split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 5) || "bin";
+  const path = `${row.jid.split("@")[0].replace(/\D/g, "")}/${row.id.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 100)}.${ext}`;
+  const res = await fetch(`${SITE_URL}/api/public/hooks/wa-media-upload`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: BRIDGE_TOKEN, path }),
+  });
+  if (!res.ok) throw new Error(`link de envio: HTTP ${res.status}`);
+  const { token } = await res.json();
+  const up = await db.storage.from("wa-media").uploadToSignedUrl(path, token, buf, { contentType: mime, upsert: true });
+  if (up.error) throw new Error(up.error.message);
+  return { media_path: path, media_size: buf.length };
+}
+
+async function drainMedia() {
+  if (downloadingMedia || state.status !== "online" || !sock || !mediaQueue.length) return;
+  downloadingMedia = true;
+  try {
+    while (mediaQueue.length && state.status === "online") {
+      const { row, msg } = mediaQueue.shift();
+      try {
+        const got = await storeMedia(row, msg);
+        if (got) await ingest([{ ...row, ...got }]);
+      } catch (e) {
+        console.error("mídia:", e?.message ?? e);
+      }
+      await sleep(400);
+    }
+  } finally {
+    downloadingMedia = false;
+  }
 }
 
 async function ingest(rows) {
@@ -266,6 +319,7 @@ setInterval(() => void heartbeat(), 20_000);
 setInterval(() => void drainOutbox(), 2_000);
 setInterval(() => void flushContacts(), 5_000);
 setInterval(() => void fetchAvatars(), 15_000);
+setInterval(() => void drainMedia(), 3_000);
 process.on("unhandledRejection", (e) => console.error("erro:", e?.message ?? e));
 start().catch((e) => {
   console.error(e);

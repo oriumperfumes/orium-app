@@ -181,14 +181,20 @@ export async function analyzeConversation(db: any, jid: string): Promise<Insight
       .maybeSingle(),
     db
       .from("wa_messages")
-      .select("from_me, body, kind, ts")
+      .select("from_me, body, kind, ts, transcript")
       .eq("jid", jid)
       .order("ts", { ascending: false })
       .limit(80),
   ]);
   if (!contact) throw new Error("Conversa não encontrada.");
   const history = (
-    (msgs ?? []) as Array<{ from_me: boolean; body: string | null; kind: string; ts: string }>
+    (msgs ?? []) as Array<{
+      from_me: boolean;
+      body: string | null;
+      kind: string;
+      ts: string;
+      transcript?: string | null;
+    }>
   ).reverse();
   if (!history.length) throw new Error("Conversa vazia.");
   const lastTs = history[history.length - 1]!.ts;
@@ -209,7 +215,10 @@ export async function analyzeConversation(db: any, jid: string): Promise<Insight
     .join("\n");
 
   const transcript = history
-    .map((m) => `[${fmtTs(m.ts)}] ${m.from_me ? "Orium" : "Cliente"}: ${m.body || `[${m.kind}]`}`)
+    .map(
+      (m) =>
+        `[${fmtTs(m.ts)}] ${m.from_me ? "Orium" : "Cliente"}: ${m.body || (m.transcript ? `[áudio] ${m.transcript}` : `[${m.kind}]`)}`,
+    )
     .join("\n");
   const { aiJson } = await import("@/lib/ai/engine.server");
   let out: InsightData;

@@ -9,6 +9,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { createPortal } from "react-dom";
 import {
+  createContext,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -62,6 +64,8 @@ import { SidePanel } from "@/components/orium/admin/orders/model";
 import { PanelHeader, PanelScroll } from "@/components/orium/admin/PanelKit";
 import { pxInputClass } from "@/components/orium/admin/PricingUI";
 import { WhatsMark } from "@/components/orium/crm/CrmShell";
+import { MediaContent, isMediaKind } from "@/components/orium/crm/MediaBubble";
+import { ReplyIdeal } from "@/components/orium/crm/ReplyIdeal";
 import { Avatar, TEMP, ago, fmtPhone } from "@/components/orium/crm/shared";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -77,25 +81,24 @@ import {
   crmCustomerSearch,
   crmLeads,
   crmPerfumeQuote,
-  crmSuggestReply,
+  crmStaff,
   waInbox,
   waLinkCustomer,
   waSend,
   waThread,
   waAnalyze,
+  waAssign,
   waDeleteContact,
   waInsight,
   waUpdateContact,
   type PerfumeQuote,
-  type ReplySuggestion,
-  type ReplyGoal,
   type WaBridge,
   type WaContact,
   type WaMessage,
+  type StaffMember,
 } from "@/lib/crm-wa.functions";
 import { brl } from "@/lib/format";
 import { flat } from "@/lib/perfume-mentions";
-import { REPLY_GOALS } from "@/lib/sales-playbook";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/admin/conversas")({
@@ -109,6 +112,8 @@ export const Route = createFileRoute("/_authenticated/admin/conversas")({
 });
 
 type Box =
+  | "minhas"
+  | "fila"
   | "todas"
   | "responder"
   | "nao_lidas"
@@ -155,6 +160,44 @@ const OBJ: Record<string, string> = {
   indeciso: "indeciso",
   sumiu: "sumiu",
 };
+
+/** Equipe que atende (quem sou eu + nomes), para todo o Conversas. */
+type Team = {
+  me: string | null;
+  staff: StaffMember[];
+  name: (id?: string | null) => string;
+  first: (id?: string | null) => string;
+};
+const TeamContext = createContext<Team>({ me: null, staff: [], name: () => "", first: () => "" });
+const TEAM_COLORS = ["#FFD599", "#7FCF9F", "#9DB7FF", "#FF9A8A", "#C9A7FF", "#F2C46D"];
+
+function TeamAvatar({ id, size = 26 }: { id: string; size?: number }) {
+  const team = useContext(TeamContext);
+  const i = Math.max(
+    0,
+    team.staff.findIndex((s) => s.id === id),
+  );
+  const n = team.name(id);
+  const ini = n
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
+  return (
+    <span
+      title={n}
+      className="grid shrink-0 place-items-center rounded-full font-black text-[#15130F]"
+      style={{
+        width: size,
+        height: size,
+        background: TEAM_COLORS[i % TEAM_COLORS.length],
+        fontSize: Math.round(size * 0.38),
+      }}
+    >
+      {ini || "?"}
+    </span>
+  );
+}
 
 const contactName = (c: WaContact) =>
   c.customer?.name ||
@@ -222,6 +265,22 @@ function ConversasPage() {
     queryFn: () => crmLeads(),
     staleTime: 30_000,
   });
+  const staffQ = useQuery({
+    queryKey: ["crm-staff"],
+    queryFn: () => crmStaff(),
+    staleTime: 10 * 60_000,
+  });
+  const team = useMemo<Team>(() => {
+    const staff = staffQ.data?.staff ?? [];
+    const name = (id?: string | null) =>
+      staff.find((s) => s.id === id)?.name ?? (id ? "Equipe" : "");
+    return {
+      me: staffQ.data?.me ?? null,
+      staff,
+      name,
+      first: (id) => name(id).split(/\s+/)[0] ?? "",
+    };
+  }, [staffQ.data]);
   const leadById = useMemo(
     () => new Map(enrich(leadsQ.data ?? []).map((l) => [l.id, l])),
     [leadsQ.data],
@@ -262,6 +321,8 @@ function ConversasPage() {
     if (b === "arquivadas") return c.archived;
     if (c.archived) return false;
     if (b === "todas") return true;
+    if (b === "minhas") return !!team.me && c.assigned_to === team.me;
+    if (b === "fila") return !c.assigned_to;
     if (b === "responder") return c.last_from_me === false;
     if (b === "nao_lidas") return c.unread > 0;
     if (b === "fixadas") return c.pinned;
@@ -299,275 +360,294 @@ function ConversasPage() {
     void navigate({ to: "/admin/conversas", search: { jid } as never, replace: true });
 
   return (
-    <AdminShell title="Conversas" bare>
-      <div className="flex min-h-[calc(100dvh-210px)] min-w-0 flex-1 lg:h-full lg:min-h-0">
-        {/* 1. caixas */}
-        <aside className="adm-scroll hidden w-[228px] shrink-0 overflow-y-auto border-r border-white/[0.06] px-3 py-5 min-[1700px]:block">
-          <div className="px-2">
-            <p className="text-[17px] font-bold tracking-[-0.02em]">Caixa de entrada</p>
-            <p className="mt-0.5 truncate text-[12.5px] text-[#8C8C8C]">
-              {bridge?.phone ? fmtPhone(bridge.phone) : "WhatsApp da loja"}
-            </p>
-          </div>
-          <div className="mt-4 space-y-0.5">
-            <BoxItem
-              icon={<Inbox />}
-              label="Todas"
-              n={count("todas")}
-              active={box === "todas"}
-              onClick={() => setBox("todas")}
-            />
-            <BoxItem
-              icon={<MessagesSquare />}
-              label="Esperando você"
-              n={count("responder")}
-              hot
-              active={box === "responder"}
-              onClick={() => setBox("responder")}
-            />
-            <BoxItem
-              icon={<MailOpen />}
-              label="Não lidas"
-              n={count("nao_lidas")}
-              active={box === "nao_lidas"}
-              onClick={() => setBox("nao_lidas")}
-            />
-            <BoxItem
-              icon={<Star />}
-              label="Fixadas"
-              n={count("fixadas")}
-              active={box === "fixadas"}
-              onClick={() => setBox("fixadas")}
-            />
-            <BoxItem
-              icon={<Archive />}
-              label="Arquivadas"
-              n={count("arquivadas")}
-              active={box === "arquivadas"}
-              onClick={() => setBox("arquivadas")}
-            />
-          </div>
-          <BoxGroup title="Etapas">
-            {STAGES.map((s) => (
-              <BoxItem
-                key={s.v}
-                icon={<span className="size-2.5 rounded-full" style={{ background: s.dot }} />}
-                label={s.label}
-                n={count(`etapa:${s.v}`)}
-                active={box === `etapa:${s.v}`}
-                onClick={() => setBox(`etapa:${s.v}`)}
-              />
-            ))}
-          </BoxGroup>
-          <BoxGroup title="Listas">
-            <BoxItem
-              icon={<Flame />}
-              label="Quentes"
-              n={count("quentes")}
-              hot
-              active={box === "quentes"}
-              onClick={() => setBox("quentes")}
-            />
-            <BoxItem
-              icon={<Users />}
-              label="Clientes"
-              n={count("clientes")}
-              active={box === "clientes"}
-              onClick={() => setBox("clientes")}
-            />
-            <BoxItem
-              icon={<UserX />}
-              label="Sem ficha"
-              n={count("sem_ficha")}
-              active={box === "sem_ficha"}
-              onClick={() => setBox("sem_ficha")}
-            />
-          </BoxGroup>
-        </aside>
-
-        {/* 2. mensagens */}
-        <section
-          className={cn(
-            "flex min-h-0 w-full flex-col border-white/[0.06] lg:w-[330px] lg:shrink-0 lg:border-r",
-            selected && "max-lg:hidden",
-          )}
-        >
-          <div className="space-y-3 px-4 pt-1 pb-3 lg:pt-5">
-            <div className="flex items-center justify-between gap-3">
-              <h1 className="text-[22px] font-bold tracking-[-0.03em]">Mensagens</h1>
-              <button
-                type="button"
-                onClick={() => setSort((s) => (s === "recentes" ? "quentes" : "recentes"))}
-                className="press inline-flex h-9 items-center gap-1.5 rounded-full bg-[#1F1F1F] px-3 text-[12.5px] font-bold text-[#D4D4D4] hover:text-white"
-              >
-                <ArrowUpDown className="size-3.5" />
-                {sort === "recentes" ? "Recentes" : "Mais quentes"}
-              </button>
+    <TeamContext.Provider value={team}>
+      <AdminShell title="Conversas" bare>
+        <div className="flex min-h-[calc(100dvh-210px)] min-w-0 flex-1 lg:h-full lg:min-h-0">
+          {/* 1. caixas */}
+          <aside className="adm-scroll hidden w-[228px] shrink-0 overflow-y-auto border-r border-white/[0.06] px-3 py-5 min-[1700px]:block">
+            <div className="px-2">
+              <p className="text-[17px] font-bold tracking-[-0.02em]">Caixa de entrada</p>
+              <p className="mt-0.5 truncate text-[12.5px] text-[#8C8C8C]">
+                {bridge?.phone ? fmtPhone(bridge.phone) : "WhatsApp da loja"}
+              </p>
             </div>
-            <label className="relative block">
-              <Search className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-[#6F6F6F]" />
-              <input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Buscar nome ou mensagem"
-                className={cn(pxInputClass, "pl-11")}
+            <div className="mt-4 space-y-0.5">
+              <BoxItem
+                icon={<UserRound />}
+                label="Minhas conversas"
+                n={count("minhas")}
+                active={box === "minhas"}
+                onClick={() => setBox("minhas")}
               />
-            </label>
-            <div className="adm-scroll -mx-1 flex gap-1.5 overflow-x-auto px-1 min-[1700px]:hidden">
-              {(
-                [
-                  ["todas", "Todas"],
-                  ["responder", "Esperando você"],
-                  ["nao_lidas", "Não lidas"],
-                  ["quentes", "Quentes"],
-                  ["sem_ficha", "Sem ficha"],
-                  ["arquivadas", "Arquivadas"],
-                ] as Array<[Box, string]>
-              ).map(([v, label]) => (
+              <BoxItem
+                icon={<UserPlus />}
+                label="Sem atendente"
+                n={count("fila")}
+                hot
+                active={box === "fila"}
+                onClick={() => setBox("fila")}
+              />
+              <BoxItem
+                icon={<Inbox />}
+                label="Todas"
+                n={count("todas")}
+                active={box === "todas"}
+                onClick={() => setBox("todas")}
+              />
+              <BoxItem
+                icon={<MessagesSquare />}
+                label="Esperando você"
+                n={count("responder")}
+                hot
+                active={box === "responder"}
+                onClick={() => setBox("responder")}
+              />
+              <BoxItem
+                icon={<MailOpen />}
+                label="Não lidas"
+                n={count("nao_lidas")}
+                active={box === "nao_lidas"}
+                onClick={() => setBox("nao_lidas")}
+              />
+              <BoxItem
+                icon={<Star />}
+                label="Fixadas"
+                n={count("fixadas")}
+                active={box === "fixadas"}
+                onClick={() => setBox("fixadas")}
+              />
+              <BoxItem
+                icon={<Archive />}
+                label="Arquivadas"
+                n={count("arquivadas")}
+                active={box === "arquivadas"}
+                onClick={() => setBox("arquivadas")}
+              />
+            </div>
+            <BoxGroup title="Etapas">
+              {STAGES.map((s) => (
+                <BoxItem
+                  key={s.v}
+                  icon={<span className="size-2.5 rounded-full" style={{ background: s.dot }} />}
+                  label={s.label}
+                  n={count(`etapa:${s.v}`)}
+                  active={box === `etapa:${s.v}`}
+                  onClick={() => setBox(`etapa:${s.v}`)}
+                />
+              ))}
+            </BoxGroup>
+            <BoxGroup title="Listas">
+              <BoxItem
+                icon={<Flame />}
+                label="Quentes"
+                n={count("quentes")}
+                hot
+                active={box === "quentes"}
+                onClick={() => setBox("quentes")}
+              />
+              <BoxItem
+                icon={<Users />}
+                label="Clientes"
+                n={count("clientes")}
+                active={box === "clientes"}
+                onClick={() => setBox("clientes")}
+              />
+              <BoxItem
+                icon={<UserX />}
+                label="Sem ficha"
+                n={count("sem_ficha")}
+                active={box === "sem_ficha"}
+                onClick={() => setBox("sem_ficha")}
+              />
+            </BoxGroup>
+          </aside>
+
+          {/* 2. mensagens */}
+          <section
+            className={cn(
+              "flex min-h-0 w-full flex-col border-white/[0.06] lg:w-[330px] lg:shrink-0 lg:border-r",
+              selected && "max-lg:hidden",
+            )}
+          >
+            <div className="space-y-3 px-4 pt-1 pb-3 lg:pt-5">
+              <div className="flex items-center justify-between gap-3">
+                <h1 className="text-[22px] font-bold tracking-[-0.03em]">Mensagens</h1>
                 <button
-                  key={v}
                   type="button"
-                  aria-pressed={box === v}
-                  onClick={() => setBox(v)}
-                  className={cn(
-                    "press inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-bold",
-                    box === v
-                      ? "bg-white text-[#15130F]"
-                      : "bg-[#1F1F1F] text-[#A9A9A9] hover:text-white",
-                  )}
+                  onClick={() => setSort((s) => (s === "recentes" ? "quentes" : "recentes"))}
+                  className="press inline-flex h-9 items-center gap-1.5 rounded-full bg-[#1F1F1F] px-3 text-[12.5px] font-bold text-[#D4D4D4] hover:text-white"
                 >
-                  {label}
-                  <span
+                  <ArrowUpDown className="size-3.5" />
+                  {sort === "recentes" ? "Recentes" : "Mais quentes"}
+                </button>
+              </div>
+              <label className="relative block">
+                <Search className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-[#6F6F6F]" />
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Buscar nome ou mensagem"
+                  className={cn(pxInputClass, "pl-11")}
+                />
+              </label>
+              <div className="adm-scroll -mx-1 flex gap-1.5 overflow-x-auto px-1 min-[1700px]:hidden">
+                {(
+                  [
+                    ["todas", "Todas"],
+                    ["minhas", "Minhas"],
+                    ["fila", "Sem atendente"],
+                    ["responder", "Esperando você"],
+                    ["nao_lidas", "Não lidas"],
+                    ["quentes", "Quentes"],
+                    ["sem_ficha", "Sem ficha"],
+                    ["arquivadas", "Arquivadas"],
+                  ] as Array<[Box, string]>
+                ).map(([v, label]) => (
+                  <button
+                    key={v}
+                    type="button"
+                    aria-pressed={box === v}
+                    onClick={() => setBox(v)}
                     className={cn(
-                      "tabular-nums",
-                      box === v ? "text-[#15130F]/55" : "text-[#6F6F6F]",
+                      "press inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-bold",
+                      box === v
+                        ? "bg-white text-[#15130F]"
+                        : "bg-[#1F1F1F] text-[#A9A9A9] hover:text-white",
                     )}
                   >
-                    {count(v)}
-                  </span>
-                </button>
-              ))}
+                    {label}
+                    <span
+                      className={cn(
+                        "tabular-nums",
+                        box === v ? "text-[#15130F]/55" : "text-[#6F6F6F]",
+                      )}
+                    >
+                      {count(v)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <BridgeStrip bridge={bridge} loading={inbox.isPending} />
             </div>
-            <BridgeStrip bridge={bridge} loading={inbox.isPending} />
-          </div>
-          <div className="adm-scroll min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-            {inbox.isPending ? (
-              [0, 1, 2, 3, 4].map((i) => (
-                <div key={i} className="admin-skeleton mx-2 my-2 h-[72px] rounded-[20px]" />
-              ))
-            ) : list.length === 0 ? (
-              <div className="grid h-full min-h-[240px] place-items-center p-6 text-center">
-                <div>
-                  <MessagesSquare className="mx-auto size-6 text-[#6F6F6F]" />
-                  <p className="mt-3 text-[14px] font-semibold">
-                    {contacts.length ? "Nada nessa caixa" : "Nenhuma conversa ainda"}
-                  </p>
-                  <p className="mt-1 text-[13px] text-[#8C8C8C]">
-                    {contacts.length
-                      ? "Escolha outra caixa."
-                      : "Conecte o WhatsApp para as conversas aparecerem aqui."}
+            <div className="adm-scroll min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+              {inbox.isPending ? (
+                [0, 1, 2, 3, 4].map((i) => (
+                  <div key={i} className="admin-skeleton mx-2 my-2 h-[72px] rounded-[20px]" />
+                ))
+              ) : list.length === 0 ? (
+                <div className="grid h-full min-h-[240px] place-items-center p-6 text-center">
+                  <div>
+                    <MessagesSquare className="mx-auto size-6 text-[#6F6F6F]" />
+                    <p className="mt-3 text-[14px] font-semibold">
+                      {contacts.length ? "Nada nessa caixa" : "Nenhuma conversa ainda"}
+                    </p>
+                    <p className="mt-1 text-[13px] text-[#8C8C8C]">
+                      {contacts.length
+                        ? "Escolha outra caixa."
+                        : "Conecte o WhatsApp para as conversas aparecerem aqui."}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                list.map((c) => (
+                  <ContactRow
+                    key={c.jid}
+                    c={c}
+                    lead={leadOf(c)}
+                    active={c.jid === selected}
+                    onOpen={() => select(c.jid)}
+                    onMenu={(x, y) => setMenu({ c, x, y })}
+                  />
+                ))
+              )}
+            </div>
+          </section>
+
+          {/* 3. conversa */}
+          <section
+            className={cn(
+              "flex min-w-0 flex-1 flex-col max-lg:h-[calc(100dvh-218px)] max-lg:min-h-[420px] lg:min-h-0",
+              !selected && "max-lg:hidden",
+            )}
+          >
+            {bridge?.status === "qr" && bridge.qr && !current ? (
+              <QrCard qr={bridge.qr} />
+            ) : current ? (
+              <Thread
+                key={current.jid}
+                contact={current}
+                lead={lead}
+                bridge={bridge}
+                onBack={() => select(undefined)}
+                assistOpen={assistOpen}
+                onToggleAssist={() => {
+                  if (window.matchMedia("(min-width: 1280px)").matches) setAssistOpen((v) => !v);
+                  else setAssistSheet(true);
+                }}
+              />
+            ) : (
+              <div className="grid h-full place-items-center p-8 text-center">
+                <div className="max-w-sm">
+                  <span className="dash-ico mx-auto">
+                    <MessagesSquare className="size-[18px]" strokeWidth={2.2} />
+                  </span>
+                  <h2 className="mt-4 text-[19px] font-bold tracking-[-0.02em]">
+                    Escolha uma conversa
+                  </h2>
+                  <p className="mt-1.5 text-[14px] text-[#8C8C8C]">
+                    Dentro da conversa você tem o preço dos perfumes citados e o botão Resposta
+                    ideal para quando não souber o que responder.
                   </p>
                 </div>
               </div>
-            ) : (
-              list.map((c) => (
-                <ContactRow
-                  key={c.jid}
-                  c={c}
-                  lead={leadOf(c)}
-                  active={c.jid === selected}
-                  onOpen={() => select(c.jid)}
-                  onMenu={(x, y) => setMenu({ c, x, y })}
-                />
-              ))
             )}
-          </div>
-        </section>
+          </section>
 
-        {/* 3. conversa */}
-        <section
-          className={cn(
-            "flex min-w-0 flex-1 flex-col max-lg:h-[calc(100dvh-218px)] max-lg:min-h-[420px] lg:min-h-0",
-            !selected && "max-lg:hidden",
-          )}
+          {/* 4. assistente */}
+          {current && assistOpen ? (
+            <aside className="adm-scroll hidden w-[340px] shrink-0 overflow-y-auto border-l border-white/[0.06] p-4 xl:block 2xl:w-[364px]">
+              <Assistant contact={current} lead={lead} onClose={() => setAssistOpen(false)} />
+            </aside>
+          ) : null}
+        </div>
+
+        {menu ? (
+          <ContactMenu
+            c={menu.c}
+            x={menu.x}
+            y={menu.y}
+            onClose={() => setMenu(null)}
+            onOpen={() => select(menu.c.jid)}
+            onFicha={(id) => setMenuFicha(id)}
+            onDeleted={(jid) => {
+              if (jid === selected) select(undefined);
+            }}
+          />
+        ) : null}
+        <CustomerSheet id={menuFicha} onClose={() => setMenuFicha(null)} />
+
+        <SidePanel
+          open={assistSheet && !!current}
+          onClose={() => setAssistSheet(false)}
+          label="Assistente"
         >
-          {bridge?.status === "qr" && bridge.qr && !current ? (
-            <QrCard qr={bridge.qr} />
-          ) : current ? (
-            <Thread
-              key={current.jid}
-              contact={current}
-              lead={lead}
-              bridge={bridge}
-              onBack={() => select(undefined)}
-              assistOpen={assistOpen}
-              onToggleAssist={() => {
-                if (window.matchMedia("(min-width: 1280px)").matches) setAssistOpen((v) => !v);
-                else setAssistSheet(true);
-              }}
-            />
-          ) : (
-            <div className="grid h-full place-items-center p-8 text-center">
-              <div className="max-w-sm">
-                <span className="dash-ico mx-auto">
-                  <MessagesSquare className="size-[18px]" strokeWidth={2.2} />
-                </span>
-                <h2 className="mt-4 text-[19px] font-bold tracking-[-0.02em]">
-                  Escolha uma conversa
-                </h2>
-                <p className="mt-1.5 text-[14px] text-[#8C8C8C]">
-                  Dentro da conversa você tem o preço dos perfumes citados e o botão Resposta ideal
-                  para quando não souber o que responder.
-                </p>
-              </div>
-            </div>
-          )}
-        </section>
-
-        {/* 4. assistente */}
-        {current && assistOpen ? (
-          <aside className="adm-scroll hidden w-[340px] shrink-0 overflow-y-auto border-l border-white/[0.06] p-4 xl:block 2xl:w-[364px]">
-            <Assistant contact={current} lead={lead} onClose={() => setAssistOpen(false)} />
-          </aside>
-        ) : null}
-      </div>
-
-      {menu ? (
-        <ContactMenu
-          c={menu.c}
-          x={menu.x}
-          y={menu.y}
-          onClose={() => setMenu(null)}
-          onOpen={() => select(menu.c.jid)}
-          onFicha={(id) => setMenuFicha(id)}
-          onDeleted={(jid) => {
-            if (jid === selected) select(undefined);
-          }}
-        />
-      ) : null}
-      <CustomerSheet id={menuFicha} onClose={() => setMenuFicha(null)} />
-
-      <SidePanel
-        open={assistSheet && !!current}
-        onClose={() => setAssistSheet(false)}
-        label="Assistente"
-      >
-        {current ? (
-          <>
-            <PanelHeader
-              title="Assistente"
-              subtitle={contactName(current)}
-              onClose={() => setAssistSheet(false)}
-            />
-            <PanelScroll swapKey={current.jid}>
-              <div className="px-5 pb-6 lg:px-6">
-                <Assistant contact={current} lead={lead} />
-              </div>
-            </PanelScroll>
-          </>
-        ) : null}
-      </SidePanel>
-    </AdminShell>
+          {current ? (
+            <>
+              <PanelHeader
+                title="Assistente"
+                subtitle={contactName(current)}
+                onClose={() => setAssistSheet(false)}
+              />
+              <PanelScroll swapKey={current.jid}>
+                <div className="px-5 pb-6 lg:px-6">
+                  <Assistant contact={current} lead={lead} />
+                </div>
+              </PanelScroll>
+            </>
+          ) : null}
+        </SidePanel>
+      </AdminShell>
+    </TeamContext.Provider>
   );
 }
 
@@ -747,9 +827,7 @@ function ContactRow({
             </button>
           )}
         </div>
-        {waiting ? (
-          <p className="mt-1 text-[11.5px] font-bold text-[#FFD599]">Esperando sua resposta</p>
-        ) : null}
+        <ContactRowFoot c={c} waiting={waiting} />
       </div>
     </div>
   );
@@ -800,6 +878,100 @@ function QrCard({ qr }: { qr: string }) {
 
 /* ───────────────────────── conversa ───────────────────────── */
 
+/** Quem está atendendo: assumir, transferir ou encerrar. */
+function AssignPill({ contact, compact }: { contact: WaContact; compact?: boolean }) {
+  const qc = useQueryClient();
+  const team = useContext(TeamContext);
+  const [open, setOpen] = useState(false);
+  const assign = useMutation({
+    mutationFn: (userId: string | null) => waAssign({ data: { jid: contact.jid, userId } }),
+    onSuccess: (_d, userId) => {
+      toast.success(
+        userId
+          ? userId === team.me
+            ? "Você assumiu este atendimento"
+            : `Transferido para ${team.first(userId)}`
+          : "Atendimento encerrado",
+      );
+      void qc.invalidateQueries({ queryKey: ["wa-inbox"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Não deu certo"),
+  });
+  const who = contact.assigned_to;
+  const mine = !!who && who === team.me;
+  if (!who)
+    return (
+      <button
+        type="button"
+        onClick={() => assign.mutate(team.me)}
+        disabled={!team.me || assign.isPending}
+        className="press inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-[#FFD599] px-4 text-[13px] font-bold text-[#15130F] disabled:opacity-50"
+      >
+        <UserPlus className="size-4" /> {compact ? "Assumir" : "Assumir atendimento"}
+      </button>
+    );
+  return (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "press inline-flex h-10 items-center gap-2 rounded-full pr-3 pl-1.5 text-[13px] font-bold",
+          mine ? "bg-[#7FCF9F]/15 text-[#7FCF9F]" : "bg-white/[0.07] text-[#E5E5E5]",
+        )}
+      >
+        <TeamAvatar id={who} size={28} />
+        <span className="2xl:hidden">{mine ? "Você" : team.first(who)}</span>
+        <span className="max-2xl:hidden">
+          {mine ? "Você está atendendo" : `${team.first(who)} está atendendo`}
+        </span>
+        <ChevronDown className="size-4 opacity-70" />
+      </button>
+      {open ? (
+        <>
+          <button
+            type="button"
+            aria-label="Fechar"
+            className="fixed inset-0 z-20 cursor-default"
+            onClick={() => setOpen(false)}
+          />
+          <div className="absolute right-0 z-30 mt-2 w-[230px] rounded-[20px] border border-white/[0.08] bg-[#1C1C1C] p-1.5 shadow-2xl">
+            {!mine ? (
+              <MenuItem
+                icon={<UserPlus />}
+                label="Assumir eu mesmo"
+                onClick={() => (setOpen(false), assign.mutate(team.me))}
+              />
+            ) : null}
+            <p className="px-3 pt-2 pb-1 text-[11.5px] font-semibold text-[#6F6F6F]">
+              Transferir para
+            </p>
+            {team.staff
+              .filter((s) => s.id !== who)
+              .map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => (setOpen(false), assign.mutate(s.id))}
+                  className="flex h-10 w-full items-center gap-2.5 rounded-[14px] px-2.5 text-left text-[13.5px] font-semibold hover:bg-white/[0.06]"
+                >
+                  <TeamAvatar id={s.id} size={26} />
+                  {s.name}
+                </button>
+              ))}
+            <div className="my-1 h-px bg-white/[0.06]" />
+            <MenuItem
+              icon={<X />}
+              label="Encerrar atendimento"
+              onClick={() => (setOpen(false), assign.mutate(null))}
+            />
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 function Thread({
   contact,
   lead,
@@ -816,12 +988,11 @@ function Thread({
   onToggleAssist: () => void;
 }) {
   const qc = useQueryClient();
+  const team = useContext(TeamContext);
   const [text, setText] = useState("");
   const [quick, setQuick] = useState(false);
   const [stageOpen, setStageOpen] = useState(false);
-  const [ai, setAi] = useState<ReplySuggestion | null>(null);
-  const [aiVersion, setAiVersion] = useState(0);
-  const [goal, setGoal] = useState<ReplyGoal>("auto");
+  const [idealKey, setIdealKey] = useState(0);
   const endRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const thread = useThread(contact.jid);
@@ -835,7 +1006,7 @@ function Thread({
   }, [contact.jid, contact.unread, qc]);
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
-  }, [thread.data?.length, ai]);
+  }, [thread.data?.length]);
   useEffect(() => {
     const on = (e: Event) => {
       const t = (e as CustomEvent<string>).detail;
@@ -850,7 +1021,7 @@ function Thread({
     mutationFn: (body: string) => waSend({ data: { jid: contact.jid, body } }),
     onMutate: async (body) => {
       setText("");
-      setAi(null);
+      setIdealKey(0);
       const key = ["wa-thread", contact.jid];
       const prev = qc.getQueryData<WaMessage[]>(key);
       qc.setQueryData<WaMessage[]>(key, [
@@ -863,6 +1034,7 @@ function Thread({
           kind: "text",
           ts: new Date().toISOString(),
           pending: "pending",
+          sent_by: team.me,
         },
       ]);
       return { prev };
@@ -872,25 +1044,28 @@ function Thread({
       setText(body);
       toast.error(e instanceof Error ? e.message : "Não foi possível enviar");
     },
-    onSettled: () => void qc.invalidateQueries({ queryKey: ["wa-thread", contact.jid] }),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ["wa-thread", contact.jid] });
+      void qc.invalidateQueries({ queryKey: ["wa-inbox"] });
+    },
   });
   const stage = useMutation({
     mutationFn: (s: WaContact["stage"]) =>
       waUpdateContact({ data: { jid: contact.jid, stage: s } }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["wa-inbox"] }),
   });
-  const suggest = useMutation({
-    mutationFn: (g: ReplyGoal = "auto") => crmSuggestReply({ data: { jid: contact.jid, goal: g } }),
-    onMutate: () => {
-      setAi(null);
-      setAiVersion(0);
+  const takeOver = useMutation({
+    mutationFn: () => waAssign({ data: { jid: contact.jid, userId: team.me } }),
+    onSuccess: () => {
+      toast.success("Você assumiu este atendimento");
+      void qc.invalidateQueries({ queryKey: ["wa-inbox"] });
     },
-    onSuccess: (r) => setAi(r),
-    onError: (e) => toast.error(e instanceof Error ? e.message : "A IA não respondeu agora"),
   });
 
+  const otherAgent = !!contact.assigned_to && contact.assigned_to !== team.me;
   const submit = (body = text.trim()) => {
-    if (body && !send.isPending) send.mutate(body);
+    if (!body || send.isPending || otherAgent) return;
+    send.mutate(body);
   };
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -905,15 +1080,6 @@ function Thread({
   const quoteList = quotes.data ?? [];
   const st = STAGES.find((s) => s.v === contact.stage) ?? STAGES[0];
   const waitingReply = contact.last_from_me === false;
-  const versions = ai
-    ? [
-        { label: "Principal", text: ai.reply },
-        ...(ai.short ? [{ label: "Mais curta", text: ai.short }] : []),
-        ...ai.alternativas.map((a) => ({ label: a.rotulo || "Outra abordagem", text: a.texto })),
-      ].filter((v) => v.text)
-    : [];
-  const aiText = versions[aiVersion]?.text ?? versions[0]?.text ?? "";
-  // perfume citado em cada mensagem do cliente → cartão de preço logo abaixo
   const quoteFor = (body: string | null) => {
     if (!body) return [];
     const f = ` ${flat(body)} `;
@@ -922,7 +1088,7 @@ function Thread({
 
   return (
     <>
-      <header className="flex items-center gap-3 border-b border-white/[0.06] px-3 py-3 sm:px-5">
+      <header className="flex items-center gap-2.5 border-b border-white/[0.06] px-3 py-3 sm:gap-3 sm:px-5">
         <button
           type="button"
           onClick={onBack}
@@ -956,15 +1122,16 @@ function Thread({
             )}
           </p>
         </div>
-        {/* etapa num menu só */}
-        <div className="relative">
+        <AssignPill contact={contact} compact />
+        <div className="relative max-sm:hidden">
           <button
             type="button"
             onClick={() => setStageOpen((v) => !v)}
+            aria-label={`Etapa: ${st.label}`}
             className="press inline-flex h-10 items-center gap-2 rounded-full bg-[#1F1F1F] px-3.5 text-[13px] font-bold text-[#D4D4D4] hover:text-white"
           >
             <span className="size-2 rounded-full" style={{ background: st.dot }} />
-            <span className="max-sm:hidden">{st.label}</span>
+            <span className="max-xl:hidden">{st.label}</span>
             <ChevronDown className="size-4 text-[#8C8C8C]" />
           </button>
           {stageOpen ? (
@@ -1002,7 +1169,7 @@ function Thread({
           ) : null}
         </div>
         <IconBtn
-          label={assistOpen ? "Fechar assistente" : "Abrir assistente"}
+          label={assistOpen ? "Fechar painel do cliente" : "Abrir painel do cliente"}
           onClick={onToggleAssist}
         >
           {assistOpen ? <PanelRightClose className="max-xl:hidden" /> : null}
@@ -1010,7 +1177,7 @@ function Thread({
         </IconBtn>
       </header>
 
-      <div className="adm-scroll min-h-0 flex-1 overflow-y-auto px-3 py-5 sm:px-6">
+      <div className="adm-scroll min-h-0 flex-1 overflow-y-auto bg-[radial-gradient(80%_60%_at_50%_0%,rgba(255,213,153,0.035),transparent)] px-3 py-5 sm:px-6">
         {thread.isPending ? (
           <div className="space-y-3">
             {[0, 1, 2].map((i) => (
@@ -1031,8 +1198,18 @@ function Thread({
               newDay ||
               !prev ||
               prev.from_me !== m.from_me ||
+              prev.sent_by !== m.sent_by ||
               +new Date(m.ts) - +new Date(prev.ts) > 10 * 60_000;
             const hits = m.from_me ? [] : quoteFor(m.body);
+            const media = isMediaKind(m.kind);
+            const bare = m.kind === "sticker";
+            const who = m.from_me
+              ? m.sent_by
+                ? m.sent_by === team.me
+                  ? "Você"
+                  : team.first(m.sent_by)
+                : "Orium"
+              : null;
             return (
               <div key={m.id}>
                 {newDay ? (
@@ -1055,19 +1232,41 @@ function Thread({
                       m.from_me ? "items-end" : "items-start",
                     )}
                   >
+                    {head && who ? (
+                      <span className="mb-1 px-1 text-[11.5px] font-bold text-[#8C8C8C]">
+                        {who}
+                      </span>
+                    ) : null}
                     <div
                       className={cn(
-                        "rounded-[22px] px-4 py-2.5 text-[15px] leading-snug whitespace-pre-wrap [overflow-wrap:anywhere]",
-                        m.from_me ? "bg-[#FFD599] text-[#15130F]" : "bg-[#222] text-white",
-                        head && (m.from_me ? "rounded-tr-[8px]" : "rounded-tl-[8px]"),
+                        "text-[15px] leading-snug whitespace-pre-wrap [overflow-wrap:anywhere]",
+                        bare
+                          ? ""
+                          : cn(
+                              "rounded-[22px]",
+                              media ? "p-1.5" : "px-4 py-2.5",
+                              m.from_me ? "bg-[#FFD599] text-[#15130F]" : "bg-[#222] text-white",
+                              head && (m.from_me ? "rounded-tr-[8px]" : "rounded-tl-[8px]"),
+                            ),
                         m.pending === "failed" && "ring-2 ring-[#FF9A8A]",
                       )}
                     >
-                      {m.body || <span className="italic opacity-70">[{kindLabel(m.kind)}]</span>}
+                      {media ? <MediaContent m={m} mine={m.from_me} /> : null}
+                      {m.body ? (
+                        <span className={cn("block", media && "px-2.5 pt-2 pb-0.5")}>{m.body}</span>
+                      ) : null}
+                      {!media && !m.body ? (
+                        <span className="italic opacity-70">[{kindLabel(m.kind)}]</span>
+                      ) : null}
                       <span
                         className={cn(
                           "mt-1 flex items-center justify-end gap-1 text-[10.5px] tabular-nums",
-                          m.from_me ? "text-[#15130F]/50" : "text-[#7A7A7A]",
+                          media && "px-2 pb-1",
+                          bare
+                            ? "text-[#7A7A7A]"
+                            : m.from_me
+                              ? "text-[#15130F]/50"
+                              : "text-[#7A7A7A]",
                         )}
                       >
                         {new Date(m.ts).toLocaleTimeString("pt-BR", {
@@ -1088,7 +1287,6 @@ function Thread({
                         ) : null}
                       </span>
                     </div>
-                    {/* ajuda embutida: preço do perfume citado */}
                     {hits.map((qt) => (
                       <button
                         key={qt.product_id}
@@ -1110,12 +1308,6 @@ function Thread({
                           <span className="block truncate text-[12.5px] font-bold">{qt.name}</span>
                           <span className="block truncate text-[12px] text-[#D4D4D4]">
                             {qt.frasco ? `${brl(qt.frasco.pix)} no Pix` : "Sem preço"}
-                            {qt.frasco?.profit != null ? (
-                              <span className="text-[#7FCF9F]">
-                                {" "}
-                                · lucro {brl(qt.frasco.profit)}
-                              </span>
-                            ) : null}
                             {qt.ready ? <span className="text-[#8C8C8C]"> · na loja</span> : null}
                           </span>
                         </span>
@@ -1133,231 +1325,78 @@ function Thread({
         <div ref={endRef} />
       </div>
 
-      {/* ajuda + escrever */}
+      {/* escrever */}
       <div className="border-t border-white/[0.06] px-3 pt-3 pb-3 sm:px-5 sm:pb-5">
-        {suggest.isPending ? (
-          <div className="mb-3 flex items-center gap-3 rounded-[22px] border border-[#FFD599]/25 bg-[#FFD599]/[0.06] p-4">
-            <Sparkles className="size-5 shrink-0 animate-pulse text-[#FFD599]" />
-            <div className="min-w-0">
-              <p className="text-[14px] font-bold text-[#FFD599]">
-                Lendo a conversa como um vendedor experiente…
-              </p>
-              <p className="text-[12.5px] text-[#A9A9A9]">
-                Diagnóstico, técnica certa e a resposta com os preços reais.
-              </p>
-            </div>
-          </div>
-        ) : ai ? (
-          <div className="adm-scroll mb-3 max-h-[min(58dvh,560px)] overflow-y-auto rounded-[24px] border border-[#FFD599]/30 bg-gradient-to-br from-[#2A2416] to-[#1C1A15] p-4">
-            {/* diagnóstico */}
-            <div className="flex items-start gap-2">
-              <Sparkles className="mt-0.5 size-4 shrink-0 text-[#FFD599]" />
-              <div className="min-w-0 flex-1">
-                <p className="text-[13px] font-bold text-[#FFD599]">Resposta ideal</p>
-                {ai.situacao ? (
-                  <p className="truncate text-[12.5px] text-[#D4D4D4]">{ai.situacao}</p>
-                ) : null}
-              </div>
-              <span
-                className={cn(
-                  "shrink-0 rounded-full px-2.5 py-1 text-[11.5px] font-bold",
-                  HEAT[ai.temperatura]?.cls,
-                )}
-              >
-                {HEAT[ai.temperatura]?.label}
-              </span>
-              <button
-                type="button"
-                onClick={() => setAi(null)}
-                aria-label="Fechar sugestão"
-                className="press grid size-8 shrink-0 place-items-center rounded-full text-[#A9A9A9] hover:bg-white/[0.06] hover:text-white"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {ai.tecnica ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-[#FFD599] px-2.5 py-1 text-[11.5px] font-bold text-[#15130F]">
-                  <Zap className="size-3" /> {ai.tecnica}
-                </span>
-              ) : null}
-              {ai.objecao && ai.objecao !== "nenhuma" ? (
-                <span className="rounded-full bg-[#FF9A8A]/15 px-2.5 py-1 text-[11.5px] font-bold text-[#FFB3A7]">
-                  Objeção: {OBJ[ai.objecao] ?? ai.objecao}
-                </span>
-              ) : null}
-            </div>
-
-            {/* versões */}
-            {versions.length > 1 ? (
-              <div className="adm-scroll -mx-1 mt-3 flex gap-1.5 overflow-x-auto px-1">
-                {versions.map((v, i) => (
-                  <button
-                    key={v.label + i}
-                    type="button"
-                    aria-pressed={aiVersion === i}
-                    onClick={() => setAiVersion(i)}
-                    className={cn(
-                      "press h-8 shrink-0 rounded-full px-3 text-[12.5px] font-bold",
-                      aiVersion === i
-                        ? "bg-white text-[#15130F]"
-                        : "bg-white/[0.07] text-[#D4D4D4] hover:text-white",
-                    )}
-                  >
-                    {v.label}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            <p className="mt-3 rounded-[18px] bg-black/25 p-3.5 text-[15px] leading-relaxed whitespace-pre-wrap text-white">
-              {aiText}
+        {otherAgent ? (
+          <div className="mb-3 flex items-center gap-3 rounded-[20px] bg-white/[0.05] p-3">
+            <TeamAvatar id={contact.assigned_to!} size={34} />
+            <p className="min-w-0 flex-1 text-[13.5px] text-[#D4D4D4]">
+              <span className="font-bold text-white">{team.first(contact.assigned_to!)}</span> está
+              atendendo esta conversa. Para não misturar, só quem atende responde.
             </p>
-
-            {ai.por_que ? (
-              <p className="mt-2.5 flex gap-1.5 text-[12.5px] leading-snug text-[#D4D4D4]">
-                <Lightbulb className="mt-0.5 size-3.5 shrink-0 text-[#FFD599]" />
-                <span>
-                  <span className="font-bold text-[#FFD599]">Por que funciona: </span>
-                  {ai.por_que}
-                </span>
-              </p>
-            ) : null}
-
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => submit(aiText)}
-                disabled={!aiText}
-                className="press inline-flex h-10 items-center gap-1.5 rounded-full bg-[#FFD599] px-4 text-[13.5px] font-bold text-[#15130F]"
-              >
-                <SendHorizontal className="size-4" /> Enviar agora
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setText(aiText);
-                  setAi(null);
-                  taRef.current?.focus();
-                }}
-                className="press inline-flex h-10 items-center gap-1.5 rounded-full bg-white/[0.08] px-4 text-[13.5px] font-bold hover:bg-white/[0.12]"
-              >
-                <PencilLine className="size-4" /> Editar
-              </button>
-              <button
-                type="button"
-                onClick={() => suggest.mutate(goal)}
-                className="press inline-flex h-10 items-center gap-1.5 rounded-full bg-white/[0.08] px-4 text-[13.5px] font-bold hover:bg-white/[0.12]"
-              >
-                <RefreshCw className="size-4" /> Outra
-              </button>
-            </div>
-
-            {/* refazer com outro foco */}
-            <div className="mt-3 flex flex-wrap items-center gap-1.5">
-              <span className="text-[11.5px] font-semibold text-[#8C8C8C]">
-                Refazer com foco em:
-              </span>
-              {REPLY_GOALS.filter((g) => g.v !== "auto").map((g) => (
-                <button
-                  key={g.v}
-                  type="button"
-                  onClick={() => {
-                    setGoal(g.v);
-                    suggest.mutate(g.v);
-                  }}
-                  className={cn(
-                    "press h-7 rounded-full px-2.5 text-[11.5px] font-bold",
-                    goal === g.v
-                      ? "bg-[#FFD599] text-[#15130F]"
-                      : "border border-white/[0.12] text-[#D4D4D4] hover:text-white",
-                  )}
-                >
-                  {g.label}
-                </button>
-              ))}
-            </div>
-
-            {/* plano */}
-            <div className="mt-3 space-y-2 border-t border-white/[0.06] pt-3 text-[12.5px] leading-snug">
-              {ai.next_step ? (
-                <p className="text-[#D4D4D4]">
-                  <span className="font-bold text-white">Depois que responder: </span>
-                  {ai.next_step}
-                </p>
-              ) : null}
-              {ai.se_nao_responder ? (
-                <div className="rounded-[14px] bg-white/[0.04] p-2.5">
-                  <p className="font-bold text-white">Se não responder em 24h, mande:</p>
-                  <p className="mt-1 text-[#D4D4D4]">{ai.se_nao_responder}</p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void navigator.clipboard?.writeText(ai.se_nao_responder);
-                      toast.success("Mensagem de retomada copiada");
-                    }}
-                    className="press mt-1.5 inline-flex items-center gap-1 text-[12px] font-bold text-[#FFD599]"
-                  >
-                    <Copy className="size-3.5" /> Copiar
-                  </button>
-                </div>
-              ) : null}
-              {ai.evitar ? (
-                <p className="flex gap-1.5 text-[#FFB3A7]">
-                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                  <span>
-                    <span className="font-bold">Evite: </span>
-                    {ai.evitar}
-                  </span>
-                </p>
-              ) : null}
-            </div>
+            <button
+              type="button"
+              onClick={() => takeOver.mutate()}
+              disabled={takeOver.isPending}
+              className="press h-10 shrink-0 rounded-full bg-white/[0.1] px-4 text-[13px] font-bold hover:bg-white/[0.15]"
+            >
+              Assumir
+            </button>
           </div>
         ) : null}
 
-        <div className="adm-scroll -mx-1 mb-2.5 flex items-center gap-1.5 overflow-x-auto px-1">
-          <button
-            type="button"
-            onClick={() => {
-              setGoal("auto");
-              suggest.mutate("auto");
-            }}
-            disabled={suggest.isPending}
-            className={cn(
-              "press inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-bold",
-              waitingReply
-                ? "bg-[#FFD599] text-[#15130F]"
-                : "border border-[#FFD599]/40 text-[#FFD599] hover:bg-[#FFD599]/10",
-            )}
-          >
-            <Sparkles className="size-4" /> Resposta ideal
-          </button>
-          {quoteList.slice(0, 3).map((qt) => (
+        {idealKey && !otherAgent ? (
+          <ReplyIdeal
+            jid={contact.jid}
+            startKey={idealKey}
+            onClose={() => setIdealKey(0)}
+            onSend={(t) => submit(t)}
+            disabled={send.isPending}
+          />
+        ) : null}
+
+        {!otherAgent ? (
+          <div className="adm-scroll -mx-1 mb-2.5 flex items-center gap-1.5 overflow-x-auto px-1">
             <button
-              key={qt.product_id}
               type="button"
-              onClick={() => compose(pricePitch(qt))}
-              title="Responder com o preço"
-              className="press inline-flex h-9 max-w-[220px] shrink-0 items-center gap-1.5 rounded-full bg-[#1F1F1F] px-3 text-[12.5px] font-semibold text-[#D4D4D4] hover:text-white"
+              onClick={() => setIdealKey((k) => k + 1)}
+              className={cn(
+                "press inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-bold",
+                waitingReply
+                  ? "bg-gradient-to-r from-[#FFE3B8] to-[#E9B865] text-[#15130F] shadow-[0_0_20px_rgba(255,213,153,0.25)]"
+                  : "border border-[#FFD599]/40 text-[#FFD599] hover:bg-[#FFD599]/10",
+              )}
             >
-              <span className="truncate">{qt.name}</span>
-              <span className="font-bold text-[#FFD599]">
-                {qt.frasco ? brl(qt.frasco.pix) : "—"}
-              </span>
+              <Sparkles className="size-4" /> Resposta ideal
             </button>
-          ))}
-          <button
-            type="button"
-            aria-pressed={quick}
-            onClick={() => setQuick((v) => !v)}
-            className={cn(
-              "press inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-semibold",
-              quick ? "bg-white text-[#15130F]" : "bg-[#1F1F1F] text-[#D4D4D4] hover:text-white",
-            )}
-          >
-            <Zap className="size-3.5" /> Rápidas
-          </button>
-        </div>
-        {quick ? (
+            {quoteList.slice(0, 3).map((qt) => (
+              <button
+                key={qt.product_id}
+                type="button"
+                onClick={() => compose(pricePitch(qt))}
+                title="Responder com o preço"
+                className="press inline-flex h-9 max-w-[220px] shrink-0 items-center gap-1.5 rounded-full bg-[#1F1F1F] px-3 text-[12.5px] font-semibold text-[#D4D4D4] hover:text-white"
+              >
+                <span className="truncate">{qt.name}</span>
+                <span className="font-bold text-[#FFD599]">
+                  {qt.frasco ? brl(qt.frasco.pix) : "—"}
+                </span>
+              </button>
+            ))}
+            <button
+              type="button"
+              aria-pressed={quick}
+              onClick={() => setQuick((v) => !v)}
+              className={cn(
+                "press inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-semibold",
+                quick ? "bg-white text-[#15130F]" : "bg-[#1F1F1F] text-[#D4D4D4] hover:text-white",
+              )}
+            >
+              <Zap className="size-3.5" /> Rápidas
+            </button>
+          </div>
+        ) : null}
+        {quick && !otherAgent ? (
           <div className="adm-scroll -mx-1 mb-2.5 flex gap-1.5 overflow-x-auto px-1">
             {QUICK.map((qr) => (
               <button
@@ -1376,15 +1415,25 @@ function Thread({
         ) : null}
 
         <div className="flex items-end gap-2">
-          <div className="flex min-w-0 flex-1 items-end rounded-[24px] border border-white/[0.08] bg-[#1A1A1A] focus-within:border-[#FFD599]/40">
+          <div
+            className={cn(
+              "flex min-w-0 flex-1 items-end rounded-[24px] border border-white/[0.08] bg-[#1A1A1A] focus-within:border-[#FFD599]/40",
+              otherAgent && "opacity-50",
+            )}
+          >
             <textarea
               ref={taRef}
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={onKey}
+              disabled={otherAgent}
               rows={Math.min(6, Math.max(1, text.split("\n").length))}
               placeholder={
-                offline ? "WhatsApp desconectado: a mensagem fica na fila" : "Escreva sua mensagem…"
+                otherAgent
+                  ? `${team.first(contact.assigned_to!)} está atendendo`
+                  : offline
+                    ? "WhatsApp desconectado: a mensagem fica na fila"
+                    : "Escreva sua mensagem…"
               }
               className="min-h-12 flex-1 resize-none bg-transparent px-4 py-3 text-[15px] leading-snug outline-none placeholder:text-[#6F6F6F]"
             />
@@ -1392,7 +1441,7 @@ function Thread({
           <button
             type="button"
             onClick={() => submit()}
-            disabled={!text.trim()}
+            disabled={!text.trim() || otherAgent}
             aria-label="Enviar"
             className="press grid size-12 shrink-0 place-items-center rounded-full bg-[#FFD599] text-[#15130F] disabled:opacity-40"
           >
@@ -1492,7 +1541,30 @@ function IconBtn({
   );
 }
 
-/* ───────────────────────── assistente ───────────────────────── */
+/* ───────────────────────── painel do cliente ───────────────────────── */
+
+type ATab = "resumo" | "perfumes" | "cliente";
+
+const INS_STATUS: Record<string, { label: string; cls: string }> = {
+  comprou: { label: "Comprou", cls: "bg-[#7FCF9F] text-[#15130F]" },
+  negociando: { label: "Negociando", cls: "bg-[#FFD599] text-[#15130F]" },
+  interessado: { label: "Interessado", cls: "bg-[#F2C46D]/20 text-[#F2C46D]" },
+  perdido: { label: "Perdido", cls: "bg-[#FF9A8A]/15 text-[#FFB3A7]" },
+  so_duvida: { label: "Só dúvida", cls: "bg-white/[0.08] text-[#D4D4D4]" },
+  pos_venda: { label: "Pós-venda", cls: "bg-[#7FCF9F]/15 text-[#7FCF9F]" },
+  sem_interesse: { label: "Não é venda", cls: "bg-[#232323] text-[#8C8C8C]" },
+};
+const INS_MOTIVO: Record<string, string> = {
+  preco: "Achou caro",
+  vou_pensar: "Ficou de pensar",
+  sumiu: "Parou de responder",
+  sem_estoque: "Queria algo sem estoque",
+  confianca: "Dúvida se é original",
+  entrega_prazo: "Entrega / prazo",
+  comparando: "Comparando com outra loja",
+  indeciso: "Indeciso",
+  outro: "Outro motivo",
+};
 
 function Assistant({
   contact,
@@ -1503,26 +1575,17 @@ function Assistant({
   lead: Lead | null;
   onClose?: () => void;
 }) {
+  const [tab, setTab] = useState<ATab>("resumo");
   const [ficha, setFicha] = useState<string | null>(null);
-  const [manual, setManual] = useState("");
   const thread = useThread(contact.jid);
   const quotes = useQuotes(contact.jid, thread.data);
-  const manualQ = useQuery({
-    queryKey: ["crm-quote-manual", manual],
-    queryFn: () => crmPerfumeQuote({ data: { text: manual } }),
-    enabled: manual.trim().length >= 3,
-    staleTime: 60_000,
-  });
   const name = contactName(contact);
   const wa = whatsLink(contact.phone_normalized);
-  const quoteList = quotes.data ?? [];
-  const task = lead ? taskOf(lead) : null;
-  const facts = lead ? factsOf(lead).slice(0, 6) : [];
-  const interests = lead ? interestsOf(lead).slice(0, 4) : [];
   const t = lead ? TEMP[lead.temp] : null;
+  const nQuotes = quotes.data?.length ?? 0;
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       {/* quem é, em uma linha */}
       <section className="flex items-center gap-3">
         <Avatar
@@ -1530,11 +1593,11 @@ function Assistant({
           name={name}
           score={lead?.score}
           temp={lead?.temp}
-          size={52}
+          size={48}
           gold={(lead?.orders_count ?? 0) > 0}
         />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[17px] font-bold tracking-[-0.02em]">{name}</p>
+          <p className="truncate text-[16.5px] font-bold tracking-[-0.02em]">{name}</p>
           <p className="flex items-center gap-2 text-[12.5px] text-[#A9A9A9]">
             {t ? (
               <span
@@ -1557,111 +1620,318 @@ function Assistant({
             </button>
           </p>
         </div>
-        {onClose ? (
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Fechar assistente"
-            className="press grid size-9 shrink-0 place-items-center rounded-full text-[#8C8C8C] hover:bg-white/[0.06] hover:text-white"
-          >
-            <PanelRightClose className="size-[17px]" />
-          </button>
-        ) : null}
-      </section>
-      <div className="grid grid-cols-2 gap-2">
         {wa ? (
           <a
             href={wa}
             target="_blank"
             rel="noreferrer"
-            className="press inline-flex h-10 items-center justify-center gap-1.5 rounded-full bg-[#1C1C1C] text-[13px] font-bold text-[#D4D4D4] hover:text-white"
+            aria-label="Abrir no WhatsApp"
+            title="Abrir no WhatsApp"
+            className="press grid size-9 shrink-0 place-items-center rounded-full bg-[#1C1C1C] text-[#D4D4D4] hover:text-white"
           >
-            <WhatsMark className="size-4" /> WhatsApp
+            <WhatsMark className="size-4" />
           </a>
         ) : null}
         {lead ? (
           <button
             type="button"
             onClick={() => setFicha(lead.id)}
-            className="press inline-flex h-10 items-center justify-center gap-1.5 rounded-full bg-[#1C1C1C] text-[13px] font-bold text-[#D4D4D4] hover:text-white"
+            aria-label="Ficha do cliente"
+            title="Ficha do cliente"
+            className="press grid size-9 shrink-0 place-items-center rounded-full bg-[#1C1C1C] text-[#D4D4D4] hover:text-white"
           >
-            <UserRound className="size-4" /> Ficha
+            <UserRound className="size-4" />
+          </button>
+        ) : null}
+        {onClose ? (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar painel"
+            className="press grid size-9 shrink-0 place-items-center rounded-full text-[#8C8C8C] hover:bg-white/[0.06] hover:text-white"
+          >
+            <PanelRightClose className="size-[17px]" />
+          </button>
+        ) : null}
+      </section>
+
+      {/* abas */}
+      <div className="grid grid-cols-3 gap-1 rounded-full bg-[#1A1A1A] p-1">
+        {(
+          [
+            ["resumo", "Resumo"],
+            ["perfumes", nQuotes ? `Perfumes · ${nQuotes}` : "Perfumes"],
+            ["cliente", "Cliente"],
+          ] as Array<[ATab, string]>
+        ).map(([v, label]) => (
+          <button
+            key={v}
+            type="button"
+            aria-pressed={tab === v}
+            onClick={() => setTab(v)}
+            className={cn(
+              "press h-9 rounded-full text-[13px] font-bold transition-colors",
+              tab === v ? "bg-white text-[#15130F]" : "text-[#A9A9A9] hover:text-white",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "resumo" ? <SummaryTab contact={contact} lead={lead} /> : null}
+      {tab === "perfumes" ? (
+        <PerfumesTab quotes={quotes.data ?? []} loading={quotes.isFetching} />
+      ) : null}
+      {tab === "cliente" ? <ClientTab contact={contact} lead={lead} /> : null}
+
+      <CustomerSheet id={ficha} onClose={() => setFicha(null)} />
+    </div>
+  );
+}
+
+/** Resumo: o que está acontecendo e o que fazer — só o essencial. */
+function SummaryTab({ contact, lead }: { contact: WaContact; lead: Lead | null }) {
+  const qc = useQueryClient();
+  const tried = useRef(false);
+  const q = useQuery({
+    queryKey: ["wa-insight", contact.jid],
+    queryFn: () => waInsight({ data: { jid: contact.jid } }),
+    staleTime: 30_000,
+  });
+  const run = useMutation({
+    mutationFn: () => waAnalyze({ data: { jid: contact.jid } }),
+    onSuccess: (row) => {
+      qc.setQueryData(["wa-insight", contact.jid], row);
+      void qc.invalidateQueries({ queryKey: ["crm-leads"] });
+      void qc.invalidateQueries({ queryKey: ["wa-inbox"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "A análise falhou agora"),
+  });
+  const row = q.data;
+  useEffect(() => {
+    if (tried.current || q.isPending || run.isPending) return;
+    if ((!row || !row.resumo) && contact.last_inbound_at) {
+      tried.current = true;
+      run.mutate();
+    }
+  }, [row, q.isPending, run, contact.last_inbound_at]);
+  const stale =
+    !!row?.last_msg_ts &&
+    !!contact.last_message_at &&
+    new Date(contact.last_message_at) > new Date(row.last_msg_ts);
+  const d = (row?.data ?? {}) as Partial<import("@/lib/wa-insights.server").InsightData>;
+  const st = row?.status ? INS_STATUS[row.status] : null;
+  const chance = row?.chance ?? null;
+  const showChance = chance != null && row?.status !== "comprou" && row?.status !== "sem_interesse";
+  const msg = d.mensagem_sugerida || lead?.action.message || null;
+
+  if (run.isPending)
+    return (
+      <div className="flex items-center gap-3 rounded-[20px] border border-[#FFD599]/25 bg-[#FFD599]/[0.06] p-4">
+        <Sparkles className="size-5 shrink-0 animate-pulse text-[#FFD599]" />
+        <p className="text-[13.5px] font-semibold text-[#FFD599]">Lendo a conversa inteira…</p>
+      </div>
+    );
+  if (!row?.resumo)
+    return (
+      <div className="rounded-[20px] bg-[#1A1A1A] p-4 text-center">
+        <p className="text-[13.5px] text-[#A9A9A9]">
+          {contact.last_inbound_at
+            ? "Ainda sem análise desta conversa."
+            : "A análise começa quando o cliente mandar mensagem."}
+        </p>
+        {contact.last_inbound_at ? (
+          <button
+            type="button"
+            onClick={() => run.mutate()}
+            className="press mt-3 inline-flex h-10 items-center gap-1.5 rounded-full bg-[#FFD599] px-4 text-[13px] font-bold text-[#15130F]"
+          >
+            <Sparkles className="size-4" /> Analisar agora
           </button>
         ) : null}
       </div>
+    );
 
-      <ConversationInsight contact={contact} />
-
-      {!contact.customer_id ? <LinkCustomer contact={contact} /> : null}
-
-      {/* dica */}
-      {lead ? (
-        <Block title="Dica" icon={<Lightbulb />}>
-          <div className="rounded-[20px] border border-[#FFD599]/25 bg-[#FFD599]/[0.06] p-3.5">
-            <p className="text-[15.5px] font-bold text-[#FFD599]">
-              {task ? TASKS[task].title : lead.action.title}
-            </p>
-            <p className="mt-0.5 text-[13px] text-[#D4D4D4]">
-              {lead.reasons[0] ?? lead.action.why}
-            </p>
-            {lead.action.message ? (
-              <button
-                type="button"
-                onClick={() => compose(lead.action.message!)}
-                className="press mt-3 inline-flex h-9 items-center gap-1.5 rounded-full bg-[#FFD599] px-3.5 text-[12.5px] font-bold text-[#15130F]"
-              >
-                Usar mensagem sugerida
-              </button>
-            ) : null}
-          </div>
-        </Block>
+  return (
+    <div className="space-y-3">
+      {d.alerta ? (
+        <p className="flex gap-2 rounded-[18px] bg-[#FF9A8A]/10 p-3 text-[13px] font-semibold text-[#FFB3A7]">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" /> {d.alerta}
+        </p>
       ) : null}
 
-      {/* perfumes citados */}
-      <Block
-        title="Perfumes citados"
-        icon={<Sparkles />}
-        badge={quoteList.length ? String(quoteList.length) : undefined}
+      {/* situação */}
+      <section className="rounded-[22px] bg-[#1A1A1A] p-4">
+        <div className="flex items-center gap-2">
+          {st ? (
+            <span className={cn("rounded-full px-2.5 py-1 text-[12px] font-bold", st.cls)}>
+              {st.label}
+            </span>
+          ) : null}
+          {showChance ? (
+            <span className="ml-auto text-[12.5px] font-bold text-[#D4D4D4] tabular-nums">
+              {chance}% de chance
+            </span>
+          ) : null}
+        </div>
+        {showChance ? (
+          <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-[#2A2A2A]">
+            <div
+              className="h-full rounded-full transition-[width] duration-700"
+              style={{
+                width: `${chance}%`,
+                background: chance! >= 70 ? "#7FCF9F" : chance! >= 40 ? "#FFD599" : "#FF9A8A",
+              }}
+            />
+          </div>
+        ) : null}
+        <p className="mt-3 text-[14px] leading-relaxed text-[#E5E5E5]">{row.resumo}</p>
+        {row.motivo && row.motivo !== "nao_se_aplica" ? (
+          <p className="mt-3 text-[13px] text-[#FFB3A7]">
+            <span className="font-bold">Travou: </span>
+            {INS_MOTIVO[row.motivo] ?? row.motivo}
+            {d.motivo_detalhe ? (
+              <span className="text-[#D4D4D4]"> — {d.motivo_detalhe}</span>
+            ) : null}
+          </p>
+        ) : null}
+        {(d.estilo ?? []).length || d.orcamento ? (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {(d.estilo ?? []).slice(0, 4).map((e) => (
+              <span
+                key={e}
+                className="rounded-full bg-[#FFD599]/12 px-2.5 py-1 text-[12px] font-bold text-[#FFD599]"
+              >
+                {e}
+              </span>
+            ))}
+            {d.orcamento ? (
+              <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[12px] font-semibold text-[#E5E5E5]">
+                💰 {d.orcamento}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
+
+      {/* o que fazer */}
+      {d.proximo_passo || msg ? (
+        <section className="rounded-[22px] border border-[#FFD599]/25 bg-[#FFD599]/[0.06] p-4">
+          <p className="text-[12.5px] font-bold text-[#FFD599]">O que fazer agora</p>
+          {d.proximo_passo ? (
+            <p className="mt-1 text-[14px] leading-snug text-[#E5E5E5]">{d.proximo_passo}</p>
+          ) : null}
+          {msg && row.status !== "sem_interesse" ? (
+            <button
+              type="button"
+              onClick={() => compose(msg)}
+              className="press mt-3 inline-flex h-10 items-center gap-1.5 rounded-full bg-[#FFD599] px-4 text-[13px] font-bold text-[#15130F]"
+            >
+              Usar mensagem sugerida
+            </button>
+          ) : null}
+        </section>
+      ) : null}
+
+      <button
+        type="button"
+        onClick={() => run.mutate()}
+        className={cn(
+          "press inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[12.5px] font-bold",
+          stale ? "bg-[#FFD599] text-[#15130F]" : "text-[#8C8C8C] hover:text-white",
+        )}
       >
-        {quoteList.length ? (
-          <div className="space-y-2">
-            {quoteList.map((qt) => (
+        <RefreshCw className="size-3.5" />{" "}
+        {stale
+          ? "Tem mensagem nova: atualizar análise"
+          : `Analisado ${ago(row.analyzed_at)} · atualizar`}
+      </button>
+    </div>
+  );
+}
+
+function PerfumesTab({ quotes, loading }: { quotes: PerfumeQuote[]; loading: boolean }) {
+  const [manual, setManual] = useState("");
+  const manualQ = useQuery({
+    queryKey: ["crm-quote-manual", manual],
+    queryFn: () => crmPerfumeQuote({ data: { text: manual } }),
+    enabled: manual.trim().length >= 3,
+    staleTime: 60_000,
+  });
+  return (
+    <div className="space-y-3">
+      <label className="relative block">
+        <Search className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-[#6F6F6F]" />
+        <input
+          value={manual}
+          onChange={(e) => setManual(e.target.value)}
+          placeholder="Cotar qualquer perfume"
+          className={cn(pxInputClass, "pl-11")}
+        />
+      </label>
+      {manual.trim().length >= 3 ? (
+        (manualQ.data ?? []).length ? (
+          manualQ.data!.map((qt) => <QuoteRow key={`m-${qt.product_id}`} q={qt} />)
+        ) : manualQ.isFetching ? (
+          <div className="admin-skeleton h-24 rounded-[20px]" />
+        ) : (
+          <p className="text-center text-[13px] text-[#8C8C8C]">
+            Não achei esse perfume no catálogo.
+          </p>
+        )
+      ) : null}
+      {!manual ? (
+        quotes.length ? (
+          <>
+            <p className="px-1 text-[12px] font-semibold text-[#8C8C8C]">Citados na conversa</p>
+            {quotes.map((qt) => (
               <QuoteRow key={qt.product_id} q={qt} />
             ))}
-          </div>
+          </>
+        ) : loading ? (
+          <div className="admin-skeleton h-24 rounded-[20px]" />
         ) : (
-          <p className="text-[13px] text-[#8C8C8C]">
+          <p className="rounded-[18px] bg-[#1A1A1A] p-4 text-center text-[13px] text-[#8C8C8C]">
             Quando o cliente falar de um perfume, o preço aparece aqui e embaixo da mensagem.
           </p>
-        )}
-        <label className="relative mt-3 block">
-          <Search className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-[#6F6F6F]" />
-          <input
-            value={manual}
-            onChange={(e) => setManual(e.target.value)}
-            placeholder="Cotar outro perfume"
-            className={cn(pxInputClass, "pl-11")}
-          />
-        </label>
-        {(manualQ.data ?? []).length ? (
-          <div className="mt-2 space-y-2">
-            {manualQ.data!.map((qt) => (
-              <QuoteRow key={`m-${qt.product_id}`} q={qt} />
-            ))}
-          </div>
-        ) : manual.trim().length >= 3 && !manualQ.isFetching ? (
-          <p className="mt-2 text-[13px] text-[#8C8C8C]">Não achei esse perfume no catálogo.</p>
-        ) : null}
-      </Block>
+        )
+      ) : null}
+    </div>
+  );
+}
 
-      {/* do que gosta */}
+function ClientTab({ contact, lead }: { contact: WaContact; lead: Lead | null }) {
+  const facts = lead ? factsOf(lead).slice(0, 8) : [];
+  const interests = lead ? interestsOf(lead).slice(0, 6) : [];
+  return (
+    <div className="space-y-4">
+      {!contact.customer_id ? <LinkCustomer contact={contact} /> : null}
+      {facts.length ? (
+        <dl className="grid grid-cols-2 gap-2">
+          {facts.map((f) => (
+            <div key={f.label} className="min-w-0 rounded-[16px] bg-[#1A1A1A] px-3 py-2.5">
+              <dt className="truncate text-[11.5px] font-semibold text-[#8C8C8C]">{f.label}</dt>
+              <dd
+                className={cn(
+                  "mt-0.5 truncate font-bold",
+                  f.strong ? "text-[16px] text-[#FFD599]" : "text-[14px]",
+                )}
+              >
+                {f.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
       {interests.length ? (
-        <Block title="Do que ele gosta">
+        <div>
+          <p className="mb-2 px-1 text-[12px] font-semibold text-[#8C8C8C]">Do que ele gosta</p>
           <div className="grid grid-cols-2 gap-2">
             {interests.map((it) => (
               <div
                 key={it.key}
-                className="flex min-w-0 items-center gap-2 rounded-[16px] bg-[#1C1C1C] p-1.5"
+                className="flex min-w-0 items-center gap-2 rounded-[16px] bg-[#1A1A1A] p-1.5"
               >
                 <span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-[12px] bg-white">
                   {it.image_url ? (
@@ -1691,31 +1961,11 @@ function Assistant({
               </div>
             ))}
           </div>
-        </Block>
+        </div>
       ) : null}
-
-      {/* quem é */}
-      {facts.length ? (
-        <Block title="Quem é">
-          <dl className="grid grid-cols-2 gap-2">
-            {facts.map((f) => (
-              <div key={f.label} className="min-w-0 rounded-[16px] bg-[#1C1C1C] px-3 py-2.5">
-                <dt className="truncate text-[11.5px] font-semibold text-[#8C8C8C]">{f.label}</dt>
-                <dd
-                  className={cn(
-                    "mt-0.5 truncate font-bold",
-                    f.strong ? "text-[16px] text-[#FFD599]" : "text-[14px]",
-                  )}
-                >
-                  {f.value}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </Block>
+      {!facts.length && !interests.length && contact.customer_id ? (
+        <p className="text-center text-[13px] text-[#8C8C8C]">Ainda sem dados deste cliente.</p>
       ) : null}
-
-      <CustomerSheet id={ficha} onClose={() => setFicha(null)} />
     </div>
   );
 }
@@ -2046,6 +2296,7 @@ function ContactMenu({
         ) : (
           <>
             <MenuItem icon={<MessageCircle />} label="Abrir conversa" onClick={run(onOpen)} />
+            <AssignMenuItems c={c} done={onClose} />
             <MenuItem
               icon={<Star fill={c.pinned ? "currentColor" : "none"} />}
               label={c.pinned ? "Desafixar" : "Fixar no topo"}
@@ -2157,245 +2408,90 @@ function MenuItem({
   );
 }
 
-/* ───────────────────────── análise da conversa ───────────────────────── */
-
-const INS_STATUS: Record<string, { label: string; cls: string }> = {
-  comprou: { label: "Comprou", cls: "bg-[#7FCF9F] text-[#15130F]" },
-  negociando: { label: "Negociando", cls: "bg-[#FFD599] text-[#15130F]" },
-  interessado: { label: "Interessado", cls: "bg-[#F2C46D]/20 text-[#F2C46D]" },
-  perdido: { label: "Perdido", cls: "bg-[#FF9A8A]/15 text-[#FFB3A7]" },
-  so_duvida: { label: "Só dúvida", cls: "bg-white/[0.08] text-[#D4D4D4]" },
-  pos_venda: { label: "Pós-venda", cls: "bg-[#7FCF9F]/15 text-[#7FCF9F]" },
-  sem_interesse: { label: "Não é venda", cls: "bg-[#232323] text-[#8C8C8C]" },
-};
-const INS_MOTIVO: Record<string, string> = {
-  preco: "Achou caro",
-  vou_pensar: "Ficou de pensar",
-  sumiu: "Parou de responder",
-  sem_estoque: "Queria algo sem estoque",
-  confianca: "Dúvida se é original",
-  entrega_prazo: "Entrega / prazo",
-  comparando: "Comparando com outra loja",
-  indeciso: "Indeciso",
-  outro: "Outro motivo",
-};
-const INTERESSE: Record<string, string> = {
-  perguntou: "perguntou",
-  quer: "quer",
-  comprou: "comprou",
-  recusou: "recusou",
-  comparou: "comparou",
-};
-
-/** O que a IA entendeu da conversa: o cliente, o que quer, por que travou e o que fazer. */
-function ConversationInsight({ contact }: { contact: WaContact }) {
-  const qc = useQueryClient();
-  const tried = useRef(false);
-  const q = useQuery({
-    queryKey: ["wa-insight", contact.jid],
-    queryFn: () => waInsight({ data: { jid: contact.jid } }),
-    staleTime: 30_000,
-  });
-  const run = useMutation({
-    mutationFn: () => waAnalyze({ data: { jid: contact.jid } }),
-    onSuccess: (row) => {
-      qc.setQueryData(["wa-insight", contact.jid], row);
-      void qc.invalidateQueries({ queryKey: ["crm-leads"] });
-      void qc.invalidateQueries({ queryKey: ["wa-inbox"] });
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "A análise falhou agora"),
-  });
-  const row = q.data;
-  const stale =
-    !!row?.last_msg_ts &&
-    !!contact.last_message_at &&
-    new Date(contact.last_message_at) > new Date(row.last_msg_ts);
-  // primeira vez que abre uma conversa sem análise: analisa na hora
-  useEffect(() => {
-    if (tried.current || q.isPending || run.isPending) return;
-    if ((!row || !row.resumo) && contact.last_inbound_at) {
-      tried.current = true;
-      run.mutate();
-    }
-  }, [row, q.isPending, run, contact.last_inbound_at]);
-
-  const d = (row?.data ?? {}) as Partial<import("@/lib/wa-insights.server").InsightData>;
-  const st = row?.status ? INS_STATUS[row.status] : null;
-  const chance = row?.chance ?? null;
-
+/** Rodapé da linha: quem atende (ou "Sem atendente") e se está esperando resposta. */
+function ContactRowFoot({ c, waiting }: { c: WaContact; waiting: boolean }) {
+  const team = useContext(TeamContext);
+  if (!c.assigned_to && !waiting) return null;
   return (
-    <Block
-      title="Análise da conversa"
-      icon={<Sparkles />}
-      badge={row?.analyzed_at ? ago(row.analyzed_at) : undefined}
-    >
-      {run.isPending ? (
-        <div className="flex items-center gap-2.5 rounded-[18px] border border-[#FFD599]/25 bg-[#FFD599]/[0.06] p-3.5">
-          <Sparkles className="size-4 shrink-0 animate-pulse text-[#FFD599]" />
-          <p className="text-[13px] font-semibold text-[#FFD599]">Lendo a conversa inteira…</p>
-        </div>
-      ) : !row?.resumo ? (
-        <div className="rounded-[18px] bg-[#1C1C1C] p-3.5">
-          <p className="text-[13px] text-[#8C8C8C]">
-            {contact.last_inbound_at
-              ? "Ainda sem análise."
-              : "A análise começa quando o cliente mandar a primeira mensagem."}
-          </p>
-          {contact.last_inbound_at ? (
-            <button
-              type="button"
-              onClick={() => run.mutate()}
-              className="press mt-2.5 inline-flex h-9 items-center gap-1.5 rounded-full bg-[#FFD599] px-3.5 text-[12.5px] font-bold text-[#15130F]"
-            >
-              <Sparkles className="size-4" /> Analisar agora
-            </button>
-          ) : null}
-        </div>
+    <div className="mt-1.5 flex items-center gap-1.5">
+      {c.assigned_to ? (
+        <span
+          className={cn(
+            "inline-flex items-center gap-1 rounded-full py-0.5 pr-2 pl-0.5 text-[11px] font-bold",
+            c.assigned_to === team.me
+              ? "bg-[#7FCF9F]/12 text-[#7FCF9F]"
+              : "bg-white/[0.06] text-[#D4D4D4]",
+          )}
+        >
+          <TeamAvatar id={c.assigned_to} size={16} />
+          {c.assigned_to === team.me ? "Você" : team.first(c.assigned_to)}
+        </span>
       ) : (
-        <div className="space-y-2.5">
-          <div className="rounded-[18px] bg-[#1C1C1C] p-3.5">
-            <div className="flex items-center gap-2">
-              {st ? (
-                <span className={cn("rounded-full px-2.5 py-1 text-[11.5px] font-bold", st.cls)}>
-                  {st.label}
-                </span>
-              ) : null}
-              {chance != null && row.status !== "comprou" && row.status !== "sem_interesse" ? (
-                <span className="ml-auto text-[12px] font-bold text-[#D4D4D4] tabular-nums">
-                  {chance}% de chance
-                </span>
-              ) : null}
-            </div>
-            {chance != null && row.status !== "comprou" && row.status !== "sem_interesse" ? (
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#2A2A2A]">
-                <div
-                  className="h-full rounded-full"
-                  style={{
-                    width: `${chance}%`,
-                    background: chance >= 70 ? "#7FCF9F" : chance >= 40 ? "#FFD599" : "#FF9A8A",
-                  }}
-                />
-              </div>
-            ) : null}
-            <p className="mt-2.5 text-[13.5px] leading-snug text-[#E5E5E5]">{row.resumo}</p>
-          </div>
-
-          {row.motivo && row.motivo !== "nao_se_aplica" ? (
-            <div className="rounded-[18px] border border-[#FF9A8A]/25 bg-[#FF9A8A]/[0.07] p-3">
-              <p className="text-[12.5px] font-bold text-[#FFB3A7]">
-                Por que não comprou: {INS_MOTIVO[row.motivo] ?? row.motivo}
-              </p>
-              {d.motivo_detalhe ? (
-                <p className="mt-0.5 text-[12.5px] text-[#D4D4D4]">{d.motivo_detalhe}</p>
-              ) : null}
-            </div>
-          ) : null}
-
-          {d.alerta ? (
-            <p className="flex gap-1.5 rounded-[16px] bg-[#FF9A8A]/10 p-2.5 text-[12.5px] font-semibold text-[#FFB3A7]">
-              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" /> {d.alerta}
-            </p>
-          ) : null}
-
-          {(d.perfumes ?? []).length ? (
-            <div>
-              <p className="mb-1.5 text-[11.5px] font-semibold text-[#8C8C8C]">
-                Perfumes na conversa
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {(d.perfumes ?? []).slice(0, 6).map((p) => (
-                  <span
-                    key={p.nome}
-                    className="rounded-full bg-[#1C1C1C] px-2.5 py-1 text-[12px] font-semibold text-[#E5E5E5]"
-                  >
-                    {p.nome}{" "}
-                    <span className="text-[#8C8C8C]">
-                      · {INTERESSE[p.interesse] ?? p.interesse}
-                    </span>
-                  </span>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {(d.estilo ?? []).length ||
-          d.orcamento ||
-          d.ocasiao ||
-          (d.prefere && d.prefere !== "indefinido") ||
-          d.para_quem === "presente" ? (
-            <div>
-              <p className="mb-1.5 text-[11.5px] font-semibold text-[#8C8C8C]">O que ele gosta</p>
-              <div className="flex flex-wrap gap-1.5">
-                {(d.estilo ?? []).slice(0, 5).map((e) => (
-                  <span
-                    key={e}
-                    className="rounded-full bg-[#FFD599]/12 px-2.5 py-1 text-[12px] font-bold text-[#FFD599]"
-                  >
-                    {e}
-                  </span>
-                ))}
-                {d.orcamento ? (
-                  <span className="rounded-full bg-[#1C1C1C] px-2.5 py-1 text-[12px] font-semibold text-[#E5E5E5]">
-                    💰 {d.orcamento}
-                  </span>
-                ) : null}
-                {d.ocasiao ? (
-                  <span className="rounded-full bg-[#1C1C1C] px-2.5 py-1 text-[12px] font-semibold text-[#E5E5E5]">
-                    {d.ocasiao}
-                  </span>
-                ) : null}
-                {d.prefere && d.prefere !== "indefinido" ? (
-                  <span className="rounded-full bg-[#1C1C1C] px-2.5 py-1 text-[12px] font-semibold text-[#E5E5E5]">
-                    prefere {d.prefere}
-                  </span>
-                ) : null}
-                {d.para_quem === "presente" ? (
-                  <span className="rounded-full bg-[#1C1C1C] px-2.5 py-1 text-[12px] font-semibold text-[#E5E5E5]">
-                    🎁 presente
-                  </span>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-
-          {(d.objecoes ?? []).length ? (
-            <p className="text-[12.5px] text-[#D4D4D4]">
-              <span className="font-bold text-white">Objeções: </span>
-              {(d.objecoes ?? []).join(" · ")}
-            </p>
-          ) : null}
-
-          {d.proximo_passo ? (
-            <div className="rounded-[18px] border border-[#FFD599]/25 bg-[#FFD599]/[0.06] p-3">
-              <p className="text-[12.5px] font-bold text-[#FFD599]">Próximo passo</p>
-              <p className="mt-0.5 text-[13px] text-[#E5E5E5]">{d.proximo_passo}</p>
-              {d.mensagem_sugerida && row.status !== "sem_interesse" ? (
-                <button
-                  type="button"
-                  onClick={() => compose(d.mensagem_sugerida!)}
-                  className="press mt-2.5 inline-flex h-9 items-center rounded-full bg-[#FFD599] px-3.5 text-[12.5px] font-bold text-[#15130F]"
-                >
-                  Usar mensagem sugerida
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-
-          <button
-            type="button"
-            onClick={() => run.mutate()}
-            className={cn(
-              "press inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[12.5px] font-bold",
-              stale
-                ? "bg-[#FFD599] text-[#15130F]"
-                : "bg-white/[0.07] text-[#D4D4D4] hover:text-white",
-            )}
-          >
-            <RefreshCw className="size-3.5" />{" "}
-            {stale ? "Mensagens novas: analisar de novo" : "Analisar de novo"}
-          </button>
-        </div>
+        <span className="rounded-full bg-[#FFD599]/12 px-2 py-0.5 text-[11px] font-bold text-[#FFD599]">
+          Sem atendente
+        </span>
       )}
-    </Block>
+      {waiting ? (
+        <span className="text-[11px] font-bold text-[#FFD599]">· esperando resposta</span>
+      ) : null}
+    </div>
+  );
+}
+
+/** Itens de atendimento no menu do contato. */
+function AssignMenuItems({ c, done }: { c: WaContact; done: () => void }) {
+  const qc = useQueryClient();
+  const team = useContext(TeamContext);
+  const [pick, setPick] = useState(false);
+  const assign = useMutation({
+    mutationFn: (userId: string | null) => waAssign({ data: { jid: c.jid, userId } }),
+    onSuccess: (_d, userId) => {
+      toast.success(
+        userId
+          ? userId === team.me
+            ? "Você assumiu este atendimento"
+            : `Transferido para ${team.first(userId)}`
+          : "Atendimento encerrado",
+      );
+      void qc.invalidateQueries({ queryKey: ["wa-inbox"] });
+      done();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Não deu certo"),
+  });
+  if (pick)
+    return (
+      <div className="rounded-[14px] bg-white/[0.03] p-1">
+        <p className="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold text-[#6F6F6F]">
+          Transferir para
+        </p>
+        {team.staff
+          .filter((s) => s.id !== c.assigned_to)
+          .map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => assign.mutate(s.id)}
+              className="flex h-9 w-full items-center gap-2 rounded-[12px] px-2 text-left text-[13px] font-semibold hover:bg-white/[0.06]"
+            >
+              <TeamAvatar id={s.id} size={22} />
+              {s.name}
+            </button>
+          ))}
+      </div>
+    );
+  return (
+    <>
+      {c.assigned_to !== team.me ? (
+        <MenuItem
+          icon={<UserPlus />}
+          label={c.assigned_to ? "Assumir eu mesmo" : "Assumir atendimento"}
+          onClick={() => assign.mutate(team.me)}
+        />
+      ) : null}
+      <MenuItem icon={<Users />} label="Transferir para…" onClick={() => setPick(true)} />
+      {c.assigned_to ? (
+        <MenuItem icon={<X />} label="Encerrar atendimento" onClick={() => assign.mutate(null)} />
+      ) : null}
+    </>
   );
 }
