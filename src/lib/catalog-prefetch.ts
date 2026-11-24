@@ -8,7 +8,14 @@
  */
 
 /** Exatamente os argumentos que a Home usa na primeira página sem filtros. */
-export const CATALOG_FIRST_ARGS = { p_q: "", p_availability: "todos", p_limit: 24, p_offset: 0 } as const;
+export const CATALOG_FIRST_ARGS = {
+  p_q: "",
+  p_availability: "todos",
+  p_limit: 24,
+  p_offset: 0,
+} as const;
+import { edgeCacheUrl } from "@/lib/sb-edge-cache";
+
 const BODY = JSON.stringify(CATALOG_FIRST_ARGS);
 const MAX_AGE = 60_000;
 
@@ -35,13 +42,15 @@ export function supabaseOrigin() {
 export function catalogPrefetchScript() {
   const { url, key } = env();
   if (!url || !key) return "";
-  return `(function(){try{if(location.pathname!=='/'||location.search)return;var k=${JSON.stringify(key)};var h={'apikey':k,'Content-Type':'application/json'};if(k.indexOf('sb_')!==0)h.Authorization='Bearer '+k;window.__oriumCat0={at:Date.now(),p:fetch(${JSON.stringify(`${url}/rest/v1/rpc/search_catalog`)},{method:'POST',headers:h,body:${JSON.stringify(BODY)}}).then(function(r){return r.ok?r.json():null}).catch(function(){return null})}}catch(e){}})()`;
+  return `(function(){try{if(location.pathname!=='/'||location.search)return;var k=${JSON.stringify(key)};var h={'apikey':k,'Content-Type':'application/json'};if(k.indexOf('sb_')!==0)h.Authorization='Bearer '+k;window.__oriumCat0={at:Date.now(),p:fetch(${JSON.stringify(edgeCacheUrl("rpc/search_catalog"))},{method:'POST',headers:h,body:${JSON.stringify(BODY)}}).then(function(r){return r.ok?r.json():null}).catch(function(){return null})}}catch(e){}})()`;
 }
 
 type Pending = { at: number; p: Promise<unknown> };
 
 /** Usa (uma vez) a resposta antecipada, se os argumentos forem os mesmos. */
-export function takeCatalogPrefetch(args: Record<string, unknown>): Promise<unknown[] | null> | null {
+export function takeCatalogPrefetch(
+  args: Record<string, unknown>,
+): Promise<unknown[] | null> | null {
   if (typeof window === "undefined") return null;
   const w = window as unknown as { __oriumCat0?: Pending };
   const pending = w.__oriumCat0;

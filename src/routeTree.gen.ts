@@ -50,6 +50,7 @@ import { Route as AuthenticatedAdminWidgetsRouteImport } from './routes/_authent
 import { Route as ApiPublicAgendaRouteImport } from './routes/api/public/agenda'
 import { Route as ApiPublicNegociacaoFotoRouteImport } from './routes/api/public/negociacao-foto'
 import { Route as ApiPublicProdutoFotoRouteImport } from './routes/api/public/produto-foto'
+import { Route as ApiPublicSbCacheRouteImport } from './routes/api/public/sb-cache'
 import { Route as ApiPublicWidgetRouteImport } from './routes/api/public/widget'
 import { Route as AuthenticatedAdminCopilotThreadIdRouteImport } from './routes/_authenticated/admin.copilot.$threadId'
 import { Route as AuthenticatedAdminProdutosIdRouteImport } from './routes/_authenticated/admin.produtos.$id'
@@ -288,6 +289,11 @@ const ApiPublicProdutoFotoRoute = ApiPublicProdutoFotoRouteImport.update({
   path: '/api/public/produto-foto',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicSbCacheRoute = ApiPublicSbCacheRouteImport.update({
+  id: '/api/public/sb-cache',
+  path: '/api/public/sb-cache',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicWidgetRoute = ApiPublicWidgetRouteImport.update({
   id: '/api/public/widget',
   path: '/api/public/widget',
@@ -393,6 +399,7 @@ export interface FileRoutesByFullPath {
   '/api/public/agenda': typeof ApiPublicAgendaRoute
   '/api/public/negociacao-foto': typeof ApiPublicNegociacaoFotoRoute
   '/api/public/produto-foto': typeof ApiPublicProdutoFotoRoute
+  '/api/public/sb-cache': typeof ApiPublicSbCacheRoute
   '/api/public/widget': typeof ApiPublicWidgetRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
   '/admin/copilot/$threadId': typeof AuthenticatedAdminCopilotThreadIdRoute
@@ -445,6 +452,7 @@ export interface FileRoutesByTo {
   '/api/public/agenda': typeof ApiPublicAgendaRoute
   '/api/public/negociacao-foto': typeof ApiPublicNegociacaoFotoRoute
   '/api/public/produto-foto': typeof ApiPublicProdutoFotoRoute
+  '/api/public/sb-cache': typeof ApiPublicSbCacheRoute
   '/api/public/widget': typeof ApiPublicWidgetRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/admin/copilot/$threadId': typeof AuthenticatedAdminCopilotThreadIdRoute
@@ -500,6 +508,7 @@ export interface FileRoutesById {
   '/api/public/agenda': typeof ApiPublicAgendaRoute
   '/api/public/negociacao-foto': typeof ApiPublicNegociacaoFotoRoute
   '/api/public/produto-foto': typeof ApiPublicProdutoFotoRoute
+  '/api/public/sb-cache': typeof ApiPublicSbCacheRoute
   '/api/public/widget': typeof ApiPublicWidgetRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/_authenticated/admin/copilot/$threadId': typeof AuthenticatedAdminCopilotThreadIdRoute
@@ -555,6 +564,7 @@ export interface FileRouteTypes {
     | '/api/public/agenda'
     | '/api/public/negociacao-foto'
     | '/api/public/produto-foto'
+    | '/api/public/sb-cache'
     | '/api/public/widget'
     | '/admin/'
     | '/admin/copilot/$threadId'
@@ -607,6 +617,7 @@ export interface FileRouteTypes {
     | '/api/public/agenda'
     | '/api/public/negociacao-foto'
     | '/api/public/produto-foto'
+    | '/api/public/sb-cache'
     | '/api/public/widget'
     | '/admin'
     | '/admin/copilot/$threadId'
@@ -661,6 +672,7 @@ export interface FileRouteTypes {
     | '/api/public/agenda'
     | '/api/public/negociacao-foto'
     | '/api/public/produto-foto'
+    | '/api/public/sb-cache'
     | '/api/public/widget'
     | '/_authenticated/admin/'
     | '/_authenticated/admin/copilot/$threadId'
@@ -691,6 +703,7 @@ export interface RootRouteChildren {
   ApiPublicAgendaRoute: typeof ApiPublicAgendaRoute
   ApiPublicNegociacaoFotoRoute: typeof ApiPublicNegociacaoFotoRoute
   ApiPublicProdutoFotoRoute: typeof ApiPublicProdutoFotoRoute
+  ApiPublicSbCacheRoute: typeof ApiPublicSbCacheRoute
   ApiPublicWidgetRoute: typeof ApiPublicWidgetRoute
   ApiPublicHooksCatalogHygieneRoute: typeof ApiPublicHooksCatalogHygieneRoute
   ApiPublicHooksConsultEnrichRoute: typeof ApiPublicHooksConsultEnrichRoute
@@ -991,6 +1004,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicProdutoFotoRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/sb-cache': {
+      id: '/api/public/sb-cache'
+      path: '/api/public/sb-cache'
+      fullPath: '/api/public/sb-cache'
+      preLoaderRoute: typeof ApiPublicSbCacheRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/widget': {
       id: '/api/public/widget'
       path: '/api/public/widget'
@@ -1175,6 +1195,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicAgendaRoute: ApiPublicAgendaRoute,
   ApiPublicNegociacaoFotoRoute: ApiPublicNegociacaoFotoRoute,
   ApiPublicProdutoFotoRoute: ApiPublicProdutoFotoRoute,
+  ApiPublicSbCacheRoute: ApiPublicSbCacheRoute,
   ApiPublicWidgetRoute: ApiPublicWidgetRoute,
   ApiPublicHooksCatalogHygieneRoute: ApiPublicHooksCatalogHygieneRoute,
   ApiPublicHooksConsultEnrichRoute: ApiPublicHooksConsultEnrichRoute,

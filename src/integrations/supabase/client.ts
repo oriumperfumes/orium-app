@@ -2,6 +2,7 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 import { brokeredPreviewStorage } from './previewAuthStorage';
+import { cacheableRestPath, edgeCacheUrl } from '@/lib/sb-edge-cache';
 
 function isNewSupabaseApiKey(value: string): boolean {
   return value.startsWith('sb_publishable_') || value.startsWith('sb_secret_');
@@ -23,6 +24,17 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
     }
 
     headers.set('apikey', supabaseKey);
+
+    // Leitura pública do catálogo de um visitante anônimo: sai do cache da borda (60 s)
+    // em vez de ir ao banco. Logado (admin/cliente) nunca passa por aqui.
+    const auth = headers.get('Authorization');
+    if (typeof window !== 'undefined' && (!auth || auth === `Bearer ${supabaseKey}`)) {
+      const href = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const at = href.indexOf('/rest/v1/');
+      const method = init?.method ?? (typeof Request !== 'undefined' && input instanceof Request ? input.method : 'GET');
+      const path = at >= 0 ? cacheableRestPath(method, href.slice(at + '/rest/v1/'.length)) : null;
+      if (path) return fetch(edgeCacheUrl(path), { ...init, method, headers });
+    }
     return fetch(input, { ...init, headers });
   };
 }
