@@ -254,12 +254,16 @@ async function flushContactsOnce() {
  * Fotos de perfil: devagar (uma a cada ~2 s) para não parecer robô.
  * Miniatura ("preview") guardada no banco; renovada a cada 7 dias.
  */
+let avatarsIdleUntil = 0;
 async function fetchAvatars() {
   if (syncing || fetchingAvatars || state.status !== "online" || !sock) return;
+  if (Date.now() < avatarsIdleUntil) return;
   fetchingAvatars = true;
   try {
     const { data, error } = await db.rpc("wa_bridge_avatar_targets", { p_token: BRIDGE_TOKEN, p_limit: 10 });
     if (error) throw new Error(error.message);
+    // nada pendente: só volta a procurar daqui a 20 min
+    if (!data?.length) avatarsIdleUntil = Date.now() + 20 * 60_000;
     for (const t of data ?? []) {
       if (state.status !== "online") break;
       let jid = t.jid;
@@ -346,10 +350,11 @@ async function start() {
   });
 }
 
-setInterval(() => void heartbeat(), 20_000);
-setInterval(() => void drainOutbox(), 2_000);
+// menos consultas = banco livre para o site (o painel considera online até 90 s sem sinal)
+setInterval(() => void heartbeat(), 30_000);
+setInterval(() => void drainOutbox(), 3_000);
 setInterval(() => void flushContacts(), 5_000);
-setInterval(() => void fetchAvatars(), 15_000);
+setInterval(() => void fetchAvatars(), 30_000);
 setInterval(() => void drainMedia(), 3_000);
 process.on("unhandledRejection", (e) => console.error("erro:", e?.message ?? e));
 start().catch((e) => {

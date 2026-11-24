@@ -105,10 +105,17 @@ async function staffCtx(context: { supabase: any; userId: string }) {
 export const crmLeads = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    // consulta pesada (~1-2 s): a mesma pessoa reaproveita por 20 s (várias telas pedem juntas)
+    const uid = String((context as any).userId ?? "");
+    const hit = uid ? leadsMemo.get(uid) : undefined;
+    if (hit && Date.now() - hit.at < 20_000) return hit.rows;
     const { data, error } = await (context.supabase as any).rpc("crm_leads");
     if (error) throw new Error(error.message);
-    return (data ?? []) as LeadRaw[];
+    const rows = (data ?? []) as LeadRaw[];
+    if (uid) leadsMemo.set(uid, { at: Date.now(), rows });
+    return rows;
   });
+const leadsMemo = new Map<string, { at: number; rows: LeadRaw[] }>();
 
 export const waInbox = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])

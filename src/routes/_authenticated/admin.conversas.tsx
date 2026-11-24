@@ -223,7 +223,7 @@ function useThread(jid: string) {
   return useQuery({
     queryKey: ["wa-thread", jid],
     queryFn: () => waThread({ data: { jid } }),
-    staleTime: 3_000,
+    staleTime: 10_000,
   });
 }
 function useQuotes(jid: string, msgs: WaMessage[] | undefined) {
@@ -241,6 +241,8 @@ function useQuotes(jid: string, msgs: WaMessage[] | undefined) {
     queryFn: () => crmPerfumeQuote({ data: { text: inboundText } }),
     enabled: !!inboundText,
     staleTime: 60_000,
+    // mensagem nova chegou: mantém os perfumes na tela enquanto atualiza
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[1] === jid ? prev : undefined),
   });
 }
 
@@ -760,10 +762,20 @@ function ContactRow({
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["wa-inbox"] }),
   });
   const waiting = c.last_from_me === false;
+  // passou o mouse / encostou: já começa a carregar a conversa
+  const warm = () =>
+    void qc.prefetchQuery({
+      queryKey: ["wa-thread", c.jid],
+      queryFn: () => waThread({ data: { jid: c.jid } }),
+      staleTime: 15_000,
+    });
   return (
     <div
       role="button"
       tabIndex={0}
+      onMouseEnter={warm}
+      onFocus={warm}
+      onTouchStart={warm}
       onClick={() => {
         if (press.current?.fired) return;
         onOpen();
@@ -1723,7 +1735,7 @@ function SummaryTab({ contact, lead }: { contact: WaContact; lead: Lead | null }
   const q = useQuery({
     queryKey: ["wa-insight", contact.jid],
     queryFn: () => waInsight({ data: { jid: contact.jid } }),
-    staleTime: 30_000,
+    staleTime: 2 * 60_000,
   });
   const run = useMutation({
     mutationFn: () => waAnalyze({ data: { jid: contact.jid } }),

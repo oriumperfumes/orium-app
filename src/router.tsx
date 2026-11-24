@@ -1,4 +1,5 @@
 import { QueryClient } from "@tanstack/react-query";
+import { persistCrmQueries } from "./lib/query-persist";
 import { createRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
 
@@ -10,6 +11,9 @@ export const getRouter = () => {
       queries: { staleTime: 30_000, gcTime: 10 * 60_000, refetchOnWindowFocus: false, retry: 1 },
     },
   });
+
+  // CRM: abre na hora com a última versão salva neste aparelho e atualiza por trás
+  persistCrmQueries(queryClient);
 
   const router = createRouter({
     routeTree,
