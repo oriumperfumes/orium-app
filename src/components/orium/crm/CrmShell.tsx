@@ -8,6 +8,7 @@ import { useEffect, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BarChart3,
+  BrainCircuit,
   LayoutGrid,
   MessagesSquare,
   Radio,
@@ -21,6 +22,7 @@ export const CRM_ITEMS = [
   { to: "/admin/leads", label: "Hoje", icon: LayoutGrid },
   { to: "/admin/conversas", label: "Conversas", icon: MessagesSquare, badge: true },
   { to: "/admin/funil", label: "Funil", icon: RouteIcon },
+  { to: "/admin/inteligencia", label: "Inteligência", icon: BrainCircuit },
   { to: "/admin/clientes", label: "Clientes", icon: Users },
   { to: "/admin/aovivo", label: "Ao vivo", icon: Radio },
   { to: "/admin/conversao", label: "Conversão", icon: BarChart3 },

@@ -44,6 +44,18 @@ export type InsightData = {
   proximo_passo: string;
   mensagem_sugerida: string;
   alerta: string;
+  /** perfumes citados ligados ao catálogo (preço e estoque reais) — preenchido pelo sistema */
+  catalogo?: Array<{
+    nome: string;
+    product_id: string;
+    produto: string;
+    marca: string | null;
+    em_estoque: boolean;
+    estoque: number;
+    preco: number | null;
+    imagem: string | null;
+    slug: string | null;
+  }>;
 };
 
 const SYSTEM = `Você é o gerente de vendas da Orium Perfumes (perfumes árabes originais, Rio de Janeiro) analisando uma conversa de WhatsApp entre a loja ("Orium") e um cliente.
@@ -182,6 +194,20 @@ export async function analyzeConversation(db: any, jid: string): Promise<Insight
   const lastTs = history[history.length - 1]!.ts;
   const name = contact.customer?.name || contact.saved_name || contact.push_name || null;
 
+  // memória: análise anterior + compras registradas (app e loja)
+  const [{ data: prev }, purchases] = await Promise.all([
+    db.from("wa_insights").select("resumo, status, data").eq("jid", jid).maybeSingle(),
+    contact.customer_id ? purchasesOf(db, contact.customer_id) : Promise.resolve([] as string[]),
+  ]);
+  const memory = [
+    prev?.resumo ? `Análise anterior desta conversa: ${prev.resumo}` : null,
+    purchases.length
+      ? `Compras registradas do cliente (mais recentes primeiro): ${purchases.join("; ")}`
+      : "Compras registradas: nenhuma.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
   const transcript = history
     .map((m) => `[${fmtTs(m.ts)}] ${m.from_me ? "Orium" : "Cliente"}: ${m.body || `[${m.kind}]`}`)
     .join("\n");
@@ -192,23 +218,22 @@ export async function analyzeConversation(db: any, jid: string): Promise<Insight
       feature: "crm_insight",
       profile: "advanced",
       system: SYSTEM,
-      prompt: `Cliente: ${name ?? "sem nome"}\nAgora: ${fmtTs(new Date().toISOString())}\n\nConversa:\n${transcript.slice(-14000)}`,
+      prompt: `Cliente: ${name ?? "sem nome"}\nAgora: ${fmtTs(new Date().toISOString())}\n${memory}\n\nConversa (as mais recentes no fim):\n${transcript.slice(-14000)}`,
       schema: SCHEMA,
     });
   } catch (e) {
-    await db
-      .from("wa_insights")
-      .upsert(
-        {
-          jid,
-          analyzed_at: new Date().toISOString(),
-          error: e instanceof Error ? e.message.slice(0, 300) : "erro",
-        },
-        { onConflict: "jid" },
-      );
+    await db.from("wa_insights").upsert(
+      {
+        jid,
+        analyzed_at: new Date().toISOString(),
+        error: e instanceof Error ? e.message.slice(0, 300) : "erro",
+      },
+      { onConflict: "jid" },
+    );
     throw e;
   }
   out.chance_compra = Math.max(0, Math.min(100, Math.round(Number(out.chance_compra) || 0)));
+  out.catalogo = await linkCatalog(db, out.perfumes ?? []).catch(() => []);
 
   // interesse real e sem ficha: cria a ficha do cliente (o gatilho liga a conversa)
   let customerId: string | null = contact.customer_id ?? null;
@@ -308,4 +333,91 @@ export async function runInsightsBatch(db: any, limit = 8) {
     }
   }
   return { due: (due ?? []).length, analyzed: ok, failed };
+}
+
+/** Últimas compras do cliente (app + loja física), em texto curto para a IA. */
+async function purchasesOf(db: any, customerId: string): Promise<string[]> {
+  const [{ data: online }, { data: store }] = await Promise.all([
+    db
+      .from("catalog_orders")
+      .select(
+        "created_at, status, final_total, catalog_order_items(product_name_snapshot, decant_ml, quantity)",
+      )
+      .eq("crm_customer_id", customerId)
+      .is("deleted_at", null)
+      .neq("status", "cancelado")
+      .order("created_at", { ascending: false })
+      .limit(5),
+    db
+      .from("store_sales")
+      .select("sold_at, total, store_sale_items(product_name_snapshot, decant_ml, quantity)")
+      .eq("customer_id", customerId)
+      .is("deleted_at", null)
+      .order("sold_at", { ascending: false })
+      .limit(5),
+  ]);
+  const day = (iso: string) =>
+    new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+  const items = (rows: any[]) =>
+    (rows ?? [])
+      .map(
+        (i) =>
+          `${i.quantity > 1 ? `${i.quantity}x ` : ""}${i.product_name_snapshot}${i.decant_ml ? ` (decant ${i.decant_ml}ml)` : ""}`,
+      )
+      .join(", ");
+  return [
+    ...((online ?? []) as any[]).map((o) => ({
+      at: o.created_at,
+      t: `${day(o.created_at)}: ${items(o.catalog_order_items)} (R$ ${Math.round(Number(o.final_total ?? 0))})`,
+    })),
+    ...((store ?? []) as any[]).map((o) => ({
+      at: o.sold_at,
+      t: `${day(o.sold_at)} na loja: ${items(o.store_sale_items)} (R$ ${Math.round(Number(o.total ?? 0))})`,
+    })),
+  ]
+    .sort((a, b) => +new Date(b.at) - +new Date(a.at))
+    .slice(0, 6)
+    .map((x) => x.t);
+}
+
+/** Liga os perfumes que o cliente citou aos produtos do catálogo (preço e estoque reais). */
+async function linkCatalog(
+  db: any,
+  perfumes: InsightData["perfumes"],
+): Promise<NonNullable<InsightData["catalogo"]>> {
+  if (!perfumes.length) return [];
+  const { mentionIndex } = await import("@/lib/crm-wa.functions");
+  const { findMentions } = await import("@/lib/perfume-mentions");
+  const idx = await mentionIndex(db);
+  const hits = perfumes
+    .slice(0, 8)
+    .map((p) => ({ nome: p.nome, m: findMentions(p.nome, idx, 1)[0] }))
+    .filter((x) => x.m);
+  if (!hits.length) return [];
+  const { data: rows } = await db
+    .from("products")
+    .select("id, canonical_name, brand, in_stock, local_stock, retail_price, image_url, slug")
+    .in(
+      "id",
+      hits.map((h) => h.m!.productId),
+    );
+  const byId = new Map(((rows ?? []) as any[]).map((r) => [r.id, r]));
+  return hits
+    .map((h) => {
+      const r = byId.get(h.m!.productId);
+      if (!r) return null;
+      const estoque = Number(r.local_stock ?? 0);
+      return {
+        nome: h.nome,
+        product_id: r.id,
+        produto: r.canonical_name,
+        marca: r.brand ?? null,
+        em_estoque: estoque > 0 || !!r.in_stock,
+        estoque,
+        preco: r.retail_price != null ? Number(r.retail_price) : null,
+        imagem: r.image_url ?? null,
+        slug: r.slug ?? null,
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => !!x);
 }

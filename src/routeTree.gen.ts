@@ -35,6 +35,7 @@ import { Route as AuthenticatedAdminFornecedoresRouteImport } from './routes/_au
 import { Route as AuthenticatedAdminFornecedoresRotaRouteImport } from './routes/_authenticated/admin.fornecedores-rota'
 import { Route as AuthenticatedAdminFunilRouteImport } from './routes/_authenticated/admin.funil'
 import { Route as AuthenticatedAdminIntegridadeRouteImport } from './routes/_authenticated/admin.integridade'
+import { Route as AuthenticatedAdminInteligenciaRouteImport } from './routes/_authenticated/admin.inteligencia'
 import { Route as AuthenticatedAdminLeadsRouteImport } from './routes/_authenticated/admin.leads'
 import { Route as AuthenticatedAdminManutencaoRouteImport } from './routes/_authenticated/admin.manutencao'
 import { Route as AuthenticatedAdminMarcasRouteImport } from './routes/_authenticated/admin.marcas'
@@ -199,6 +200,12 @@ const AuthenticatedAdminIntegridadeRoute =
     path: '/integridade',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAdminInteligenciaRoute =
+  AuthenticatedAdminInteligenciaRouteImport.update({
+    id: '/inteligencia',
+    path: '/inteligencia',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
 const AuthenticatedAdminLeadsRoute = AuthenticatedAdminLeadsRouteImport.update({
   id: '/leads',
   path: '/leads',
@@ -357,6 +364,7 @@ export interface FileRoutesByFullPath {
   '/admin/fornecedores-rota': typeof AuthenticatedAdminFornecedoresRotaRoute
   '/admin/funil': typeof AuthenticatedAdminFunilRoute
   '/admin/integridade': typeof AuthenticatedAdminIntegridadeRoute
+  '/admin/inteligencia': typeof AuthenticatedAdminInteligenciaRoute
   '/admin/leads': typeof AuthenticatedAdminLeadsRoute
   '/admin/manutencao': typeof AuthenticatedAdminManutencaoRoute
   '/admin/marcas': typeof AuthenticatedAdminMarcasRoute
@@ -406,6 +414,7 @@ export interface FileRoutesByTo {
   '/admin/fornecedores-rota': typeof AuthenticatedAdminFornecedoresRotaRoute
   '/admin/funil': typeof AuthenticatedAdminFunilRoute
   '/admin/integridade': typeof AuthenticatedAdminIntegridadeRoute
+  '/admin/inteligencia': typeof AuthenticatedAdminInteligenciaRoute
   '/admin/leads': typeof AuthenticatedAdminLeadsRoute
   '/admin/manutencao': typeof AuthenticatedAdminManutencaoRoute
   '/admin/marcas': typeof AuthenticatedAdminMarcasRoute
@@ -458,6 +467,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/fornecedores-rota': typeof AuthenticatedAdminFornecedoresRotaRoute
   '/_authenticated/admin/funil': typeof AuthenticatedAdminFunilRoute
   '/_authenticated/admin/integridade': typeof AuthenticatedAdminIntegridadeRoute
+  '/_authenticated/admin/inteligencia': typeof AuthenticatedAdminInteligenciaRoute
   '/_authenticated/admin/leads': typeof AuthenticatedAdminLeadsRoute
   '/_authenticated/admin/manutencao': typeof AuthenticatedAdminManutencaoRoute
   '/_authenticated/admin/marcas': typeof AuthenticatedAdminMarcasRoute
@@ -510,6 +520,7 @@ export interface FileRouteTypes {
     | '/admin/fornecedores-rota'
     | '/admin/funil'
     | '/admin/integridade'
+    | '/admin/inteligencia'
     | '/admin/leads'
     | '/admin/manutencao'
     | '/admin/marcas'
@@ -559,6 +570,7 @@ export interface FileRouteTypes {
     | '/admin/fornecedores-rota'
     | '/admin/funil'
     | '/admin/integridade'
+    | '/admin/inteligencia'
     | '/admin/leads'
     | '/admin/manutencao'
     | '/admin/marcas'
@@ -610,6 +622,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/fornecedores-rota'
     | '/_authenticated/admin/funil'
     | '/_authenticated/admin/integridade'
+    | '/_authenticated/admin/inteligencia'
     | '/_authenticated/admin/leads'
     | '/_authenticated/admin/manutencao'
     | '/_authenticated/admin/marcas'
@@ -845,6 +858,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminIntegridadeRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/admin/inteligencia': {
+      id: '/_authenticated/admin/inteligencia'
+      path: '/inteligencia'
+      fullPath: '/admin/inteligencia'
+      preLoaderRoute: typeof AuthenticatedAdminInteligenciaRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/_authenticated/admin/leads': {
       id: '/_authenticated/admin/leads'
       path: '/leads'
@@ -1036,6 +1056,7 @@ interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminFornecedoresRotaRoute: typeof AuthenticatedAdminFornecedoresRotaRoute
   AuthenticatedAdminFunilRoute: typeof AuthenticatedAdminFunilRoute
   AuthenticatedAdminIntegridadeRoute: typeof AuthenticatedAdminIntegridadeRoute
+  AuthenticatedAdminInteligenciaRoute: typeof AuthenticatedAdminInteligenciaRoute
   AuthenticatedAdminLeadsRoute: typeof AuthenticatedAdminLeadsRoute
   AuthenticatedAdminManutencaoRoute: typeof AuthenticatedAdminManutencaoRoute
   AuthenticatedAdminMarcasRoute: typeof AuthenticatedAdminMarcasRoute
@@ -1065,6 +1086,7 @@ const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
     AuthenticatedAdminFornecedoresRotaRoute,
   AuthenticatedAdminFunilRoute: AuthenticatedAdminFunilRoute,
   AuthenticatedAdminIntegridadeRoute: AuthenticatedAdminIntegridadeRoute,
+  AuthenticatedAdminInteligenciaRoute: AuthenticatedAdminInteligenciaRoute,
   AuthenticatedAdminLeadsRoute: AuthenticatedAdminLeadsRoute,
   AuthenticatedAdminManutencaoRoute: AuthenticatedAdminManutencaoRoute,
   AuthenticatedAdminMarcasRoute: AuthenticatedAdminMarcasRoute,

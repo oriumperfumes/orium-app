@@ -297,7 +297,7 @@ export const waNewBridgeToken = createServerFn({ method: "POST" })
 let mentionCache: { at: number; index: import("@/lib/perfume-mentions").MentionIndex } | null =
   null;
 
-async function mentionIndex(db: any) {
+export async function mentionIndex(db: any) {
   if (mentionCache && Date.now() - mentionCache.at < 5 * 60_000) return mentionCache.index;
   const { buildMentionIndex } = await import("@/lib/perfume-mentions");
   const { data: products } = await db
@@ -714,4 +714,155 @@ export const waAnalyze = createServerFn({ method: "POST" })
       .eq("jid", data.jid)
       .maybeSingle();
     return (row ?? null) as WaInsight | null;
+  });
+
+// ---------- inteligência: visão geral de todas as conversas analisadas ----------
+
+export type InsightsOverview = {
+  total: number;
+  last7d: number;
+  avgChance: number | null;
+  byStatus: Record<string, number>;
+  motivos: Array<{ key: string; n: number }>;
+  demand: Array<{
+    key: string;
+    name: string;
+    product_id: string | null;
+    image: string | null;
+    price: number | null;
+    inStock: boolean | null;
+    stock: number;
+    conversas: number;
+    querem: number;
+    compraram: number;
+    recusaram: number;
+  }>;
+  estilos: Array<{ key: string; n: number }>;
+  ocasioes: Array<{ key: string; n: number }>;
+  objecoes: Array<{ key: string; n: number }>;
+  presente: number;
+  recover: Array<{
+    jid: string;
+    name: string;
+    avatar: string | null;
+    status: string;
+    motivo: string;
+    detalhe: string;
+    chance: number;
+    mensagem: string;
+    at: string;
+  }>;
+  alerts: Array<{ jid: string; name: string; alerta: string; at: string }>;
+};
+
+export const crmInsightsOverview = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data, error } = await (context.supabase as any)
+      .from("wa_insights")
+      .select(
+        "jid, analyzed_at, status, chance, motivo, resumo, data, contact:wa_contacts(push_name, saved_name, phone_normalized, avatar, customer:crm_customers(name))",
+      )
+      .not("resumo", "is", null)
+      .order("analyzed_at", { ascending: false })
+      .limit(1500);
+    if (error) throw new Error(error.message);
+    const rows = (data ?? []) as any[];
+    const now = Date.now();
+    const count = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1);
+    const top = (m: Map<string, number>, n: number) =>
+      [...m.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, n)
+        .map(([key, n]) => ({ key, n }));
+    const byStatus: Record<string, number> = {};
+    const motivos = new Map<string, number>();
+    const estilos = new Map<string, number>();
+    const ocasioes = new Map<string, number>();
+    const objecoes = new Map<string, number>();
+    const demand = new Map<string, InsightsOverview["demand"][number]>();
+    let chanceSum = 0;
+    let chanceN = 0;
+    let presente = 0;
+    const recover: InsightsOverview["recover"] = [];
+    const alerts: InsightsOverview["alerts"] = [];
+    const nameOf = (r: any) =>
+      r.contact?.customer?.name ||
+      r.contact?.saved_name ||
+      r.contact?.push_name ||
+      r.contact?.phone_normalized ||
+      "Contato";
+
+    for (const r of rows) {
+      const d = (r.data ?? {}) as Partial<import("@/lib/wa-insights.server").InsightData>;
+      byStatus[r.status ?? "?"] = (byStatus[r.status ?? "?"] ?? 0) + 1;
+      if (r.status === "sem_interesse") continue;
+      if (r.motivo && r.motivo !== "nao_se_aplica" && r.status !== "comprou")
+        count(motivos, r.motivo);
+      if (r.status !== "comprou" && r.status !== "pos_venda" && r.chance != null) {
+        chanceSum += Number(r.chance);
+        chanceN++;
+      }
+      for (const e of d.estilo ?? []) count(estilos, e.trim().toLowerCase());
+      if (d.ocasiao) count(ocasioes, d.ocasiao.trim().toLowerCase());
+      for (const o of d.objecoes ?? []) count(objecoes, o.trim().toLowerCase());
+      if (d.para_quem === "presente") presente++;
+      const linked = new Map((d.catalogo ?? []).map((c) => [c.nome.toLowerCase(), c]));
+      for (const p of d.perfumes ?? []) {
+        const c = linked.get(p.nome.toLowerCase());
+        const key = c?.product_id ?? p.nome.trim().toLowerCase();
+        const cur = demand.get(key) ?? {
+          key,
+          name: c?.produto ?? p.nome,
+          product_id: c?.product_id ?? null,
+          image: c?.imagem ?? null,
+          price: c?.preco ?? null,
+          inStock: c ? c.em_estoque : null,
+          stock: c?.estoque ?? 0,
+          conversas: 0,
+          querem: 0,
+          compraram: 0,
+          recusaram: 0,
+        };
+        cur.conversas++;
+        if (p.interesse === "quer" || p.interesse === "perguntou") cur.querem++;
+        if (p.interesse === "comprou") cur.compraram++;
+        if (p.interesse === "recusou") cur.recusaram++;
+        demand.set(key, cur);
+      }
+      if (
+        ["interessado", "negociando", "perdido", "so_duvida"].includes(r.status) &&
+        d.mensagem_sugerida &&
+        now - new Date(r.analyzed_at).getTime() < 30 * 86_400_000
+      )
+        recover.push({
+          jid: r.jid,
+          name: nameOf(r),
+          avatar: r.contact?.avatar ?? null,
+          status: r.status,
+          motivo: r.motivo ?? "",
+          detalhe: d.motivo_detalhe ?? "",
+          chance: Number(r.chance ?? 0),
+          mensagem: d.mensagem_sugerida,
+          at: r.analyzed_at,
+        });
+      if (d.alerta && now - new Date(r.analyzed_at).getTime() < 14 * 86_400_000)
+        alerts.push({ jid: r.jid, name: nameOf(r), alerta: d.alerta, at: r.analyzed_at });
+    }
+    return {
+      total: rows.length,
+      last7d: rows.filter((r) => now - new Date(r.analyzed_at).getTime() < 7 * 86_400_000).length,
+      avgChance: chanceN ? Math.round(chanceSum / chanceN) : null,
+      byStatus,
+      motivos: top(motivos, 8),
+      demand: [...demand.values()]
+        .sort((a, b) => b.conversas - a.conversas || b.querem - a.querem)
+        .slice(0, 15),
+      estilos: top(estilos, 10),
+      ocasioes: top(ocasioes, 6),
+      objecoes: top(objecoes, 8),
+      presente,
+      recover: recover.sort((a, b) => b.chance - a.chance).slice(0, 20),
+      alerts: alerts.slice(0, 10),
+    } satisfies InsightsOverview;
   });

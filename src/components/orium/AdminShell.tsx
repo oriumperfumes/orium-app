@@ -103,6 +103,7 @@ export const NAV_HUBS: NavHub[] = [
       { to: "/admin/leads", label: "Hoje" },
       { to: "/admin/conversas", label: "Conversas" },
       { to: "/admin/funil", label: "Funil" },
+      { to: "/admin/inteligencia", label: "Inteligência" },
       { to: "/admin/clientes", label: "Clientes" },
       { to: "/admin/aovivo", label: "Ao vivo" },
       { to: "/admin/conversao", label: "Conversão" },
