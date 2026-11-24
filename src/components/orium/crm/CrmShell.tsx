@@ -17,6 +17,7 @@ import {
   Users,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { onAdminSignal } from "@/lib/admin-signal";
 import { cn } from "@/lib/utils";
 
 export const CRM_ITEMS = [
@@ -59,18 +60,11 @@ function usePulse() {
   });
   useEffect(() => {
     const bump = throttleByKey(() => void qc.invalidateQueries({ queryKey: ["crm-pulse"] }), 3000);
-    const ch = supabase
-      .channel("orium-crm-pulse")
-      .on("postgres_changes", { event: "*", schema: "public", table: "wa_contacts" }, () => bump())
-      .on("postgres_changes", { event: "*", schema: "public", table: "wa_bridge_state" }, (p) => {
-        // sinal de vida a cada 20 s: só recarrega quando o status muda
-        const st = (p.new as { status?: string }).status;
-        if (st !== qc.getQueryData<Pulse>(["crm-pulse"])?.status) bump();
-      })
-      .subscribe();
+    // sinal leve: não lidas mudaram ou a ponte mudou de status (o sinal de vida não acorda a tela)
+    const off = onAdminSignal(["wa_contacts", "wa_bridge_state"], () => bump());
     return () => {
       bump.cancel();
-      void supabase.removeChannel(ch);
+      off();
     };
   }, [qc]);
   return q.data;
@@ -81,7 +75,7 @@ export function bridgeOnline(p?: { status: string; lastSeen: string | null }) {
     !!p &&
     p.status === "online" &&
     !!p.lastSeen &&
-    Date.now() - new Date(p.lastSeen).getTime() < 90_000
+    Date.now() - new Date(p.lastSeen).getTime() < 150_000
   );
 }
 

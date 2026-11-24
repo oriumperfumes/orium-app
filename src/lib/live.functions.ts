@@ -131,136 +131,44 @@ export const livePing = createServerFn({ method: "POST" })
       const { verifiedViewerId } = await import("@/lib/viewer.server");
       const userId = await verifiedViewerId();
 
-      const { data: visitor } = await db
-        .from("analytics_visitors")
-        .select("customer_id, first_source, device, sessions_count, first_seen_at")
-        .eq("visitor_id", visitorId)
-        .maybeSingle();
-
-      let customerId = visitor?.customer_id ?? null;
-      let displayName: string | null = null;
-      let phone: string | null = null;
-
-      if (!customerId && userId) {
-        const { data: byUser } = await db
-          .from("crm_customers")
-          .select("id")
-          .eq("user_id", userId)
-          .maybeSingle();
-        customerId = byUser?.id ?? null;
-      }
-      if (customerId) {
-        const { data: c } = await db
-          .from("crm_customers")
-          .select("name, phone")
-          .eq("id", customerId)
-          .maybeSingle();
-        displayName = text(c?.name, 80);
-        phone = text(c?.phone, 20);
-      }
-
       const cartItems = int(data.cartItems);
       const favorites = int(data.favorites);
       const views = int(data.views);
       const inCheckout = !!data.inCheckout;
 
-      const row = {
-        session_key: sessionKey,
-        visitor_id: visitorId,
-        customer_id: customerId,
-        user_id: userId,
-        identified: !!displayName,
-        display_name: displayName,
-        phone,
-        device: text(data.device, 20) ?? visitor?.device ?? null,
-        source: text(data.source, 60) ?? visitor?.first_source ?? null,
-        current_route: text(data.route, 200),
-        current_product_id: uuid(data.productId),
-        current_product_name: text(data.productName, 120),
-        current_variant: data.variant === "DECANT" ? "DECANT" : data.variant === "FULL" ? "FULL" : null,
-        current_decant_ml: data.decantMl ? int(data.decantMl) : null,
-        cart_items: cartItems,
-        cart_total: num(data.cartTotal),
-        favorites_count: favorites,
-        views_count: views,
-        in_checkout: inCheckout,
-        intent: intentOf({
-          inCheckout,
-          cartItems,
-          favorites,
-          views,
-          negotiation: !!data.negotiation,
-        }),
-        browser: text(data.context?.browser, 40),
-        os: text(data.context?.os, 40),
-        standalone: typeof data.context?.standalone === "boolean" ? data.context.standalone : null,
-        viewport: text(data.context?.viewport, 20),
-        timezone: text(data.context?.timezone, 60),
-        language: text(data.context?.language, 20),
-        theme: text(data.context?.theme, 12),
-        connection: text(data.context?.connection, 20),
-        first_source: visitor?.first_source ?? null,
-        visitor_sessions: visitor?.sessions_count ?? null,
-        visitor_first_seen: visitor?.first_seen_at ?? null,
-        last_query: text(data.query, 120),
-        last_activity_at: data.ended
-          ? new Date(Date.now() - 10 * 60 * 1000).toISOString()
-          : new Date().toISOString(),
-      };
-
-      // O nome do perfume é resolvido no servidor a partir do catálogo.
-      if (row.current_product_id && !row.current_product_name) {
-        const { data: p } = await db
-          .from("products")
-          .select("canonical_name")
-          .eq("id", row.current_product_id)
-          .maybeSingle();
-        row.current_product_name = p?.canonical_name ?? null;
-      }
-
-      // Última ação útil: o perfume visto antes, preservado mesmo ao voltar ao catálogo.
-      const { data: prev } = await db
-        .from("live_sessions")
-        .select("current_product_name, last_action")
-        .eq("session_key", sessionKey)
-        .maybeSingle();
-      const lastAction =
-        row.current_product_name
-          ? `Visualizou ${row.current_product_name}`
-          : prev?.current_product_name
-            ? `Visualizou ${prev.current_product_name}`
-            : (prev?.last_action ?? null);
-
-      await db
-        .from("live_sessions")
-        .upsert({ ...row, is_active: !data.ended, last_action: lastAction } as never, { onConflict: "session_key" });
-
-      // UMA PESSOA + UM APARELHO = UM CARD: sessões antigas da mesma identidade
-      // no mesmo tipo de aparelho deixam de aparecer no Ao Vivo.
-      if (!data.ended) {
-        let others = db
-          .from("live_sessions")
-          .update({ is_active: false } as never)
-          .eq("is_active", true)
-          .neq("session_key", sessionKey);
-        if (customerId) others = others.eq("customer_id", customerId);
-        else if (userId) others = others.eq("user_id", userId);
-        else others = others.eq("visitor_id", visitorId);
-        others = row.device ? others.eq("device", row.device) : others.is("device", null);
-        await others;
-      }
-
-
-
-      const { data: pending } = await db
-        .from("live_interactions")
-        .select("id, kind, message, coupon_code, product_id, created_at, seen_at, accepted_at, dismissed_at")
-        .eq("session_key", sessionKey)
-        .is("dismissed_at", null)
-        .is("accepted_at", null)
-        .order("created_at", { ascending: false })
-        .limit(3);
-
+      // Tudo numa chamada só (live_ping): o banco resolve cliente, nome do perfume
+      // e não grava nada quando a batida não traz novidade.
+      const { data: pending, error } = await (db as any).rpc("live_ping", {
+        p_user: userId ?? null,
+        p: {
+          session_key: sessionKey,
+          visitor_id: visitorId,
+          ended: !!data.ended,
+          device: text(data.device, 20),
+          source: text(data.source, 60),
+          current_route: text(data.route, 200),
+          current_product_id: uuid(data.productId),
+          current_product_name: text(data.productName, 120),
+          current_variant: data.variant === "DECANT" ? "DECANT" : data.variant === "FULL" ? "FULL" : null,
+          current_decant_ml: data.decantMl ? int(data.decantMl) : null,
+          cart_items: cartItems,
+          cart_total: num(data.cartTotal),
+          favorites_count: favorites,
+          views_count: views,
+          in_checkout: inCheckout,
+          intent: intentOf({ inCheckout, cartItems, favorites, views, negotiation: !!data.negotiation }),
+          browser: text(data.context?.browser, 40),
+          os: text(data.context?.os, 40),
+          standalone: typeof data.context?.standalone === "boolean" ? data.context.standalone : null,
+          viewport: text(data.context?.viewport, 20),
+          timezone: text(data.context?.timezone, 60),
+          language: text(data.context?.language, 20),
+          theme: text(data.context?.theme, 12),
+          connection: text(data.context?.connection, 20),
+          last_query: text(data.query, 120),
+        },
+      });
+      if (error) throw error;
       return { ok: true as const, pending: (pending ?? []) as LiveInteraction[] };
     } catch {
       return { ok: false as const, pending: [] as LiveInteraction[] };

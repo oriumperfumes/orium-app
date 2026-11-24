@@ -230,6 +230,7 @@ export const KLCosmeticosAdapter: SupplierAdapter = {
     return {
       items,
       nextCursor: start + CHUNK >= all.length ? null : start + CHUNK,
+      cursorKind: "index",
       pages: 1,
       total: all.length,
       categories: fetched.categories,

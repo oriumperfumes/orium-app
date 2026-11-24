@@ -69,7 +69,7 @@ import { WhatsMark } from "@/components/orium/crm/CrmShell";
 import { MediaContent, isMediaKind } from "@/components/orium/crm/MediaBubble";
 import { ReplyIdeal } from "@/components/orium/crm/ReplyIdeal";
 import { Avatar, TEMP, ago, fmtPhone } from "@/components/orium/crm/shared";
-import { supabase } from "@/integrations/supabase/client";
+import { onAdminSignal } from "@/lib/admin-signal";
 import {
   TASKS,
   enrich,
@@ -296,44 +296,28 @@ function ConversasPage() {
       () => void qc.invalidateQueries({ queryKey: ["wa-inbox"] }),
       2000,
     );
-    const threadBump = throttleByKey(
-      (jid) => void qc.invalidateQueries({ queryKey: ["wa-thread", jid] }),
-      1200,
-    );
-    const insightBump = throttleByKey((jid) => {
-      void qc.invalidateQueries({ queryKey: ["wa-insight", jid] });
+    const threadBump = throttleByKey(() => openThreads(), 1200);
+    const insightBump = throttleByKey(() => openInsights(), 3000);
+    // Sinal leve (sem dados): só a conversa aberta na tela busca de novo.
+    const openThreads = () =>
+      void qc.invalidateQueries({ queryKey: ["wa-thread"], refetchType: "active" });
+    const openInsights = () => {
+      void qc.invalidateQueries({ queryKey: ["wa-insight"], refetchType: "active" });
       void qc.invalidateQueries({ queryKey: ["crm-leads"] });
-    }, 3000);
-    const jidOf = (p: { new: unknown }) => (p.new as { jid?: string })?.jid ?? "";
-    const ch = supabase
-      .channel("orium-wa-admin")
-      .on("postgres_changes", { event: "*", schema: "public", table: "wa_contacts" }, (p) => {
-        inboxBump();
-        // mensagem nova muda a conversa: atualiza o chat aberto dela
-        const jid = jidOf(p);
-        if (jid && qc.getQueryState(["wa-thread", jid])) threadBump(jid);
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "wa_bridge_state" }, (p) => {
-        // o sinal de vida (a cada 20 s) não muda nada na tela: só recarrega se status/QR mudou
-        const n = p.new as { status?: string; qr?: string | null };
-        const cur = qc.getQueryData<{ bridge?: { status?: string; qr?: string | null } }>([
-          "wa-inbox",
-        ])?.bridge;
-        if (!cur || n.status !== cur.status || (n.qr ?? null) !== (cur.qr ?? null)) inboxBump();
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "wa_insights" }, (p) =>
-        insightBump(jidOf(p)),
-      )
-      .on("postgres_changes", { event: "*", schema: "public", table: "wa_outbox" }, (p) => {
-        const jid = jidOf(p);
-        if (jid) threadBump(jid);
-      })
-      .subscribe();
+    };
+    const off = onAdminSignal(
+      ["wa_contacts", "wa_outbox", "wa_bridge_state", "wa_insights"],
+      (ev) => {
+        if (ev === "wa_contacts" || ev === "wa_bridge_state") inboxBump();
+        if (ev === "wa_contacts" || ev === "wa_outbox") threadBump("aberta");
+        if (ev === "wa_insights") insightBump("aberta");
+      },
+    );
     return () => {
       inboxBump.cancel();
       threadBump.cancel();
       insightBump.cancel();
-      void supabase.removeChannel(ch);
+      off();
     };
   }, [qc]);
 
@@ -873,7 +857,7 @@ function ContactRow({
 
 function BridgeStrip({ bridge, loading }: { bridge?: WaBridge; loading: boolean }) {
   if (loading || !bridge) return null;
-  const stale = !bridge.last_seen || Date.now() - new Date(bridge.last_seen).getTime() > 90_000;
+  const stale = !bridge.last_seen || Date.now() - new Date(bridge.last_seen).getTime() > 150_000;
   if (bridge.status === "online" && !stale) return null;
   const label =
     bridge.status === "qr" && !stale

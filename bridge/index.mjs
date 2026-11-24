@@ -167,7 +167,8 @@ async function drainMedia() {
 let ingestChain = Promise.resolve();
 let syncing = 0; // lotes de histórico ainda na fila (fotos/mídia esperam)
 function ingest(rows, { history = false } = {}) {
-  const size = history ? 80 : 200;
+  // histórico: lotes pequenos com pausa de 2 s (≈1.500 mensagens/min no máximo) para o banco Nano respirar
+  const size = history ? 50 : 200;
   const chunks = [];
   for (let i = 0; i < rows.length; i += size) chunks.push(rows.slice(i, i + size));
   if (history) syncing += chunks.length;
@@ -182,7 +183,7 @@ function ingest(rows, { history = false } = {}) {
       }
       if (history) {
         syncing--;
-        await sleep(600); // respiro para o site
+        await sleep(2000); // respiro para o site
       }
     }
   });
@@ -191,9 +192,15 @@ function ingest(rows, { history = false } = {}) {
 }
 
 /** Fila de saída: uma mensagem por vez, com pausa humana entre elas. */
+let outboxAgain = false;
 async function drainOutbox() {
-  if (sending || state.status !== "online" || !sock) return;
+  if (sending) {
+    outboxAgain = true; // chegou aviso no meio do envio: confere de novo ao terminar
+    return;
+  }
+  if (state.status !== "online" || !sock) return;
   sending = true;
+  outboxAgain = false;
   try {
     const { data, error } = await db.rpc("wa_bridge_claim_outbox", { p_token: BRIDGE_TOKEN });
     if (error) throw new Error(error.message);
@@ -215,6 +222,7 @@ async function drainOutbox() {
     console.error("fila:", e.message);
   } finally {
     sending = false;
+    if (outboxAgain) setTimeout(() => void drainOutbox(), 500);
   }
 }
 
@@ -352,7 +360,12 @@ async function start() {
 
 // menos consultas = banco livre para o site (o painel considera online até 90 s sem sinal)
 setInterval(() => void heartbeat(), 30_000);
-setInterval(() => void drainOutbox(), 3_000);
+// Fila de saída: o banco avisa (sinal "outbox" no canal orium-bridge) quando o Admin manda algo;
+// a consulta a cada 30 s fica só de reserva (antes era a cada 3 s, o dia inteiro).
+db.channel("orium-bridge")
+  .on("broadcast", { event: "outbox" }, () => void drainOutbox())
+  .subscribe();
+setInterval(() => void drainOutbox(), 30_000);
 setInterval(() => void flushContacts(), 5_000);
 setInterval(() => void fetchAvatars(), 30_000);
 setInterval(() => void drainMedia(), 3_000);

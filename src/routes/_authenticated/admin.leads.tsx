@@ -13,7 +13,7 @@ import { AdminShell } from "@/components/orium/AdminShell";
 import { LeadPanel, useDoneToday } from "@/components/orium/crm/LeadPanel";
 import { Avatar, TEMP } from "@/components/orium/crm/shared";
 import { pxInputClass } from "@/components/orium/admin/PricingUI";
-import { supabase } from "@/integrations/supabase/client";
+import { onAdminSignal } from "@/lib/admin-signal";
 import {
   TASKS,
   TASK_ORDER,
@@ -77,14 +77,10 @@ function HojePage() {
   });
   useEffect(() => {
     const bump = throttleByKey(() => void qc.invalidateQueries({ queryKey: ["crm-leads"] }), 4000);
-    const ch = supabase
-      .channel("orium-crm-hoje")
-      .on("postgres_changes", { event: "*", schema: "public", table: "wa_contacts" }, () => bump())
-      .on("postgres_changes", { event: "*", schema: "public", table: "live_sessions" }, () => bump())
-      .subscribe();
+    const off = onAdminSignal(["wa_contacts", "live_sessions"], () => bump());
     return () => {
       bump.cancel();
-      void supabase.removeChannel(ch);
+      off();
     };
   }, [qc]);
 
