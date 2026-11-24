@@ -1818,7 +1818,7 @@ function SummaryTab({ contact, lead }: { contact: WaContact; lead: Lead | null }
             ) : null}
           </p>
         ) : null}
-        {(d.estilo ?? []).length || d.orcamento ? (
+        {(d.estilo ?? []).length || d.orcamento || (d.propostas ?? []).length ? (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {(d.estilo ?? []).slice(0, 4).map((e) => (
               <span
@@ -1828,11 +1828,18 @@ function SummaryTab({ contact, lead }: { contact: WaContact; lead: Lead | null }
                 {e}
               </span>
             ))}
-            {d.orcamento ? (
-              <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[12px] font-semibold text-[#E5E5E5]">
-                💰 {d.orcamento}
-              </span>
-            ) : null}
+            {(() => {
+              const ps = d.propostas ?? [];
+              const p = ps.find((x) => x.de === "cliente") ?? ps[0];
+              const label = p
+                ? `${p.de === "loja" ? "Ofereceu" : "Propôs"} R$ ${Math.round(p.valor)} por ${p.item}${ps.length > 1 ? ` +${ps.length - 1}` : ""}`
+                : d.orcamento;
+              return label ? (
+                <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[12px] font-semibold text-[#E5E5E5]">
+                  💰 {label}
+                </span>
+              ) : null;
+            })()}
           </div>
         ) : null}
       </section>
