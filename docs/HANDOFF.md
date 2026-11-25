@@ -107,10 +107,12 @@ bun run dev              # abre em http://localhost:<porta mostrada no terminal>
 - `supabase/config.toml` com `project_id` errado; `orium-app-homolog` e o Supabase OriumApp possivelmente sem uso; branches antigas já mergeadas ainda no GitHub.
 - A tabela `integration_secrets` guarda tokens no próprio banco (valores não foram lidos): avaliar mover para o cofre do Supabase.
 - Origem exata do deploy do Worker (Workers Builds vs. Publish do Lovable) e se a ponte do WhatsApp está no ar: não verificado.
+- **Deploy da venda na Negociação ainda não está no ar** (conferido em 25/11/2026 ~21h50 UTC): o PR #41 foi para a `main` às 20h12 UTC, mas o arquivo publicado `admin.negociacao-Bqe4HDl3.js` em `oriumperfumes.com` não tem "Venda e pagamento" nem "Salvar venda" (o botão do painel ainda diz "Concluir"). A `main` compila (`tsc` ok, `bun run build` ok, o pacote gerado traz o cartão). Ou seja: o merge **não publicou sozinho** desta vez — publicar pelo Lovable (Publish → Update). Ao abrir o Admin depois, recarregar a página (o `sw.js` guarda `/assets/*`).
 
 ## 7. Registro de entregas
 
 | Data | O que | Verificação |
 |---|---|---|
 | 25/11/2026 | Venda e controle de pagamento na Negociação (`negotiation_sales`, `SaleCard`, `saveNegotiationSale`, `listNegotiationSales`) | tsc ok · `vite build` ok · lógica 12/12 · RLS 3/3 em produção (rollback) · tela não verificada |
+| 25/11/2026 | Conferência: site no ar sem a venda da Negociação (deploy pendente); item de teste "Asad Gift Set Gel Banho" (Vendido, sem venda/interesse) apagado de `negotiation_items` a pedido do dono | arquivo JS publicado lido · `tsc`/`build` da `main` ok · contagem no banco = 0 após apagar |
 | 25/11/2026 | Este HANDOFF criado a partir do levantamento da estrutura | leitura de código, Supabase e Cloudflare (somente leitura) |
