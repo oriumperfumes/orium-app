@@ -495,3 +495,121 @@ export const sellNegotiationItem = createServerFn({ method: "POST" })
     await db.from("negotiation_items").update({ status: "SOLD" }).eq("id", item.id);
     return result as { id: string; duplicate: boolean };
   });
+
+/* ------------------------------------------------------------------ *
+ * Controle de pagamento da peça vendida (tabela `negotiation_sales`).
+ * Não gera venda em "Vendas da loja" e não mexe em estoque/preço: é só o
+ * caderno de quem comprou, por quanto e quanto falta receber.
+ * ------------------------------------------------------------------ */
+
+export type NegotiationSale = {
+  item_id: string;
+  customer_id: string | null;
+  customer_name: string | null;
+  sale_price: number;
+  amount_paid: number;
+  payment_method: "PIX" | "CARTAO" | "DINHEIRO" | null;
+  payment_due_date: string | null;
+  sold_at: string;
+  note: string | null;
+};
+
+const SALE_COLUMNS =
+  "item_id, customer_id, customer_name, sale_price, amount_paid, payment_method, payment_due_date, sold_at, note";
+
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Vendas registradas, com o nome atual da ficha do CRM (uma fonte só). */
+export const listNegotiationSales = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await staffOnly(context as unknown as Ctx);
+    const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await db.from("negotiation_sales").select(SALE_COLUMNS);
+    if (error) throw new Error(error.message);
+    const rows = (data ?? []) as unknown as NegotiationSale[];
+
+    const ids = [...new Set(rows.map((r) => r.customer_id).filter((v): v is string => !!v))];
+    if (ids.length) {
+      const { data: customers } = await db.from("crm_customers").select("id, name").in("id", ids);
+      const names = new Map((customers ?? []).map((c) => [c.id, c.name]));
+      for (const r of rows) if (r.customer_id && names.get(r.customer_id)) r.customer_name = names.get(r.customer_id) ?? r.customer_name;
+    }
+    return { sales: rows.map((r) => ({ ...r, sale_price: Number(r.sale_price), amount_paid: Number(r.amount_paid) })) };
+  });
+
+export type NegotiationSalePayInput = {
+  itemId: string;
+  customerId?: string | null;
+  customerName?: string | null;
+  /** valor combinado da venda, em reais */
+  price: number;
+  /** quanto já foi pago (total acumulado), em reais */
+  paid: number;
+  paymentMethod?: "PIX" | "CARTAO" | "DINHEIRO" | null;
+  /** até quando o restante deve ser pago (AAAA-MM-DD) */
+  dueDate?: string | null;
+  note?: string | null;
+  soldAt?: string | null;
+};
+
+/**
+ * Marca a peça como Vendida e grava/atualiza o pagamento: para quem, por
+ * quanto, quanto já entrou e até quando vence o restante. Pode ser chamada
+ * de novo a cada recebimento (o `paid` é o total acumulado).
+ */
+export const saveNegotiationSale = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: NegotiationSalePayInput) => {
+    if (!data.itemId) throw new Error("Escolha a peça vendida.");
+    const price = Number(data.price);
+    const paid = Number(data.paid);
+    if (!Number.isFinite(price) || price <= 0) throw new Error("Informe por quanto a peça foi vendida.");
+    if (!Number.isFinite(paid) || paid < 0) throw new Error("Valor pago inválido.");
+    if (r2(paid) > r2(price)) throw new Error("O valor pago não pode passar do valor da venda.");
+    if (data.paymentMethod && !["PIX", "CARTAO", "DINHEIRO"].includes(data.paymentMethod)) throw new Error("Forma de pagamento inválida.");
+    if (data.dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(data.dueDate)) throw new Error("Data de vencimento inválida.");
+    return data;
+  })
+  .handler(async ({ data, context }) => {
+    const ctx = context as unknown as Ctx;
+    await staffOnly(ctx);
+    const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
+
+    const { data: item, error: itemErr } = await db.from("negotiation_items").select("id").eq("id", data.itemId).maybeSingle();
+    if (itemErr) throw new Error(itemErr.message);
+    if (!item) throw new Error("Peça não encontrada.");
+
+    // ficha do CRM manda no nome; sem ficha, vale o nome digitado
+    let customerName = data.customerName?.trim() || null;
+    if (data.customerId) {
+      const { data: c } = await db.from("crm_customers").select("name").eq("id", data.customerId).maybeSingle();
+      if (c?.name) customerName = c.name;
+    }
+
+    const price = r2(Number(data.price));
+    const paid = r2(Number(data.paid));
+    const row = {
+      item_id: data.itemId,
+      customer_id: data.customerId ?? null,
+      customer_name: customerName,
+      sale_price: price,
+      amount_paid: paid,
+      payment_method: data.paymentMethod ?? null,
+      // pago por completo: não há mais vencimento
+      payment_due_date: paid >= price ? null : (data.dueDate ?? null),
+      note: data.note?.trim() || null,
+      updated_at: new Date().toISOString(),
+      ...(data.soldAt ? { sold_at: data.soldAt } : {}),
+    };
+    const { data: saved, error } = await db
+      .from("negotiation_sales")
+      .upsert({ ...row, created_by: ctx.userId }, { onConflict: "item_id" })
+      .select(SALE_COLUMNS)
+      .single();
+    if (error) throw new Error(error.message);
+
+    const { error: statusErr } = await db.from("negotiation_items").update({ status: "SOLD" }).eq("id", data.itemId);
+    if (statusErr) throw new Error(statusErr.message);
+    return { sale: saved as unknown as NegotiationSale };
+  });

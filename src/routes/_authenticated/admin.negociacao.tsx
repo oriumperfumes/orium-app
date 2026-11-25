@@ -53,13 +53,19 @@ import {
   deleteNegotiationItem,
   listNegotiationAdmin,
   listNegotiationInterests,
+  listNegotiationSales,
   removeNegotiationPhoto,
   saveNegotiationItem,
+  saveNegotiationSale,
   searchCatalogForNegotiation,
   setNegotiationPhoto,
   uploadNegotiationPhoto,
   type NegotiationCatalogHit,
+  type NegotiationSale,
 } from "@/lib/negotiation.functions";
+import { SaleCard } from "@/components/orium/admin/negotiation/SaleCard";
+import { salePayload, saleStatusText, saleToDraft, type SaleDraft } from "@/lib/negotiation-sale";
+import { brl } from "@/lib/format";
 import { copyFragranceFrom } from "@/lib/fragrance.functions";
 import { optimizePhoto } from "@/lib/image-optimize";
 import { imgVariant } from "@/lib/product-img";
@@ -177,6 +183,9 @@ const draftPayload = (d: Draft) => ({
 
 type Filter = "ALL" | NegotiationStatus | "INTEREST";
 
+/** `markDirty`: abre já com mudança pendente (ex.: "Vendido" escolhido no menu, falta preencher a venda). */
+type PanelState = { draft: Draft; origin: HTMLElement | null; startAt: "pick" | "form"; markDirty?: boolean };
+
 function AdminNegotiation() {
   const qc = useQueryClient();
   const list = useServerFn(listNegotiationAdmin);
@@ -187,13 +196,14 @@ function AdminNegotiation() {
   const swapPhoto = useServerFn(setNegotiationPhoto);
   const [optimizing, setOptimizing] = useState(false);
 
-  const [panel, setPanel] = useState<{ draft: Draft; origin: HTMLElement | null; startAt: "pick" | "form" } | null>(null);
+  const [panel, setPanel] = useState<PanelState | null>(null);
   const [confirm, setConfirm] = useState<NegotiationItem | null>(null);
   const [filter, setFilter] = useState<Filter>("ALL");
   const menu = useItemMenu();
 
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ["negotiation-admin"] });
+    void qc.invalidateQueries({ queryKey: ["negotiation-sales"] });
     void qc.invalidateQueries({ queryKey: ["negotiation-public"] });
   };
 
@@ -220,6 +230,30 @@ function AdminNegotiation() {
     () => new Set((interests.data?.interests ?? []).map((r) => r.customer_id ?? r.id)).size,
     [interests.data],
   );
+
+  const loadSales = useServerFn(listNegotiationSales);
+  const salesQuery = useQuery({
+    queryKey: ["negotiation-sales"],
+    retry: false,
+    queryFn: async () => await loadSales(),
+  });
+  const saleByItem = useMemo(() => new Map((salesQuery.data?.sales ?? []).map((x) => [x.item_id, x])), [salesQuery.data]);
+  /** quanto ainda falta receber das peças vendidas (só itens hoje em "Vendido") */
+  const receivable = useMemo(() => {
+    let due = 0;
+    let open = 0;
+    for (const i of items) {
+      if (i.status !== "SOLD") continue;
+      const sale = saleByItem.get(i.id);
+      if (!sale) continue;
+      const d = saleStatusText(sale).due;
+      if (d > 0) {
+        due += d;
+        open += 1;
+      }
+    }
+    return { due: Math.round(due * 100) / 100, open };
+  }, [items, saleByItem]);
 
   const counts = useMemo(() => {
     const c: Record<NegotiationStatus, number> = { AVAILABLE: 0, NEGOTIATING: 0, SOLD: 0, HIDDEN: 0 };
@@ -309,7 +343,8 @@ function AdminNegotiation() {
     }
   };
 
-  const openItem = (item: NegotiationItem, origin: HTMLElement | null) => setPanel({ draft: toDraft(item), origin, startAt: "form" });
+  const openItem = (item: NegotiationItem, origin: HTMLElement | null, patch?: Partial<Draft>) =>
+    setPanel({ draft: { ...toDraft(item), ...patch }, origin, startAt: "form", markDirty: !!patch });
   const openNew = (origin: HTMLElement | null, startAt: "pick" | "form" = "pick") => setPanel({ draft: emptyDraft(), origin, startAt });
 
   const itemMenu = (item: NegotiationItem, pos: MenuPos) => {
@@ -352,7 +387,13 @@ function AdminNegotiation() {
         label: NEGOTIATION_STATUS_LABEL[s],
         icon: STATUS_META[s].icon,
         active: item.status === s,
-        onSelect: () => void quickSave(item, { status: s }, `${item.name}: ${NEGOTIATION_STATUS_LABEL[s].toLowerCase()}.`),
+        // "Vendido" pede para quem, por quanto e quanto já pagou: abre o perfume já na venda
+        onSelect: () =>
+          s === "SOLD"
+            ? item.status === "SOLD"
+              ? openItem(item, document.querySelector(`[data-item-id="${item.id}"]`))
+              : openItem(item, document.querySelector(`[data-item-id="${item.id}"]`), { status: "SOLD" })
+            : void quickSave(item, { status: s }, `${item.name}: ${NEGOTIATION_STATUS_LABEL[s].toLowerCase()}.`),
       })),
       main: [
         {
@@ -421,6 +462,11 @@ function AdminNegotiation() {
               <span className="mt-auto text-[34px] leading-none font-bold tracking-[-0.045em]">
                 {isLoading ? "—" : <AnimatedNumber value={t.value} />}
               </span>
+              {t.key === "SOLD" && receivable.open > 0 ? (
+                <span className={cn("mt-1.5 truncate text-[12.5px] font-semibold tabular-nums", on ? "text-[#8A5A00]" : "text-[#FFD599]")}>
+                  A receber {brl(receivable.due)}
+                </span>
+              ) : null}
             </button>
           );
         })}
@@ -462,6 +508,7 @@ function AdminNegotiation() {
                   item={item}
                   i={i}
                   interested={interestByItem.get(item.id) ?? 0}
+                  sale={saleByItem.get(item.id) ?? null}
                   onOpen={(el) => openItem(item, el)}
                   onMenu={(pos) => itemMenu(item, pos)}
                 />
@@ -487,6 +534,7 @@ function AdminNegotiation() {
 
       <NegotiationPanel
         state={panel}
+        sales={saleByItem}
         onClose={() => setPanel(null)}
         onSaved={refresh}
         onDelete={(id) => {
@@ -530,12 +578,15 @@ function ShowcaseTile({
   item,
   i,
   interested,
+  sale,
   onOpen,
   onMenu,
 }: {
   item: NegotiationItem;
   i: number;
   interested: number;
+  /** venda registrada (só aparece quando o item está Vendido) */
+  sale: NegotiationSale | null;
   onOpen: (el: HTMLElement) => void;
   onMenu: (pos: MenuPos) => void;
 }) {
@@ -587,7 +638,22 @@ function ShowcaseTile({
           })()}</p>
         <StatusDot tone={meta.tone} className="mt-2.5">
           {NEGOTIATION_STATUS_LABEL[item.status]}
+          {item.status === "SOLD" && sale?.customer_name ? ` · ${sale.customer_name}` : ""}
         </StatusDot>
+        {item.status === "SOLD" ? (
+          sale ? (
+            <p
+              className={cn(
+                "mt-1.5 truncate text-[12.5px] font-semibold tabular-nums",
+                saleStatusText(sale).tone === "ok" ? "text-[#7FCF9F]" : saleStatusText(sale).tone === "gold" ? "text-[#FFD599]" : "text-[#FF9A8A]",
+              )}
+            >
+              {brl(sale.sale_price)} · {saleStatusText(sale).label}
+            </p>
+          ) : (
+            <p className="mt-1.5 truncate text-[12.5px] font-semibold text-[#8C8C8C]">Sem dados da venda</p>
+          )
+        ) : null}
       </div>
     </article>
   );
@@ -617,11 +683,13 @@ function EmptyShowcase({ onCatalog, onBlank }: { onCatalog: (el: HTMLElement) =>
 
 function NegotiationPanel({
   state,
+  sales,
   onClose,
   onSaved,
   onDelete,
 }: {
-  state: { draft: Draft; origin: HTMLElement | null; startAt: "pick" | "form" } | null;
+  state: PanelState | null;
+  sales: Map<string, NegotiationSale>;
   onClose: () => void;
   onSaved: () => void;
   onDelete: (id: string) => void;
@@ -644,6 +712,8 @@ function NegotiationPanel({
           <PanelBody
             key={s.draft.id ?? `novo-${String(s.startAt)}`}
             initial={s.draft}
+            sale={s.draft.id ? (sales.get(s.draft.id) ?? null) : null}
+            markDirty={!!s.markDirty}
             startAt={s.startAt}
             onClose={close}
             onDirty={setDirty}
@@ -667,6 +737,8 @@ function NegotiationPanel({
 
 function PanelBody({
   initial,
+  sale,
+  markDirty,
   startAt,
   onClose,
   onDirty,
@@ -674,6 +746,9 @@ function PanelBody({
   onDelete,
 }: {
   initial: Draft;
+  /** venda já registrada deste item (ou null) */
+  sale: NegotiationSale | null;
+  markDirty: boolean;
   startAt: "pick" | "form";
   onClose: () => void;
   onDirty: (v: boolean) => void;
@@ -682,6 +757,7 @@ function PanelBody({
 }) {
   const qc = useQueryClient();
   const save = useServerFn(saveNegotiationItem);
+  const saveSale = useServerFn(saveNegotiationSale);
   const upload = useServerFn(uploadNegotiationPhoto);
   const dropPhoto = useServerFn(removeNegotiationPhoto);
   const copyFragrance = useServerFn(copyFragranceFrom);
@@ -689,9 +765,15 @@ function PanelBody({
   const [draft, setDraft] = useState<Draft>(initial);
   const [step, setStep] = useState<"pick" | "form">(initial.id ? "form" : startAt);
   const [busy, setBusy] = useState<null | "photo" | "save">(null);
-  const [saved, setSaved] = useState(JSON.stringify(draftPayload(initial)));
+  // venda e pagamento: só contam quando a situação é "Vendido"
+  const [saleDraft, setSaleDraft] = useState<SaleDraft>(() => saleToDraft(sale));
+  const [savedPaid, setSavedPaid] = useState(sale?.amount_paid ?? 0);
+  const snapshot = (d: Draft, sd: SaleDraft) => JSON.stringify([draftPayload(d), d.status === "SOLD" ? sd : null]);
+  const [saved, setSaved] = useState(() => (markDirty ? "" : snapshot(initial, saleToDraft(sale))));
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
-  const dirty = JSON.stringify(draftPayload(draft)) !== saved;
+  const setSale = (patch: Partial<SaleDraft>) => setSaleDraft((d) => ({ ...d, ...patch }));
+  const dirty = snapshot(draft, saleDraft) !== saved;
+  const salePending = draft.status === "SOLD" && salePayload(draft.id ?? "novo", saleDraft, savedPaid) == null;
   useEffect(() => {
     // novo perfume só conta como "não salvo" depois que algo foi preenchido
     onDirty(dirty && !!(draft.id || draft.name.trim() || draft.imagePath));
@@ -729,10 +811,22 @@ function PanelBody({
   };
 
   const submit = async () => {
+    // "Vendido" precisa de valor; sem ele a peça sairia da vitrine sem registro nenhum
+    const salePay = draft.status === "SOLD" ? salePayload(draft.id ?? "novo", saleDraft, savedPaid) : null;
+    if (draft.status === "SOLD" && !salePay) {
+      toast.error("Informe por quanto a peça foi vendida e quanto já foi pago.");
+      return;
+    }
     setBusy("save");
     try {
       const res = await save({ data: draftPayload(draft) });
       const productId = res.productId ?? draft.productId;
+      let soldAs: NegotiationSale | null = null;
+      if (salePay) {
+        const out = await saveSale({ data: { ...salePay, itemId: res.id } });
+        soldAs = out.sale;
+        setSavedPaid(out.sale.amount_paid);
+      }
       let copied = false;
       // primeira vez a partir do catálogo: a ficha olfativa vem junto
       if (!draft.id && draft.source?.hasFragrance && productId) {
@@ -745,11 +839,17 @@ function PanelBody({
         }
       }
       const next = { ...draft, id: res.id, productId, source: draft.id ? draft.source : null };
+      const nextSale = soldAs ? saleToDraft(soldAs) : saleDraft;
       setDraft(next);
-      setSaved(JSON.stringify(draftPayload(next)));
+      setSaleDraft(nextSale);
+      setSaved(snapshot(next, nextSale));
       onSaved();
       toast.success(
-        draft.id ? "Alterações salvas." : copied ? "Perfume na vitrine, com as notas do catálogo." : "Perfume na vitrine. Complete as notas abaixo, se quiser.",
+        soldAs
+          ? saleStatusText(soldAs).due > 0
+            ? `Venda salva. ${saleStatusText(soldAs).label}.`
+            : "Venda salva e paga por completo."
+          : draft.id ? "Alterações salvas." : copied ? "Perfume na vitrine, com as notas do catálogo." : "Perfume na vitrine. Complete as notas abaixo, se quiser.",
       );
     } catch (e) {
       toast.error((e as Error).message);
@@ -877,6 +977,10 @@ function PanelBody({
           </div>
         </PanelCard>
 
+        {draft.status === "SOLD" ? (
+          <SaleCard draft={saleDraft} onChange={setSale} savedPaid={savedPaid} itemName={draft.name.trim()} />
+        ) : null}
+
         <PanelCard title="Descrição" hint="Poucas linhas: o estado do frasco e por que vale a pena.">
           <TextArea value={draft.description} onChange={(e) => set({ description: e.target.value })} placeholder="Ex.: Usado duas vezes, guardado na caixa, longe da luz." />
         </PanelCard>
@@ -902,8 +1006,8 @@ function PanelBody({
           <GoldButton
             className="flex-1"
             loading={busy === "save"}
-            disabled={!draft.name.trim() || busy === "photo" || (!!draft.remaining && !!draft.volume && Number(draft.remaining) > Number(draft.volume))} onClick={() => void submit()}>
-            {draft.id ? "Salvar alterações" : "Colocar na vitrine"}
+            disabled={!draft.name.trim() || busy === "photo" || salePending || (!!draft.remaining && !!draft.volume && Number(draft.remaining) > Number(draft.volume))} onClick={() => void submit()}>
+            {draft.status === "SOLD" ? "Salvar venda" : draft.id ? "Salvar alterações" : "Colocar na vitrine"}
           </GoldButton>
         )}
       </PanelFooter>
