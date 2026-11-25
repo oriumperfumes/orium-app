@@ -92,6 +92,15 @@ import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/admin/negociacao")({
   head: () => ({ meta: [{ title: "Negociação — Orium Admin" }, { name: "robots", content: "noindex" }] }),
+  /** `?item=<id>` abre a peça; com `&vender=1` abre já no "Venda e pagamento" (usado por Admin → Vendas). */
+  validateSearch: (search: Record<string, unknown>): { item?: string; vender?: boolean } => {
+    const item = search["item"];
+    const sell = search["vender"];
+    return {
+      ...(typeof item === "string" && item ? { item } : {}),
+      ...(sell === true || sell === "1" || sell === 1 || sell === "true" ? { vender: true } : {}),
+    };
+  },
   component: AdminNegotiation,
 });
 
@@ -205,6 +214,7 @@ function AdminNegotiation() {
     void qc.invalidateQueries({ queryKey: ["negotiation-admin"] });
     void qc.invalidateQueries({ queryKey: ["negotiation-sales"] });
     void qc.invalidateQueries({ queryKey: ["negotiation-public"] });
+    void qc.invalidateQueries({ queryKey: ["sales-ledger"] });
   };
 
   const { data, isLoading } = useQuery({
@@ -346,6 +356,20 @@ function AdminNegotiation() {
   const openItem = (item: NegotiationItem, origin: HTMLElement | null, patch?: Partial<Draft>) =>
     setPanel({ draft: { ...toDraft(item), ...patch }, origin, startAt: "form", markDirty: !!patch });
   const openNew = (origin: HTMLElement | null, startAt: "pick" | "form" = "pick") => setPanel({ draft: emptyDraft(), origin, startAt });
+
+  /* chegou de Admin → Vendas: abre a peça pedida (uma vez) e limpa o endereço */
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const deepLinked = useRef<string | null>(null);
+  useEffect(() => {
+    if (!search.item || deepLinked.current === search.item || isLoading) return;
+    deepLinked.current = search.item;
+    const item = items.find((i) => i.id === search.item);
+    if (item) openItem(item, null, search.vender ? { status: "SOLD" } : undefined);
+    else toast.error("Essa peça não está mais na Negociação.");
+    void navigate({ search: {}, replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search.item, search.vender, isLoading, items]);
 
   const itemMenu = (item: NegotiationItem, pos: MenuPos) => {
     const n = interestByItem.get(item.id) ?? 0;

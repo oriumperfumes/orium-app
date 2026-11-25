@@ -169,7 +169,8 @@ export function CommandPalette() {
     const term = q.trim();
     const actions: Cmd[] = [
       { id: "novo", label: "Novo pedido", hint: "Ação", icon: Plus, to: "/admin/pedidos", search: { novo: true } },
-      { id: "venda", label: "Registrar venda da loja", hint: "Ação", icon: Store, to: "/admin/vendas-loja", search: { registrar: "manual" } },
+      { id: "venda", label: "Registrar venda no balcão", hint: "Ação", icon: Store, to: "/admin/vendas-loja", search: { registrar: "manual" } },
+      { id: "vendas", label: "Ver todas as vendas", hint: "Ação", icon: Store, to: "/admin/vendas-loja" },
     ];
     const sections: Cmd[] = navSections().map((i) => ({ id: i.to, label: i.label, hint: i.label === i.hub ? "Área" : i.hub, icon: i.icon, to: i.to }));
     const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();

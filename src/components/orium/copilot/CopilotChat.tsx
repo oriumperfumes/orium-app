@@ -848,7 +848,7 @@ const PAGE_NAMES: Array<[RegExp, string]> = [
   [/^\/admin\/produtos\/[0-9a-f-]{36}/i, "Este perfume"],
   [/^\/admin\/produtos/, "Produtos"],
   [/^\/admin\/estoque/, "Estoque"],
-  [/^\/admin\/vendas-loja/, "Vendas da loja"],
+  [/^\/admin\/vendas-loja/, "Vendas"],
   [/^\/admin\/negociacao/, "Negociação"],
   [/^\/admin\/reposicao/, "Reposição"],
   [/^\/admin\/fornecedores/, "Fornecedores"],
