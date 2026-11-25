@@ -37,6 +37,8 @@
 
 - Frasco em promoção na página do perfume: `SealedDeal` substitui a escolha Decant/Frasco, o decant vira alternativa discreta sem "Recomendado" e todo número vem de `priceUnit`; urgência continua só com fim e estoque reais.
 
+- Vendas (`/admin/vendas-loja`): todas as vendas vêm só de `sales_ledger` (pedidos + balcão + Negociação, só leitura) e as contas só de `src/lib/sales-ledger.ts`; nunca somar faturamento de outra fonte na tela nem gravar venda por ali — cada venda é gravada no fluxo dela (store_sale_commit, createManualOrder, saveNegotiationSale).
+
 - Menu do Admin: seis áreas em `NAV_HUBS` (AdminShell). Telas parecidas são navegadas pelo próprio título da página (`PageTitle`: a tela aberta grande, as irmãs ao lado em cinza); para mudar o agrupamento, edite só `NAV_HUBS`. Atendimento fica fora do menu, mas a rota continua.
 
 - Gerenciamento (Produtos › Gerenciamento, rota `/admin/estoque`): `?parte=perfumes` é o estoque de frascos lacrados (store-stock); `?parte=itens` são os itens que a loja usa (`store_supplies` + histórico `store_supply_moves`, sempre via `store_supply_move`; gasto = soma das compras com valor, em `src/lib/store-supplies.functions.ts`).

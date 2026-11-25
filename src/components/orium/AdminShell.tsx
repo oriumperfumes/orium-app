@@ -71,7 +71,7 @@ export const NAV_HUBS: NavHub[] = [
     badge: "orders",
     sections: [
       { to: "/admin/pedidos", label: "Pedidos" },
-      { to: "/admin/vendas-loja", label: "Vendas da loja" },
+      { to: "/admin/vendas-loja", label: "Vendas" },
     ],
   },
   {

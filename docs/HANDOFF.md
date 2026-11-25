@@ -65,9 +65,27 @@ Perfumes da própria Orium, deslacrados, negociados um a um. Vitrine pública em
 
 `PayAmount`, `DateChips`, `resolvePaid`, `draftFrom` em `src/components/orium/admin/orders/controls.tsx` — reaproveitados pela Negociação. Detalhes de fases e pagamento por perfume estão em `AGENTS.md`.
 
-### 4.3 Outras áreas (onde olhar primeiro)
+### 4.3 Vendas (Admin → Pedidos › Vendas, rota `/admin/vendas-loja`)
 
-- Vendas da loja: `src/components/orium/admin/store-sales/*`, `src/lib/store-sales.functions.ts`, RPC `store_sale_commit`.
+Um só livro de **todas** as vendas: balcão (frascos e decants, por voz ou catálogo), WhatsApp, site, encomendas e Negociação.
+
+| O quê | Onde |
+|---|---|
+| Tela | `src/routes/_authenticated/admin.vendas-loja.tsx` (nome da aba no menu: "Vendas") |
+| Leitura (só lê, nada é copiado) | RPC `sales_ledger(p_from, p_to)` → `src/lib/sales-ledger.functions.ts` |
+| Rótulos, filtros, somas (testado) | `src/lib/sales-ledger.ts` + `sales-ledger.test.ts` |
+| Migration / teste | `supabase/migrations/20261126120000_vendas_unificadas.sql` · `supabase/tests/20261126_sales_ledger.test.sql` |
+
+- De onde vem cada linha: `catalog_orders` (canal `site`, `whatsapp` ou `manual` = Encomenda), `store_sales` (canal `balcao`; mostruário = `negociacao`), `negotiation_sales` (canal `negociacao`).
+- Cada venda continua sendo **gravada no lugar dela**: balcão → `store_sale_commit` (janelas da própria tela); WhatsApp/encomenda → `OrderComposer` (abre na tela, grava em Pedidos); Negociação → `ShowcaseSale` (balcão, com lucro) ou painel da peça (`SaleCard`, com parcelas).
+- Não contar duas vezes: pedido cancelado/lixeira e venda de balcão excluída/cancelada ficam fora; pedido `pendente` sem confirmação aparece esmaecido ("A confirmar") e não soma; peça vendida pelos dois caminhos aparece uma vez (vale a do balcão).
+- "A receber" = saldo de pedidos + Negociação, de qualquer época. "Peças marcadas como vendidas sem valor" = itens `SOLD` da Negociação sem venda em lugar nenhum; tocar abre `/admin/negociacao?item=<id>&vender=1` (painel já em "Venda e pagamento").
+- Tocar numa venda abre o detalhe certo: balcão → `SaleDetailSheet`; pedido → `/admin/pedidos?pedido=<id>`; Negociação → `/admin/negociacao?item=<id>`. Editar/excluir na lista só para balcão (pedidos e Negociação se editam no lugar deles).
+- Lucro mostrado só onde há custo (balcão com `cost_complete`, pedido com `cost_total` > 0 = "lucro estimado" igual ao do painel do pedido).
+
+### 4.4 Outras áreas (onde olhar primeiro)
+
+- Venda no balcão (gravação): `src/components/orium/admin/store-sales/*`, `src/lib/store-sales.functions.ts`, RPC `store_sale_commit`.
 - CRM / WhatsApp: `src/lib/crm*.ts`, `src/lib/wa-insights.server.ts`, `src/lib/crm-wa.functions.ts`, `bridge/`.
 - Equipe/permissões: `src/lib/team.functions.ts`, `TeamSettings.tsx`.
 - Regras de arquitetura detalhadas (preço único, IA, fornecedores, motion, layout): `AGENTS.md`.
@@ -102,6 +120,8 @@ bun run dev              # abre em http://localhost:<porta mostrada no terminal>
 
 ## 6. Pendências e coisas não verificadas
 
+- Vendas (26/11/2026): a função `sales_ledger` **já foi aplicada em produção em 26/11/2026** (migration `20261126120000_vendas_unificadas.sql`; anon sem acesso, authenticated executa e a função barra quem não é equipe). Teste de tela no navegador: **não verificado**. Verificado: tipos, `vite build`, lógica 5/5 (vitest) e o teste de acesso (anon barrado, cliente barrado, venda com saldo, peça sem registro, período inválido) 5/5 em produção dentro de transação desfeita.
+
 - Teste de tela (navegador) da venda na Negociação: **não verificado** — o Admin exige login; foi verificada só a lógica (12 casos, `saleSummary`/`salePayload`), tipos, build e RLS no banco.
 - O arquivo `supabase/tests/20261125_negotiation_sales.test.sql` não foi rodado por inteiro (precisa do baseline do banco); as mesmas verificações de acesso (anon, cliente comum, pago ≤ preço) foram rodadas direto em produção dentro de uma transação desfeita: 3 de 3 passaram.
 - `supabase/config.toml` com `project_id` errado; `orium-app-homolog` e o Supabase OriumApp possivelmente sem uso; branches antigas já mergeadas ainda no GitHub.
@@ -112,5 +132,6 @@ bun run dev              # abre em http://localhost:<porta mostrada no terminal>
 
 | Data | O que | Verificação |
 |---|---|---|
+| 26/11/2026 | Vendas unificadas: `sales_ledger`, tela "Vendas" (todos os canais, A receber, peças sem registro, registrar WhatsApp/encomenda na própria tela), atalho `?item=`/`?vender=` na Negociação | tsc ok · `vite build` ok · lógica 5/5 · acesso 5/5 em produção (rollback) · migration aplicada em produção · tela não verificada |
 | 25/11/2026 | Venda e controle de pagamento na Negociação (`negotiation_sales`, `SaleCard`, `saveNegotiationSale`, `listNegotiationSales`) | tsc ok · `vite build` ok · lógica 12/12 · RLS 3/3 em produção (rollback) · tela não verificada |
 | 25/11/2026 | Este HANDOFF criado a partir do levantamento da estrutura | leitura de código, Supabase e Cloudflare (somente leitura) |

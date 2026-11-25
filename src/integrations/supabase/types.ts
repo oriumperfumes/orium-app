@@ -7113,6 +7113,7 @@ export type Database = {
         Returns: Json
       }
       store_sale_detail: { Args: { p_id: string }; Returns: Json }
+      sales_ledger: { Args: { p_from: string; p_to: string }; Returns: Json }
       store_sale_list: { Args: { p_from: string; p_to: string }; Returns: Json }
       store_sale_update: { Args: { p_payload: Json }; Returns: Json }
       store_stock_clear_all: { Args: { p_confirmation: string }; Returns: Json }
