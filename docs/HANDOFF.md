@@ -14,7 +14,7 @@
 | Peça | Onde | Observação |
 |---|---|---|
 | Código | GitHub `oriumperfumes/orium-app`, branch `main` | Conectado ao Lovable: **nunca reescrever histórico publicado** (sem force push/rebase/amend). |
-| Frontend + servidor | Worker Cloudflare `orium-app` (existe também `orium-app-homolog`, parado desde 14/11) | TanStack Start + Nitro (alvo Cloudflare). Deploy parece automático a partir da `main` (Worker alterado 1 min depois do merge do PR #40) — **origem exata do deploy não verificada**. Não há `wrangler.jsonc` no repositório. |
+| Frontend + servidor | Worker Cloudflare `orium-app` (existe também `orium-app-homolog`, parado desde 14/11) | TanStack Start + Nitro (alvo Cloudflare). **Deploy é manual** (conferido no painel em 25/11/2026): todas as versões do Worker vêm de `wrangler deploy` pela CLI (usuário `oriumperfumesrj`); Settings › Builds **não tem repositório Git conectado**, então merge na `main` **não** publica sozinho. Não há `wrangler.jsonc` no repositório: o build (`bun run build`) gera `.output/server/wrangler.json` (nome `oriumperfumes-orium-app`, por isso publicar com `--name orium-app` ou via Workers Builds, que força o nome do Worker) e `.wrangler/deploy/config.json` aponta para ele. Build precisa de `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` no ambiente; segredos do servidor ficam no Worker (usar `--keep-vars`). |
 | Domínio | `oriumperfumes.com` | `oriumperfum.lovable.app` ainda aparece no README/código (URL antiga do Lovable). |
 | Banco / Auth / Storage | Supabase **OriumProducao**, ref `onazmlxfrstrdefbekle`, `sa-east-1`, Postgres 17 | Login por e-mail e Google. Buckets privados: `negociacao`, `produtos`, `wa-media`. |
 | Banco antigo | Supabase **OriumApp**, ref `zvlspnavxpxltolvmlfj` | Cópia congelada em 14/11 (último login 14/11). **Não é usado.** Pausar antes de apagar. |
@@ -106,8 +106,8 @@ bun run dev              # abre em http://localhost:<porta mostrada no terminal>
 - O arquivo `supabase/tests/20261125_negotiation_sales.test.sql` não foi rodado por inteiro (precisa do baseline do banco); as mesmas verificações de acesso (anon, cliente comum, pago ≤ preço) foram rodadas direto em produção dentro de uma transação desfeita: 3 de 3 passaram.
 - `supabase/config.toml` com `project_id` errado; `orium-app-homolog` e o Supabase OriumApp possivelmente sem uso; branches antigas já mergeadas ainda no GitHub.
 - A tabela `integration_secrets` guarda tokens no próprio banco (valores não foram lidos): avaliar mover para o cofre do Supabase.
-- Origem exata do deploy do Worker (Workers Builds vs. Publish do Lovable) e se a ponte do WhatsApp está no ar: não verificado.
-- **Deploy da venda na Negociação ainda não está no ar** (conferido em 25/11/2026 ~21h50 UTC): o PR #41 foi para a `main` às 20h12 UTC, mas o arquivo publicado `admin.negociacao-Bqe4HDl3.js` em `oriumperfumes.com` não tem "Venda e pagamento" nem "Salvar venda" (o botão do painel ainda diz "Concluir"). A `main` compila (`tsc` ok, `bun run build` ok, o pacote gerado traz o cartão). Ou seja: o merge **não publicou sozinho** desta vez — publicar pelo Lovable (Publish → Update). Ao abrir o Admin depois, recarregar a página (o `sw.js` guarda `/assets/*`).
+- Se a ponte do WhatsApp está no ar: não verificado. (Deploy: ver seção 2 — manual por Wrangler; plano é ligar Workers Builds à `main`.)
+- **Deploy da venda na Negociação ainda não está no ar** (conferido em 25/11/2026 ~21h50 UTC): o PR #41 foi para a `main` às 20h12 UTC, mas o arquivo publicado `admin.negociacao-Bqe4HDl3.js` em `oriumperfumes.com` não tem "Venda e pagamento" nem "Salvar venda" (o botão do painel ainda diz "Concluir"). A `main` compila (`tsc` ok, `bun run build` ok, o pacote gerado traz o cartão). Ou seja: o merge **não publica sozinho** (deploy é manual, ver seção 2) — publicar com `wrangler deploy` ou ligar Workers Builds. Ao abrir o Admin depois, recarregar a página (o `sw.js` guarda `/assets/*`).
 
 ## 7. Registro de entregas
 
