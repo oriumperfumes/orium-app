@@ -9,6 +9,8 @@
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
 
+- **Comece por `docs/HANDOFF.md`** (mapa de infraestrutura, Admin, Negociação e onde mexer em cada assunto). Toda entrega relevante atualiza esse arquivo no mesmo commit/PR: o que mudou, quando e com qual verificação; o que não foi verificado fica escrito como "não verificado".
+
 - Keep one debounced catalog-search value shared by the inline bar, sticky bar, preview, intent, URL, and result grid; this prevents stale or contradictory results.
 - Keep automatic global route preloading disabled and use explicit stable link preloads only; this avoids route-match races in the Admin.
 - Motion: use only `--motion-fast/standard/emphasis` + `--ease-orium` from styles.css; one easing app-wide for consistency.

@@ -3164,6 +3164,66 @@ export type Database = {
           },
         ]
       }
+      negotiation_sales: {
+        Row: {
+          amount_paid: number
+          created_at: string
+          created_by: string | null
+          customer_id: string | null
+          customer_name: string | null
+          item_id: string
+          note: string | null
+          payment_due_date: string | null
+          payment_method: string | null
+          sale_price: number
+          sold_at: string
+          updated_at: string
+        }
+        Insert: {
+          amount_paid?: number
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string | null
+          customer_name?: string | null
+          item_id: string
+          note?: string | null
+          payment_due_date?: string | null
+          payment_method?: string | null
+          sale_price: number
+          sold_at?: string
+          updated_at?: string
+        }
+        Update: {
+          amount_paid?: number
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string | null
+          customer_name?: string | null
+          item_id?: string
+          note?: string | null
+          payment_due_date?: string | null
+          payment_method?: string | null
+          sale_price?: number
+          sold_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "negotiation_sales_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "crm_customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "negotiation_sales_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: true
+            referencedRelation: "negotiation_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       olfactory_note_assets: {
         Row: {
           canonical_note_name: string
