@@ -83,6 +83,23 @@ npx prettier --write <arquivos novos>   # o repositório antigo tem muito aviso 
 
 Banco: toda mudança é migration nova em `supabase/migrations/` (nunca editar migration já aplicada), com RLS ligado e teste em `supabase/tests/`.
 
+### Testar antes de aprovar (regra do dono: toda entrega passa por teste local antes do merge)
+
+O merge na `main` publica em produção, e **qualquer teste usa o banco de produção** (não há banco de testes). Por isso:
+
+```bash
+git clone https://github.com/oriumperfumes/orium-app && cd orium-app
+git checkout <branch-da-entrega>
+bun install
+cp .env.example .env     # preencher com os valores do painel do Supabase (Project Settings → API)
+bun run dev              # abre em http://localhost:<porta mostrada no terminal>
+```
+
+- `.env`: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` e `SUPABASE_SERVICE_ROLE_KEY` (esta última é chave de administrador: só no `.env` local, que não vai para o git; nunca no chat, no código ou em docs).
+- Entre no Admin com uma conta de equipe. O login com Google pode não funcionar em `localhost`; use e-mail e senha se a conta tiver. Não verificado.
+- Teste sempre com item fictício ("TESTE — apagar"), preferindo situação **Oculto** antes de mexer, e apague no final. Peça para conferir no banco que nada de teste sobrou.
+- Em sessão na nuvem (Claude Code web) o `localhost` não é acessível ao dono; só dá para rodar o servidor para ele se houver computador conectado à sessão.
+
 ## 6. Pendências e coisas não verificadas
 
 - Teste de tela (navegador) da venda na Negociação: **não verificado** — o Admin exige login; foi verificada só a lógica (12 casos, `saleSummary`/`salePayload`), tipos, build e RLS no banco.
